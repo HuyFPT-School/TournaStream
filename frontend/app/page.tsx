@@ -72,17 +72,9 @@ function useCountUp(target: number, duration = 1800, decimals = 0) {
 
 /* ── StatCard ── */
 function StatCard({
-  label,
-  value,
-  suffix,
-  short,
-  decimals = 0,
+  label, value, suffix, short, decimals = 0,
 }: {
-  label: string;
-  value: number;
-  suffix: string;
-  short?: string;
-  decimals?: number;
+  label: string; value: number; suffix: string; short?: string; decimals?: number;
 }) {
   const { val, ref } = useCountUp(value, 1800, decimals);
   const display = short
@@ -92,16 +84,9 @@ function StatCard({
     : Math.round(val).toLocaleString("vi-VN") + suffix;
 
   return (
-    <div
-      ref={ref}
-      className="flex flex-col items-center gap-1 px-6 py-5 rounded-2xl border border-white/[0.07] bg-white/[0.03] min-w-[140px]"
-    >
-      <span className="text-3xl font-black tracking-tight text-[#22c55e] tabular-nums">
-        {display}
-      </span>
-      <span className="text-xs text-white/40 font-medium text-center leading-tight">
-        {label}
-      </span>
+    <div ref={ref} className="flex flex-col items-center gap-1 px-6 py-5 rounded-2xl border border-white/[0.07] bg-white/[0.03] min-w-[140px]">
+      <span className="text-3xl font-black tracking-tight text-[#22c55e] tabular-nums">{display}</span>
+      <span className="text-xs text-white/40 font-medium text-center leading-tight">{label}</span>
     </div>
   );
 }
@@ -137,6 +122,23 @@ function BracketMatch({
   );
 }
 
+/* ── useBracketVisible: trigger once when bracket scrolls into view ── */
+function useBracketVisible() {
+  const [visible, setVisible] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
+      { threshold: 0.2 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  return { visible, ref };
+}
+
 /* ── Features ── */
 const FEATURES = [
   { emoji: "🏆", title: "Sinh bracket tự động",  desc: "Nhập đội, hệ thống tự tạo bảng đấu loại trực tiếp theo chuẩn quốc tế." },
@@ -147,40 +149,16 @@ const FEATURES = [
 /* ── Pricing tiers ── */
 const PRICING_TIERS = [
   {
-    name: "Dùng thử",
-    price: "Miễn phí",
-    subtitle: "giải đấu đầu tiên",
-    badge: null,
-    features: [
-      "Tạo giải đấu đầu tiên miễn phí",
-      "Đầy đủ tính năng",
-      "Tối đa 8 đội",
-    ],
+    name: "Dùng thử", price: "Miễn phí", subtitle: "giải đấu đầu tiên", badge: null,
+    features: ["Tạo giải đấu đầu tiên miễn phí", "Đầy đủ tính năng", "Tối đa 8 đội"],
   },
   {
-    name: "Cơ bản",
-    price: "49.000đ",
-    subtitle: "/ giải đấu",
-    badge: "Phổ biến",
-    features: [
-      "Không giới hạn thời gian",
-      "Tối đa 16 đội",
-      "Quản lý thành viên đội",
-      "Chia sẻ link trực tiếp",
-    ],
+    name: "Cơ bản", price: "49.000đ", subtitle: "/ giải đấu", badge: "Phổ biến",
+    features: ["Không giới hạn thời gian", "Tối đa 16 đội", "Quản lý thành viên đội", "Chia sẻ link trực tiếp"],
   },
   {
-    name: "Cao cấp",
-    price: "99.000đ",
-    subtitle: "/ giải đấu",
-    badge: null,
-    features: [
-      "Không giới hạn thời gian",
-      "Tối đa 32 đội",
-      "Tất cả tính năng cơ bản",
-      "Hiệp phụ & bù giải nâng cao",
-      "Hỗ trợ ưu tiên",
-    ],
+    name: "Cao cấp", price: "99.000đ", subtitle: "/ giải đấu", badge: null,
+    features: ["Không giới hạn thời gian", "Tối đa 32 đội", "Tất cả tính năng cơ bản", "Hiệp phụ & bù giải nâng cao", "Hỗ trợ ưu tiên"],
   },
 ];
 
@@ -188,6 +166,7 @@ const PRICING_TIERS = [
 export default function HomePage() {
   const year = new Date().getFullYear();
   const [tickerPaused, setTickerPaused] = useState(false);
+  const { visible: bracketVisible, ref: bracketRef } = useBracketVisible();
 
   return (
     <main className="min-h-screen bg-[#080b10] text-white font-sans overflow-x-hidden">
@@ -222,10 +201,7 @@ export default function HomePage() {
         <div className="flex items-center gap-3">
           <Link href="/features" className="text-sm text-white/50 hover:text-white transition-colors px-3 py-1.5">Tính năng</Link>
           <Link href="/pricing" className="text-sm text-white/50 hover:text-white transition-colors px-3 py-1.5">Bảng giá</Link>
-          <Link
-            href="/login"
-            className="px-5 py-2 rounded-lg bg-white text-[#080b10] text-sm font-bold hover:bg-[#22c55e] transition-all duration-200"
-          >
+          <Link href="/login" className="px-5 py-2 rounded-lg bg-white text-[#080b10] text-sm font-bold hover:bg-[#22c55e] transition-all duration-200">
             Đăng nhập
           </Link>
         </div>
@@ -248,21 +224,18 @@ export default function HomePage() {
               style={{ animationPlayState: tickerPaused ? "paused" : "running" }}
             >
               {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
-                <span key={i} className="text-[12px] text-white/60 font-medium shrink-0">
-                  {item}
-                </span>
+                <span key={i} className="text-[12px] text-white/60 font-medium shrink-0">{item}</span>
               ))}
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── Hero with Arena Background ── */}
+      {/* ── Hero ── */}
       <section className="relative z-10 px-0">
-        {/* ── Arena Background ── */}
-        <div 
+        <div
           className="w-screen rounded-none overflow-hidden mb-16 border-0 shadow-2xl relative flex flex-col items-center justify-center"
-          style={{ 
+          style={{
             height: "700px",
             backgroundImage: `url('/background.png')`,
             backgroundPosition: "center",
@@ -271,52 +244,28 @@ export default function HomePage() {
             marginLeft: "calc(-50vw + 50%)",
           }}
         >
-          {/* Dark overlay for better readability */}
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#080b10]/80 to-[#080b10]/100" />
-          {/* Left glow */}
           <div className="absolute left-0 top-1/2 -translate-y-1/2 w-64 h-64 rounded-full bg-[#22c55e] blur-3xl opacity-15 pointer-events-none" />
-
-          {/* Right glow */}
           <div className="absolute right-0 top-1/2 -translate-y-1/2 w-64 h-64 rounded-full bg-red-500 blur-3xl opacity-15 pointer-events-none" />
 
-          {/* Content overlay */}
           <div className="relative z-10 flex flex-col items-center text-center w-full">
-            {/* Badge */}
             <div className="mb-6 hero-fade-in" style={{ animationDelay: "0ms" }}>
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e] text-[11px] font-bold tracking-widest uppercase">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
                 Realtime Sync · Season 2026
               </div>
             </div>
-
-            {/* Headline */}
-            <h1
-              className="hero-fade-in text-[clamp(2.8rem,6.5vw,5rem)] font-black leading-[1.05] tracking-[-3px] mb-4 max-w-4xl"
-              style={{ animationDelay: "80ms" }}
-            >
+            <h1 className="hero-fade-in text-[clamp(2.8rem,6.5vw,5rem)] font-black leading-[1.05] tracking-[-3px] mb-4 max-w-4xl" style={{ animationDelay: "80ms" }}>
               Quản lý bảng đấu
               <br />
-              <span
-                className="text-transparent bg-clip-text"
-                style={{ backgroundImage: "linear-gradient(90deg, #22c55e 0%, #4ade80 60%, #86efac 100%)" }}
-              >
+              <span className="text-transparent bg-clip-text" style={{ backgroundImage: "linear-gradient(90deg, #22c55e 0%, #4ade80 60%, #86efac 100%)" }}>
                 Realtime
               </span>
             </h1>
-
-            {/* Description */}
-            <p
-              className="hero-fade-in text-white/60 text-[1rem] leading-relaxed max-w-md mb-8 px-4"
-              style={{ animationDelay: "160ms" }}
-            >
+            <p className="hero-fade-in text-white/60 text-[1rem] leading-relaxed max-w-md mb-8 px-4" style={{ animationDelay: "160ms" }}>
               Tạo giải đấu, cập nhật kết quả một lần — mọi màn hình đồng bộ ngay lập tức. Không cần Excel, không cần reload.
             </p>
-
-            {/* CTAs */}
-            <div
-              className="hero-fade-in flex items-center gap-3"
-              style={{ animationDelay: "240ms" }}
-            >
+            <div className="hero-fade-in flex items-center gap-3" style={{ animationDelay: "240ms" }}>
               <Link
                 href="/tournaments/new"
                 className="group inline-flex items-center gap-2 px-7 py-3.5 rounded-xl bg-[#22c55e] text-[#080b10] text-[15px] font-black hover:bg-[#16a34a] transition-all duration-200 hover:scale-[1.03] active:scale-[0.97] shadow-[0_0_50px_rgba(34,197,94,0.3)]"
@@ -339,52 +288,112 @@ export default function HomePage() {
 
       {/* ── Live Bracket Preview ── */}
       <section className="relative z-10 px-6 pb-16">
-        <div id="bracket" className="w-full max-w-5xl mx-auto">
-          <p className="text-[11px] font-bold tracking-widest text-white/25 uppercase mb-6">
+        <div id="bracket" ref={bracketRef} className="w-full max-w-5xl mx-auto">
+          <p
+            className="text-[11px] font-bold tracking-widest text-white/25 uppercase mb-6 transition-all duration-500"
+            style={{
+              opacity: bracketVisible ? 1 : 0,
+              transform: bracketVisible ? "translateY(0)" : "translateY(8px)",
+            }}
+          >
             🏆 Giải Vô Địch Mùa Hè 2026 · Đang diễn ra
           </p>
 
-          <div className="bracket-container flex items-center justify-center gap-0 overflow-x-auto pb-4">
+          <div className="bracket-container flex items-center justify-center gap-8 overflow-x-auto pb-4">
 
-            {/* Quarter-finals */}
-            <div className="flex flex-col gap-3 shrink-0">
+            {/* ── Quarter-finals — fly in from LEFT ── */}
+            <div
+              className="flex flex-col gap-3 shrink-0"
+              style={{
+                transition: "transform 0.7s cubic-bezier(0.22,1,0.36,1), opacity 0.7s ease",
+                transform: bracketVisible ? "translateX(0)" : "translateX(-140px)",
+                opacity: bracketVisible ? 1 : 0,
+                transitionDelay: "0ms",
+              }}
+            >
               <p className="text-[10px] font-black tracking-widest text-white/20 uppercase text-center mb-1">Tứ kết</p>
               {BRACKET.qf.map((m, i) => (
                 <div key={i} className="flex items-center">
-                  <BracketMatch {...m} delay={i * 80} />
-                  <div className="connector-h" />
+                  <BracketMatch {...m} delay={bracketVisible ? 300 + i * 80 : 99999} />
+                  <div
+                    className="connector-h"
+                    style={{
+                      transition: "opacity 0.4s ease",
+                      opacity: bracketVisible ? 1 : 0,
+                      transitionDelay: bracketVisible ? "700ms" : "0ms",
+                    }}
+                  />
                 </div>
               ))}
             </div>
 
             {/* QF → SF vertical connectors */}
-            <div className="flex flex-col shrink-0">
+            <div
+              className="flex flex-col justify-center shrink-0"
+              style={{
+                transition: "opacity 0.4s ease",
+                opacity: bracketVisible ? 1 : 0,
+                transitionDelay: bracketVisible ? "750ms" : "0ms",
+                height: "100%",
+              }}
+            >
               <div className="connector-v-top" />
               <div className="connector-v-bot" />
             </div>
 
-            {/* Semi-finals */}
-            <div className="flex flex-col gap-[52px] shrink-0 mt-[38px]">
+            {/* ── Semi-finals — fly in from RIGHT ── */}
+            <div
+              className="flex flex-col gap-[52px] shrink-0 items-center justify-center h-full"
+              style={{
+                transition: "transform 0.7s cubic-bezier(0.22,1,0.36,1), opacity 0.7s ease",
+                transform: bracketVisible ? "translateX(0)" : "translateX(140px)",
+                opacity: bracketVisible ? 1 : 0,
+                transitionDelay: "80ms",
+              }}
+            >
               <p className="text-[10px] font-black tracking-widest text-white/20 uppercase text-center mb-1">Bán kết</p>
               {BRACKET.sf.map((m, i) => (
                 <div key={i} className="flex items-center">
-                  <BracketMatch {...m} delay={400 + i * 100} />
-                  <div className="connector-h" />
+                  <BracketMatch {...m} delay={bracketVisible ? 380 + i * 100 : 99999} />
+                  <div
+                    className="connector-h"
+                    style={{
+                      transition: "opacity 0.4s ease",
+                      opacity: bracketVisible ? 1 : 0,
+                      transitionDelay: bracketVisible ? "800ms" : "0ms",
+                    }}
+                  />
                 </div>
               ))}
             </div>
 
             {/* SF → Final connector */}
-            <div className="flex flex-col shrink-0">
+            <div
+              className="flex flex-col justify-center shrink-0"
+              style={{
+                transition: "opacity 0.4s ease",
+                opacity: bracketVisible ? 1 : 0,
+                transitionDelay: bracketVisible ? "850ms" : "0ms",
+                height: "100%",
+              }}
+            >
               <div className="connector-v-final" />
             </div>
 
-            {/* Final */}
-            <div className="flex flex-col items-center shrink-0">
+            {/* ── Final — zoom in from center ── */}
+            <div
+              className="flex flex-col items-center shrink-0"
+              style={{
+                transition: "transform 0.55s cubic-bezier(0.22,1,0.36,1), opacity 0.55s ease",
+                transform: bracketVisible ? "scale(1) translateY(0)" : "scale(0.7) translateY(16px)",
+                opacity: bracketVisible ? 1 : 0,
+                transitionDelay: bracketVisible ? "900ms" : "0ms",
+              }}
+            >
               <p className="text-[10px] font-black tracking-widest text-[#22c55e]/60 uppercase text-center mb-2">⚡ Chung kết</p>
               <div className="relative">
                 <div className="absolute -inset-2 rounded-2xl bg-[#22c55e]/10 blur-md" />
-                <BracketMatch {...BRACKET.f[0]} delay={700} />
+                <BracketMatch {...BRACKET.f[0]} delay={bracketVisible ? 950 : 99999} />
               </div>
             </div>
           </div>
@@ -407,9 +416,7 @@ export default function HomePage() {
             key={f.title}
             className="group rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6 hover:border-[#22c55e]/30 hover:bg-[#22c55e]/[0.04] transition-all duration-300 hover:-translate-y-1"
           >
-            <div className="mb-4 w-10 h-10 flex items-center justify-center rounded-xl bg-[#22c55e]/15 text-xl">
-              {f.emoji}
-            </div>
+            <div className="mb-4 w-10 h-10 flex items-center justify-center rounded-xl bg-[#22c55e]/15 text-xl">{f.emoji}</div>
             <h3 className="text-[15px] font-bold mb-2 text-white/90">{f.title}</h3>
             <p className="text-sm text-white/40 leading-relaxed">{f.desc}</p>
           </div>
@@ -419,13 +426,10 @@ export default function HomePage() {
       {/* ── Pricing ── */}
       <section className="relative z-10 py-20 border-t border-white/[0.06]">
         <div className="max-w-6xl mx-auto px-6">
-          {/* Header */}
           <div className="text-center mb-16">
             <h2 className="text-4xl font-black mb-3 tracking-tight">Chọn gói dịch vụ</h2>
             <p className="text-white/50 text-base leading-relaxed">Chọn gói phù hợp cho giải đấu của bạn. Giải đấu đầu tiên miễn phí!</p>
           </div>
-
-          {/* Pricing Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             {PRICING_TIERS.map((tier) => (
               <div
@@ -436,25 +440,16 @@ export default function HomePage() {
                     : "border-white/[0.1] bg-white/[0.04] hover:border-white/20"
                 }`}
               >
-                {/* Badge */}
                 {tier.badge && (
                   <div className="absolute -top-3 right-6 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#22c55e] text-[#080b10] text-xs font-black tracking-wide">
                     {tier.badge}
                   </div>
                 )}
-
-                {/* Title */}
                 <h3 className="text-2xl font-black mb-1 text-white/90">{tier.name}</h3>
-
-                {/* Price */}
                 <div className="mb-6">
-                  <div className="text-4xl font-black text-white mb-1 tracking-tight">
-                    {tier.price}
-                  </div>
+                  <div className="text-4xl font-black text-white mb-1 tracking-tight">{tier.price}</div>
                   <div className="text-xs text-white/40">{tier.subtitle}</div>
                 </div>
-
-                {/* CTA */}
                 <button
                   className={`w-full py-3 px-4 rounded-xl font-bold text-sm mb-6 transition-all duration-200 ${
                     tier.badge
@@ -464,8 +459,6 @@ export default function HomePage() {
                 >
                   Lựa chọn
                 </button>
-
-                {/* Features */}
                 <div className="space-y-3">
                   {tier.features.map((feature) => (
                     <div key={feature} className="flex items-start gap-3">
@@ -479,8 +472,6 @@ export default function HomePage() {
               </div>
             ))}
           </div>
-
-          {/* Footer note */}
           <div className="rounded-2xl border border-white/[0.1] bg-white/[0.04] p-6 text-center">
             <p className="text-sm text-white/60">
               <span className="text-lg mr-2">🎉</span>
@@ -500,75 +491,50 @@ export default function HomePage() {
         @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&display=swap');
         body { font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; }
 
-        /* Stadium spotlight beams */
         .spotlight {
-          position: absolute;
-          top: 0;
-          height: 65vh;
-          opacity: 0.1;
+          position: absolute; top: 0; height: 65vh; opacity: 0.1;
           filter: blur(60px);
           background: linear-gradient(180deg, #22c55e 0%, transparent 100%);
         }
         .spotlight-left   { left: 15%;  width: 140px; transform: rotate(-18deg); transform-origin: top center; animation: beam 9s ease-in-out infinite; }
         .spotlight-right  { right: 15%; width: 140px; transform: rotate(18deg);  transform-origin: top center; animation: beam 9s ease-in-out infinite 1.5s; }
         .spotlight-center { left: 50%;  width: 220px; transform: translateX(-50%); opacity: 0.06; animation: beam 12s ease-in-out infinite 0.7s; }
+        @keyframes beam { 0%, 100% { opacity: 0.1; } 50% { opacity: 0.2; } }
 
-        @keyframes beam {
-          0%, 100% { opacity: 0.1; }
-          50%       { opacity: 0.2; }
-        }
-
-        /* Live score ticker */
         .ticker-track { animation: ticker 32s linear infinite; }
-        @keyframes ticker {
-          from { transform: translateX(0); }
-          to   { transform: translateX(-50%); }
-        }
+        @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
-        /* Hero fade-up entrance */
         .hero-fade-in {
-          opacity: 0;
-          transform: translateY(18px);
+          opacity: 0; transform: translateY(18px);
           animation: fadeUp 0.65s cubic-bezier(0.22,1,0.36,1) forwards;
         }
-        @keyframes fadeUp {
-          to { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
 
-        /* Bracket match pop-in */
+        /* bracket-match pop-in — delay 99999ms = effectively disabled until triggered */
         .bracket-match {
-          opacity: 0;
-          transform: scale(0.9) translateY(6px);
+          opacity: 0; transform: scale(0.9) translateY(6px);
           animation: popIn 0.45s cubic-bezier(0.22,1,0.36,1) forwards;
         }
-        @keyframes popIn {
-          to { opacity: 1; transform: scale(1) translateY(0); }
-        }
+        @keyframes popIn { to { opacity: 1; transform: scale(1) translateY(0); } }
 
-        /* Bracket connectors */
         .connector-h {
-          width: 20px;
-          height: 2px;
+          width: 20px; height: 2px;
           background: linear-gradient(90deg, rgba(34,197,94,0.35), rgba(34,197,94,0.08));
         }
         .connector-v-top {
-          width: 20px;
-          height: 86px;
+          width: 20px; height: 86px;
           border-right: 2px solid rgba(34,197,94,0.2);
           border-top: 2px solid rgba(34,197,94,0.2);
-          border-top-right-radius: 6px;
-          margin-top: 50px;
+          border-top-right-radius: 6px; margin-top: 50px;
         }
         .connector-v-bot {
-          width: 20px;
-          height: 86px;
+          width: 20px; height: 86px;
           border-right: 2px solid rgba(34,197,94,0.2);
           border-bottom: 2px solid rgba(34,197,94,0.2);
           border-bottom-right-radius: 6px;
         }
         .connector-v-final {
-          width: 20px;
-          height: 60px;
+          width: 20px; height: 60px;
           border-right: 2px solid rgba(34,197,94,0.3);
           margin-top: 28px;
         }
