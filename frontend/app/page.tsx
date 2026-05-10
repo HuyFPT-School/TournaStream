@@ -38,6 +38,64 @@ const STATS = [
   { label: "Uptime đảm bảo",   value: 99.9,    suffix: "%",  decimals: 1 },
 ];
 
+/* ── useScrollReveal hook ── */
+function useScrollReveal(options?: IntersectionObserverInit) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          obs.disconnect();
+        }
+      },
+      { threshold: 0.12, ...options }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  return { ref, visible };
+}
+
+/* ── ScrollReveal wrapper ── */
+function Reveal({
+  children,
+  delay = 0,
+  direction = "up",
+  className = "",
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  direction?: "up" | "left" | "right" | "scale";
+  className?: string;
+}) {
+  const { ref, visible } = useScrollReveal();
+
+  const base = "transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]";
+
+  const hidden: Record<string, string> = {
+    up:    "opacity-0 translate-y-10",
+    left:  "opacity-0 -translate-x-10",
+    right: "opacity-0 translate-x-10",
+    scale: "opacity-0 scale-90",
+  };
+
+  return (
+    <div
+      ref={ref}
+      className={`${base} ${visible ? "opacity-100 translate-y-0 translate-x-0 scale-100" : hidden[direction]} ${className}`}
+      style={{ transitionDelay: visible ? `${delay}ms` : "0ms" }}
+    >
+      {children}
+    </div>
+  );
+}
+
 /* ── useCountUp hook ── */
 function useCountUp(target: number, duration = 1800, decimals = 0) {
   const [val, setVal] = useState(0);
@@ -72,17 +130,9 @@ function useCountUp(target: number, duration = 1800, decimals = 0) {
 
 /* ── StatCard ── */
 function StatCard({
-  label,
-  value,
-  suffix,
-  short,
-  decimals = 0,
+  label, value, suffix, short, decimals = 0,
 }: {
-  label: string;
-  value: number;
-  suffix: string;
-  short?: string;
-  decimals?: number;
+  label: string; value: number; suffix: string; short?: string; decimals?: number;
 }) {
   const { val, ref } = useCountUp(value, 1800, decimals);
   const display = short
@@ -96,12 +146,8 @@ function StatCard({
       ref={ref}
       className="flex flex-col items-center gap-1 px-6 py-5 rounded-2xl border border-white/[0.07] bg-white/[0.03] min-w-[140px]"
     >
-      <span className="text-3xl font-black tracking-tight text-[#22c55e] tabular-nums">
-        {display}
-      </span>
-      <span className="text-xs text-white/40 font-medium text-center leading-tight">
-        {label}
-      </span>
+      <span className="text-3xl font-black tracking-tight text-[#22c55e] tabular-nums">{display}</span>
+      <span className="text-xs text-white/40 font-medium text-center leading-tight">{label}</span>
     </div>
   );
 }
@@ -151,36 +197,21 @@ const PRICING_TIERS = [
     price: "Miễn phí",
     subtitle: "giải đấu đầu tiên",
     badge: null,
-    features: [
-      "Tạo giải đấu đầu tiên miễn phí",
-      "Đầy đủ tính năng",
-      "Tối đa 8 đội",
-    ],
+    features: ["Tạo giải đấu đầu tiên miễn phí", "Đầy đủ tính năng", "Tối đa 8 đội"],
   },
   {
     name: "Cơ bản",
     price: "49.000đ",
     subtitle: "/ giải đấu",
     badge: "Phổ biến",
-    features: [
-      "Không giới hạn thời gian",
-      "Tối đa 16 đội",
-      "Quản lý thành viên đội",
-      "Chia sẻ link trực tiếp",
-    ],
+    features: ["Không giới hạn thời gian", "Tối đa 16 đội", "Quản lý thành viên đội", "Chia sẻ link trực tiếp"],
   },
   {
     name: "Cao cấp",
     price: "99.000đ",
     subtitle: "/ giải đấu",
     badge: null,
-    features: [
-      "Không giới hạn thời gian",
-      "Tối đa 32 đội",
-      "Tất cả tính năng cơ bản",
-      "Hiệp phụ & bù giải nâng cao",
-      "Hỗ trợ ưu tiên",
-    ],
+    features: ["Không giới hạn thời gian", "Tối đa 32 đội", "Tất cả tính năng cơ bản", "Hiệp phụ & bù giải nâng cao", "Hỗ trợ ưu tiên"],
   },
 ];
 
@@ -248,18 +279,15 @@ export default function HomePage() {
               style={{ animationPlayState: tickerPaused ? "paused" : "running" }}
             >
               {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
-                <span key={i} className="text-[12px] text-white/60 font-medium shrink-0">
-                  {item}
-                </span>
+                <span key={i} className="text-[12px] text-white/60 font-medium shrink-0">{item}</span>
               ))}
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── Hero ── */}
+      {/* ── Hero (no scroll reveal — already visible on load) ── */}
       <section className="relative z-10 flex flex-col items-center text-center px-4 pt-20 pb-16">
-        {/* Badge */}
         <div className="mb-7 hero-fade-in" style={{ animationDelay: "0ms" }}>
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e] text-[11px] font-bold tracking-widest uppercase">
             <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
@@ -267,7 +295,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Headline */}
         <h1
           className="hero-fade-in text-[clamp(2.8rem,6.5vw,5rem)] font-black leading-[1.05] tracking-[-3px] mb-4 max-w-4xl"
           style={{ animationDelay: "80ms" }}
@@ -289,11 +316,7 @@ export default function HomePage() {
           Tạo giải đấu, cập nhật kết quả một lần — mọi màn hình đồng bộ ngay lập tức. Không cần Excel, không cần reload.
         </p>
 
-        {/* CTAs */}
-        <div
-          className="hero-fade-in flex items-center gap-3 mb-16"
-          style={{ animationDelay: "240ms" }}
-        >
+        <div className="hero-fade-in flex items-center gap-3 mb-16" style={{ animationDelay: "240ms" }}>
           <Link
             href="/tournaments/new"
             className="group inline-flex items-center gap-2 px-7 py-3.5 rounded-xl bg-[#22c55e] text-[#080b10] text-[15px] font-black hover:bg-[#16a34a] transition-all duration-200 hover:scale-[1.03] active:scale-[0.97] shadow-[0_0_50px_rgba(34,197,94,0.3)]"
@@ -312,155 +335,137 @@ export default function HomePage() {
         </div>
 
         {/* ── Live Bracket Preview ── */}
-        <div id="bracket" className="w-full max-w-5xl mx-auto">
-          <p className="text-[11px] font-bold tracking-widest text-white/25 uppercase mb-6">
-            🏆 Giải Vô Địch Mùa Hè 2026 · Đang diễn ra
-          </p>
-
-          <div className="bracket-container flex items-center justify-center gap-0 overflow-x-auto pb-4">
-
-            {/* Quarter-finals */}
-            <div className="flex flex-col gap-3 shrink-0">
-              <p className="text-[10px] font-black tracking-widest text-white/20 uppercase text-center mb-1">Tứ kết</p>
-              {BRACKET.qf.map((m, i) => (
-                <div key={i} className="flex items-center">
-                  <BracketMatch {...m} delay={i * 80} />
-                  <div className="connector-h" />
+        <Reveal direction="scale" className="w-full max-w-5xl mx-auto">
+          <div id="bracket">
+            <p className="text-[11px] font-bold tracking-widest text-white/25 uppercase mb-6">
+              🏆 Giải Vô Địch Mùa Hè 2026 · Đang diễn ra
+            </p>
+            <div className="bracket-container flex items-center justify-center gap-0 overflow-x-auto pb-4">
+              {/* Quarter-finals */}
+              <div className="flex flex-col gap-3 shrink-0">
+                <p className="text-[10px] font-black tracking-widest text-white/20 uppercase text-center mb-1">Tứ kết</p>
+                {BRACKET.qf.map((m, i) => (
+                  <div key={i} className="flex items-center">
+                    <BracketMatch {...m} delay={i * 80} />
+                    <div className="connector-h" />
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-col shrink-0">
+                <div className="connector-v-top" />
+                <div className="connector-v-bot" />
+              </div>
+              <div className="flex flex-col gap-[52px] shrink-0 mt-[38px]">
+                <p className="text-[10px] font-black tracking-widest text-white/20 uppercase text-center mb-1">Bán kết</p>
+                {BRACKET.sf.map((m, i) => (
+                  <div key={i} className="flex items-center">
+                    <BracketMatch {...m} delay={400 + i * 100} />
+                    <div className="connector-h" />
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-col shrink-0">
+                <div className="connector-v-final" />
+              </div>
+              <div className="flex flex-col items-center shrink-0">
+                <p className="text-[10px] font-black tracking-widest text-[#22c55e]/60 uppercase text-center mb-2">⚡ Chung kết</p>
+                <div className="relative">
+                  <div className="absolute -inset-2 rounded-2xl bg-[#22c55e]/10 blur-md" />
+                  <BracketMatch {...BRACKET.f[0]} delay={700} />
                 </div>
-              ))}
-            </div>
-
-            {/* QF → SF vertical connectors */}
-            <div className="flex flex-col shrink-0">
-              <div className="connector-v-top" />
-              <div className="connector-v-bot" />
-            </div>
-
-            {/* Semi-finals */}
-            <div className="flex flex-col gap-[52px] shrink-0 mt-[38px]">
-              <p className="text-[10px] font-black tracking-widest text-white/20 uppercase text-center mb-1">Bán kết</p>
-              {BRACKET.sf.map((m, i) => (
-                <div key={i} className="flex items-center">
-                  <BracketMatch {...m} delay={400 + i * 100} />
-                  <div className="connector-h" />
-                </div>
-              ))}
-            </div>
-
-            {/* SF → Final connector */}
-            <div className="flex flex-col shrink-0">
-              <div className="connector-v-final" />
-            </div>
-
-            {/* Final */}
-            <div className="flex flex-col items-center shrink-0">
-              <p className="text-[10px] font-black tracking-widest text-[#22c55e]/60 uppercase text-center mb-2">⚡ Chung kết</p>
-              <div className="relative">
-                <div className="absolute -inset-2 rounded-2xl bg-[#22c55e]/10 blur-md" />
-                <BracketMatch {...BRACKET.f[0]} delay={700} />
               </div>
             </div>
           </div>
-        </div>
+        </Reveal>
       </section>
 
       {/* ── Stats counter ── */}
       <section className="relative z-10 py-14 border-y border-white/[0.06] bg-white/[0.01]">
         <div className="max-w-3xl mx-auto px-6 flex flex-wrap items-center justify-center gap-4">
-          {STATS.map((s) => (
-            <StatCard key={s.label} {...s} />
+          {STATS.map((s, i) => (
+            <Reveal key={s.label} direction="up" delay={i * 80}>
+              <StatCard {...s} />
+            </Reveal>
           ))}
         </div>
       </section>
 
       {/* ── Feature cards ── */}
       <section className="relative z-10 max-w-5xl mx-auto px-6 py-20 grid grid-cols-1 md:grid-cols-3 gap-4">
-        {FEATURES.map((f) => (
-          <div
-            key={f.title}
-            className="group rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6 hover:border-[#22c55e]/30 hover:bg-[#22c55e]/[0.04] transition-all duration-300 hover:-translate-y-1"
-          >
-            <div className="mb-4 w-10 h-10 flex items-center justify-center rounded-xl bg-[#22c55e]/15 text-xl">
-              {f.emoji}
+        {FEATURES.map((f, i) => (
+          <Reveal key={f.title} direction="up" delay={i * 100}>
+            <div className="group h-full rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6 hover:border-[#22c55e]/30 hover:bg-[#22c55e]/[0.04] transition-all duration-300 hover:-translate-y-1">
+              <div className="mb-4 w-10 h-10 flex items-center justify-center rounded-xl bg-[#22c55e]/15 text-xl">{f.emoji}</div>
+              <h3 className="text-[15px] font-bold mb-2 text-white/90">{f.title}</h3>
+              <p className="text-sm text-white/40 leading-relaxed">{f.desc}</p>
             </div>
-            <h3 className="text-[15px] font-bold mb-2 text-white/90">{f.title}</h3>
-            <p className="text-sm text-white/40 leading-relaxed">{f.desc}</p>
-          </div>
+          </Reveal>
         ))}
       </section>
 
       {/* ── Pricing ── */}
       <section className="relative z-10 py-20 border-t border-white/[0.06]">
         <div className="max-w-6xl mx-auto px-6">
-          {/* Header */}
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-black mb-3 tracking-tight">Chọn gói dịch vụ</h2>
-            <p className="text-white/50 text-base leading-relaxed">Chọn gói phù hợp cho giải đấu của bạn. Giải đấu đầu tiên miễn phí!</p>
-          </div>
+          <Reveal direction="up">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-black mb-3 tracking-tight">Chọn gói dịch vụ</h2>
+              <p className="text-white/50 text-base leading-relaxed">Chọn gói phù hợp cho giải đấu của bạn. Giải đấu đầu tiên miễn phí!</p>
+            </div>
+          </Reveal>
 
-          {/* Pricing Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            {PRICING_TIERS.map((tier) => (
-              <div
-                key={tier.name}
-                className={`relative rounded-3xl border p-8 transition-all duration-300 group ${
-                  tier.badge
-                    ? "border-[#22c55e]/50 bg-[#22c55e]/[0.08] ring-2 ring-[#22c55e]/20 md:scale-[1.05]"
-                    : "border-white/[0.1] bg-white/[0.04] hover:border-white/20"
-                }`}
-              >
-                {/* Badge */}
-                {tier.badge && (
-                  <div className="absolute -top-3 right-6 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#22c55e] text-[#080b10] text-xs font-black tracking-wide">
-                    {tier.badge}
-                  </div>
-                )}
-
-                {/* Title */}
-                <h3 className="text-2xl font-black mb-1 text-white/90">{tier.name}</h3>
-
-                {/* Price */}
-                <div className="mb-6">
-                  <div className="text-4xl font-black text-white mb-1 tracking-tight">
-                    {tier.price}
-                  </div>
-                  <div className="text-xs text-white/40">{tier.subtitle}</div>
-                </div>
-
-                {/* CTA */}
-                <button
-                  className={`w-full py-3 px-4 rounded-xl font-bold text-sm mb-6 transition-all duration-200 ${
+            {PRICING_TIERS.map((tier, i) => (
+              <Reveal key={tier.name} direction="up" delay={i * 120}>
+                <div
+                  className={`relative h-full rounded-3xl border p-8 transition-all duration-300 group ${
                     tier.badge
-                      ? "bg-[#22c55e] text-[#080b10] hover:bg-[#16a34a]"
-                      : "bg-white/10 text-white hover:bg-white/20 border border-white/[0.1]"
+                      ? "border-[#22c55e]/50 bg-[#22c55e]/[0.08] ring-2 ring-[#22c55e]/20 md:scale-[1.05]"
+                      : "border-white/[0.1] bg-white/[0.04] hover:border-white/20"
                   }`}
                 >
-                  Lựa chọn
-                </button>
-
-                {/* Features */}
-                <div className="space-y-3">
-                  {tier.features.map((feature) => (
-                    <div key={feature} className="flex items-start gap-3">
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="mt-0.5 shrink-0">
-                        <path d="M13 4L6 11L3 8" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                      <span className="text-sm text-white/60">{feature}</span>
+                  {tier.badge && (
+                    <div className="absolute -top-3 right-6 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#22c55e] text-[#080b10] text-xs font-black tracking-wide">
+                      {tier.badge}
                     </div>
-                  ))}
+                  )}
+                  <h3 className="text-2xl font-black mb-1 text-white/90">{tier.name}</h3>
+                  <div className="mb-6">
+                    <div className="text-4xl font-black text-white mb-1 tracking-tight">{tier.price}</div>
+                    <div className="text-xs text-white/40">{tier.subtitle}</div>
+                  </div>
+                  <button
+                    className={`w-full py-3 px-4 rounded-xl font-bold text-sm mb-6 transition-all duration-200 ${
+                      tier.badge
+                        ? "bg-[#22c55e] text-[#080b10] hover:bg-[#16a34a]"
+                        : "bg-white/10 text-white hover:bg-white/20 border border-white/[0.1]"
+                    }`}
+                  >
+                    Lựa chọn
+                  </button>
+                  <div className="space-y-3">
+                    {tier.features.map((feature) => (
+                      <div key={feature} className="flex items-start gap-3">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="mt-0.5 shrink-0">
+                          <path d="M13 4L6 11L3 8" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        <span className="text-sm text-white/60">{feature}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </Reveal>
             ))}
           </div>
 
-          {/* Footer note */}
-          <div className="rounded-2xl border border-white/[0.1] bg-white/[0.04] p-6 text-center">
-            <p className="text-sm text-white/60">
-              <span className="text-lg mr-2">🎉</span>
-              <span className="font-bold text-white">Miễn phí cho giải đấu đầu tiên!</span>
-              <span className="text-white/40 ml-1">Tối đa 8 đội, đầy đủ tính năng.</span>
-            </p>
-          </div>
+          <Reveal direction="up" delay={200}>
+            <div className="rounded-2xl border border-white/[0.1] bg-white/[0.04] p-6 text-center">
+              <p className="text-sm text-white/60">
+                <span className="text-lg mr-2">🎉</span>
+                <span className="font-bold text-white">Miễn phí cho giải đấu đầu tiên!</span>
+                <span className="text-white/40 ml-1">Tối đa 8 đội, đầy đủ tính năng.</span>
+              </p>
+            </div>
+          </Reveal>
         </div>
       </section>
 
@@ -473,7 +478,6 @@ export default function HomePage() {
         @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&display=swap');
         body { font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; }
 
-        /* Stadium spotlight beams */
         .spotlight {
           position: absolute;
           top: 0;
@@ -491,14 +495,12 @@ export default function HomePage() {
           50%       { opacity: 0.2; }
         }
 
-        /* Live score ticker */
         .ticker-track { animation: ticker 32s linear infinite; }
         @keyframes ticker {
           from { transform: translateX(0); }
           to   { transform: translateX(-50%); }
         }
 
-        /* Hero fade-up entrance */
         .hero-fade-in {
           opacity: 0;
           transform: translateY(18px);
@@ -508,7 +510,6 @@ export default function HomePage() {
           to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Bracket match pop-in */
         .bracket-match {
           opacity: 0;
           transform: scale(0.9) translateY(6px);
@@ -518,7 +519,6 @@ export default function HomePage() {
           to { opacity: 1; transform: scale(1) translateY(0); }
         }
 
-        /* Bracket connectors */
         .connector-h {
           width: 20px;
           height: 2px;
@@ -544,6 +544,16 @@ export default function HomePage() {
           height: 60px;
           border-right: 2px solid rgba(34,197,94,0.3);
           margin-top: 28px;
+        }
+
+        /* Respect reduced-motion preference */
+        @media (prefers-reduced-motion: reduce) {
+          .hero-fade-in,
+          .bracket-match {
+            opacity: 1 !important;
+            transform: none !important;
+            animation: none !important;
+          }
         }
       `}</style>
     </main>
