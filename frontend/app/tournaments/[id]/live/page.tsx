@@ -1,0 +1,206 @@
+'use client';
+
+import { useParams } from 'next/navigation';
+import { useState, useEffect } from 'react';
+
+interface MatchState {
+  team1Score: number;
+  team2Score: number;
+  time: number;
+  hiep: number;
+}
+
+export default function TournamentLiveViewPage() {
+  const params = useParams();
+  const tournamentId = params.id as string;
+  const [tournament, setTournament] = useState<any>(null);
+  const [matchState, setMatchState] = useState<MatchState>({
+    team1Score: 0,
+    team2Score: 0,
+    time: 0,
+    hiep: 1,
+  });
+
+  useEffect(() => {
+    // Load tournament from localStorage or API
+    const saved = localStorage.getItem('currentTournament');
+    if (saved) {
+      setTournament(JSON.parse(saved));
+    }
+
+    // Simulate live updates
+    const interval = setInterval(() => {
+      setMatchState(prev => ({
+        ...prev,
+        time: prev.time + 1,
+      }));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  if (!tournament) {
+    return (
+      <main className="min-h-screen bg-[#080b10] text-white font-sans flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4">📺</div>
+          <p className="text-xl font-semibold">Giải đấu chưa bắt đầu</p>
+          <p className="text-white/60 mt-2">Vui lòng quay lại sau</p>
+        </div>
+      </main>
+    );
+  }
+
+  const team1 = tournament.teams[0];
+  const team2 = tournament.teams[1];
+
+  return (
+    <main className="min-h-screen bg-[#080b10] text-white font-sans">
+      {/* Noise overlay */}
+      <div
+        className="pointer-events-none fixed inset-0 z-0 opacity-[0.025]"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+          backgroundRepeat: "repeat",
+          backgroundSize: "128px 128px",
+        }}
+      />
+
+      {/* Header */}
+      <div className="relative z-20 border-b border-white/[0.06] backdrop-blur-md bg-[#080b10]/60 sticky top-0">
+        <div className="max-w-6xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm font-semibold text-[#22c55e] mb-1">TRỰC TIẾP</p>
+              <h1 className="text-2xl font-black">{tournament.name}</h1>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#22c55e]/20 border border-[#22c55e]/50">
+              <div className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse" />
+              <span className="text-sm font-semibold text-[#22c55e]">LIVE</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <section className="relative z-10 max-w-6xl mx-auto px-6 py-8">
+        {/* Match Display */}
+        <div className="mb-12">
+          <div className="text-center mb-8">
+            <div className="text-lg font-bold mb-4 text-white/80">Hiệp {matchState.hiep}</div>
+            <div className="text-7xl font-black mb-8 font-mono tracking-wider">
+              {formatTime(matchState.time)}
+            </div>
+          </div>
+
+          {/* Scoreboard */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* Team 1 */}
+            <div className="text-center">
+              <div className="mb-6">
+                <h2 className="text-3xl font-black">{team1?.name || 'Team 1'}</h2>
+              </div>
+              <div className="p-8 rounded-lg bg-[#0f1419] border-2 border-white/[0.06]">
+                <div className="text-6xl font-black">{matchState.team1Score}</div>
+              </div>
+              {team1?.members && team1.members.length > 0 && (
+                <div className="mt-6">
+                  <p className="text-sm font-semibold text-white/60 mb-3">Thành viên</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {team1.members.slice(0, 4).map((member: any) => (
+                      <div
+                        key={member.id}
+                        className="p-2 rounded-lg bg-[#0f1419] border border-white/[0.06]"
+                      >
+                        {member.image && (
+                          <img
+                            src={member.image}
+                            alt={member.name}
+                            className="w-full h-24 rounded-lg object-cover mb-2"
+                          />
+                        )}
+                        <p className="text-xs font-medium truncate">{member.name}</p>
+                        <p className="text-xs text-white/50">{member.position}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* VS */}
+            <div className="flex flex-col items-center justify-center">
+              <div className="text-4xl font-black text-white/30 mb-4">VS</div>
+              <div className="space-y-3 w-full">
+                <div className="p-3 rounded-lg bg-[#0f1419] border border-white/[0.06] text-center">
+                  <p className="text-sm text-white/60">Thể loại</p>
+                  <p className="font-semibold">{tournament.sport}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-[#0f1419] border border-white/[0.06] text-center">
+                  <p className="text-sm text-white/60">Hiệp</p>
+                  <p className="font-semibold">{tournament.matchDuration} phút</p>
+                </div>
+                <div className="p-3 rounded-lg bg-[#0f1419] border border-white/[0.06] text-center">
+                  <p className="text-sm text-white/60">Hiệp phụ</p>
+                  <p className="font-semibold">{tournament.allowExtraTime ? 'Có' : 'Không'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Team 2 */}
+            <div className="text-center">
+              <div className="mb-6">
+                <h2 className="text-3xl font-black">{team2?.name || 'Team 2'}</h2>
+              </div>
+              <div className="p-8 rounded-lg bg-[#0f1419] border-2 border-white/[0.06]">
+                <div className="text-6xl font-black">{matchState.team2Score}</div>
+              </div>
+              {team2?.members && team2.members.length > 0 && (
+                <div className="mt-6">
+                  <p className="text-sm font-semibold text-white/60 mb-3">Thành viên</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {team2.members.slice(0, 4).map((member: any) => (
+                      <div
+                        key={member.id}
+                        className="p-2 rounded-lg bg-[#0f1419] border border-white/[0.06]"
+                      >
+                        {member.image && (
+                          <img
+                            src={member.image}
+                            alt={member.name}
+                            className="w-full h-24 rounded-lg object-cover mb-2"
+                          />
+                        )}
+                        <p className="text-xs font-medium truncate">{member.name}</p>
+                        <p className="text-xs text-white/50">{member.position}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* All Teams Info */}
+        <div className="border-t border-white/[0.06] pt-8">
+          <h3 className="text-lg font-black mb-4">Đội tham gia ({tournament.teams.length})</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {tournament.teams.map((team: any, idx: number) => (
+              <div key={team.id} className="p-4 rounded-lg bg-[#0f1419] border border-white/[0.06]">
+                <div className="font-semibold mb-2">#{idx + 1} {team.name}</div>
+                <p className="text-sm text-white/60">{team.members.length} thành viên</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}

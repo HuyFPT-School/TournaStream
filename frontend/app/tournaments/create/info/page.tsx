@@ -1,0 +1,203 @@
+'use client';
+
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useTournament } from '@/app/contexts/TournamentContext';
+import { useState } from 'react';
+
+const sports = [
+  { id: 'soccer', name: 'Bóng đá', icon: '⚽' },
+  { id: 'basketball', name: 'Bóng rổ', icon: '🏀' },
+  { id: 'volleyball', name: 'Bóng chuyền', icon: '🏐' },
+  { id: 'tennis', name: 'Cầu lông', icon: '🏸' },
+  { id: 'esports', name: 'Esport', icon: '🎮' },
+];
+
+export default function TournamentInfoPage() {
+  const router = useRouter();
+  const { data, setTournamentInfo } = useTournament();
+  const [name, setName] = useState('');
+  const [sport, setSport] = useState('');
+  const [matchDuration, setMatchDuration] = useState(45);
+  const [allowExtraTime, setAllowExtraTime] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const handleContinue = () => {
+    const newErrors: Record<string, string> = {};
+
+    if (!name.trim()) {
+      newErrors.name = 'Vui lòng nhập tên giải đấu';
+    }
+    if (!sport) {
+      newErrors.sport = 'Vui lòng chọn loại môn thể thao';
+    }
+    if (matchDuration <= 0) {
+      newErrors.matchDuration = 'Thời gian hiệp phải > 0';
+    }
+
+    setErrors(newErrors);
+
+    if (Object.keys(newErrors).length === 0) {
+      setTournamentInfo(name, sport, matchDuration, allowExtraTime);
+      router.push('/tournaments/create/teams');
+    }
+  };
+
+  return (
+    <main className="min-h-screen bg-[#080b10] text-white font-sans">
+      {/* Noise overlay */}
+      <div
+        className="pointer-events-none fixed inset-0 z-0 opacity-[0.025]"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+          backgroundRepeat: "repeat",
+          backgroundSize: "128px 128px",
+        }}
+      />
+
+      {/* Navbar */}
+      <nav className="relative z-20 flex items-center justify-between px-8 py-4 border-b border-white/[0.06] backdrop-blur-md bg-[#080b10]/60">
+        <Link href="/" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
+          <div className="w-8 h-8 rounded-lg bg-[#22c55e] flex items-center justify-center">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 1L10 6.5H15.5L11 9.5L13 15L8 11.5L3 15L5 9.5L0.5 6.5H6L8 1Z" fill="#080b10" />
+            </svg>
+          </div>
+          <span className="text-[15px] font-bold tracking-tight">TournaStream</span>
+        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/tournaments"
+            className="text-sm text-white/50 hover:text-white transition-colors px-3 py-1.5"
+          >
+            Quay lại
+          </Link>
+        </div>
+      </nav>
+
+      {/* Main Content */}
+      <section className="relative z-10 max-w-3xl mx-auto px-6 py-16">
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-2 mb-8 text-sm text-white/60 overflow-x-auto pb-2">
+          <button className="text-white/40 hover:text-white transition-colors whitespace-nowrap">Gói dịch vụ</button>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
+            <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <button className="text-[#22c55e] whitespace-nowrap">Thông tin</button>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
+            <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <span className="text-white/40 whitespace-nowrap">Danh sách đội</span>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
+            <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <span className="text-white/40 whitespace-nowrap">Thành viên</span>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
+            <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <span className="text-white/40 whitespace-nowrap">Sắp xếp & Tạo</span>
+        </div>
+
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-black mb-1">Tên giải đấu</h1>
+          <p className="text-white/60">Điền thông tin cơ bản cho giải đấu của bạn</p>
+        </div>
+
+        {/* Form */}
+        <div className="space-y-6">
+          {/* Tournament Name */}
+          <div>
+            <label className="block text-sm font-semibold mb-2">Tên giải đấu</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (errors.name) setErrors({ ...errors, name: '' });
+              }}
+              placeholder="VD: Giải bóng đá mùa hè 2026"
+              className={`w-full px-4 py-3 rounded-lg bg-[#0f1419] border transition-all duration-200 text-white placeholder-white/30 focus:outline-none ${
+                errors.name ? 'border-red-500' : 'border-white/[0.06] focus:border-[#22c55e]'
+              }`}
+            />
+            {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
+          </div>
+
+          {/* Sport Selection */}
+          <div>
+            <label className="block text-sm font-semibold mb-3">Loại môn thể thao</label>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              {sports.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => {
+                    setSport(s.id);
+                    if (errors.sport) setErrors({ ...errors, sport: '' });
+                  }}
+                  className={`p-4 rounded-lg border transition-all duration-200 text-center ${
+                    sport === s.id
+                      ? 'border-[#22c55e] bg-[#1a1f2e]'
+                      : 'border-white/[0.06] bg-[#0f1419] hover:border-white/[0.12]'
+                  }`}
+                >
+                  <div className="text-3xl mb-2">{s.icon}</div>
+                  <div className="text-sm font-medium">{s.name}</div>
+                </button>
+              ))}
+            </div>
+            {errors.sport && <p className="text-red-500 text-sm mt-1">{errors.sport}</p>}
+          </div>
+
+          {/* Match Duration */}
+          <div>
+            <label className="block text-sm font-semibold mb-2">Thời gian mỗi hiệp (phút)</label>
+            <input
+              type="number"
+              value={matchDuration}
+              onChange={(e) => {
+                setMatchDuration(Number(e.target.value));
+                if (errors.matchDuration) setErrors({ ...errors, matchDuration: '' });
+              }}
+              min="1"
+              className={`w-full px-4 py-3 rounded-lg bg-[#0f1419] border transition-all duration-200 text-white focus:outline-none ${
+                errors.matchDuration ? 'border-red-500' : 'border-white/[0.06] focus:border-[#22c55e]'
+              }`}
+            />
+            {errors.matchDuration && <p className="text-red-500 text-sm mt-1">{errors.matchDuration}</p>}
+          </div>
+
+          {/* Extra Time */}
+          <div className="flex items-center gap-4 p-4 rounded-lg bg-[#0f1419] border border-white/[0.06]">
+            <input
+              type="checkbox"
+              id="extraTime"
+              checked={allowExtraTime}
+              onChange={(e) => setAllowExtraTime(e.target.checked)}
+              className="w-5 h-5 rounded accent-[#22c55e] cursor-pointer"
+            />
+            <label htmlFor="extraTime" className="flex-1 text-sm font-medium cursor-pointer">
+              Cho phép hiệp phụ khi hòa?
+            </label>
+          </div>
+        </div>
+
+        {/* CTA Buttons */}
+        <div className="flex gap-4 mt-12">
+          <Link
+            href="/tournaments/create"
+            className="flex-1 px-6 py-3 rounded-lg border border-white/[0.06] text-white font-semibold hover:bg-white/[0.05] transition-all duration-200 text-center"
+          >
+            Quay lại
+          </Link>
+          <button
+            onClick={handleContinue}
+            className="flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200"
+          >
+            Tiếp tục
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}
