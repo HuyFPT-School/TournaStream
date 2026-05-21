@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
 function getApiBaseUrl() {
   return process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000/api";
 }
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
 
@@ -72,5 +72,19 @@ export default function VerifyEmailPage() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-[#080b10] text-white font-sans flex items-center justify-center px-6">
+          <p>Dang tai...</p>
+        </main>
+      }
+    >
+      <VerifyEmailContent />
+    </Suspense>
   );
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Toast } from "@/app/components/Toast";
 import { resetPassword } from "@/app/lib/authStorage";
 
@@ -22,7 +22,7 @@ function makeToastId() {
   return `toast_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -274,5 +274,19 @@ export default function ResetPasswordPage() {
         />
       )}
     </main>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-[#080b10] text-white font-sans flex items-center justify-center">
+          <p>Dang tai...</p>
+        </main>
+      }
+    >
+      <ResetPasswordContent />
+    </Suspense>
   );
 }
