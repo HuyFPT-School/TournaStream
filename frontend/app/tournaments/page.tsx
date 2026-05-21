@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { clearSession, getSession, SessionUser } from "@/app/lib/authStorage";
+import { getSession, logoutUser, SessionUser } from "@/app/lib/authStorage";
 
 interface Tournament {
   id: string;
@@ -25,8 +25,8 @@ export default function MyTournamentsPage() {
     setSessionUser(session);
   }, [router]);
 
-  const handleLogout = () => {
-    clearSession();
+  const handleLogout = async () => {
+    await logoutUser();
     router.push("/login");
   };
 
@@ -72,6 +72,12 @@ export default function MyTournamentsPage() {
           <span className="text-sm text-white/40">
             Xin chào, {sessionUser.fullName}
           </span>
+          <Link
+            href="/change-password"
+            className="text-sm text-white/50 hover:text-white transition-colors px-3 py-1.5"
+          >
+            Doi mat khau
+          </Link>
           <button
             onClick={handleLogout}
             className="text-sm text-white/50 hover:text-white transition-colors px-3 py-1.5"

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Toast } from "@/app/components/Toast";
-import { findUserByEmail, getSession, setSession } from "@/app/lib/authStorage";
+import { getSession, loginUser } from "@/app/lib/authStorage";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -73,7 +73,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const newErrors: Record<string, string> = {};
     const normalizedEmail = email.trim().toLowerCase();
@@ -91,35 +91,25 @@ export default function LoginPage() {
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
 
-    const user = findUserByEmail(normalizedEmail);
-    if (!user) {
-      setErrors({ email: "Tài khoản không tồn tại" });
-      openToast({
-        kind: "error",
-        title: "Không tìm thấy tài khoản",
-        message: "Email này chưa được đăng ký. Vui lòng kiểm tra lại.",
-      });
-      return;
+    try {
+      await loginUser({ email: normalizedEmail, password });
+      router.push("/tournaments");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Loi dang nhap";
+      if (message.toLowerCase().includes("verified")) {
+        openToast({
+          kind: "error",
+          title: "Chua xac thuc email",
+          message: "Vui long kiem tra email de xac thuc tai khoan.",
+        });
+      } else {
+        openToast({
+          kind: "error",
+          title: "Dang nhap that bai",
+          message: "Email hoac mat khau khong dung.",
+        });
+      }
     }
-
-    if (user.password !== password) {
-      setErrors({ password: "Mật khẩu không đúng" });
-      openToast({
-        kind: "error",
-        title: "Sai mật khẩu",
-        message: "Mật khẩu không đúng. Vui lòng thử lại.",
-      });
-      return;
-    }
-
-    setSession({
-      id: user.id,
-      fullName: user.fullName,
-      email: user.email,
-      loginAt: new Date().toISOString(),
-    });
-
-    router.push("/tournaments");
   };
 
   const dismissToast = () => {
