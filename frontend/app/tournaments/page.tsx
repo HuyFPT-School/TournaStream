@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { clearSession, getSession, SessionUser } from "@/app/lib/authStorage";
 
+interface Tournament {
+  id: string;
+  name: string;
+  teams?: { id: string; name: string }[];
+}
+
 export default function MyTournamentsPage() {
   const router = useRouter();
   const [tournaments, setTournaments] = useState<any[]>([]);
@@ -126,7 +132,7 @@ export default function MyTournamentsPage() {
 
             {/* CTA Button */}
             <Link
-              href="/tournaments/new"
+              href="/tournaments/create"
               className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl bg-[#22c55e] text-[#080b10] text-[15px] font-black hover:bg-[#16a34a] transition-all duration-200 hover:scale-[1.03] active:scale-[0.97] shadow-[0_0_50px_rgba(34,197,94,0.3)]"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
