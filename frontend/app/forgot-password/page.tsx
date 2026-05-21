@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Toast } from "@/app/components/Toast";
-import { findUserByEmail } from "@/app/lib/authStorage";
+import { requestPasswordReset } from "@/app/lib/authStorage";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -43,7 +43,7 @@ export default function ForgotPasswordPage() {
     };
   }, [toast?.id]);
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const newErrors: Record<string, string> = {};
     const normalizedEmail = email.trim().toLowerCase();
@@ -57,23 +57,21 @@ export default function ForgotPasswordPage() {
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
 
-    const user = findUserByEmail(normalizedEmail);
-    if (!user) {
-      setErrors({ email: "Email chưa được đăng ký" });
+    try {
+      await requestPasswordReset(normalizedEmail);
+      setSubmitted(true);
+      openToast({
+        kind: "success",
+        title: "Da gui huong dan",
+        message: "Kiem tra email de dat lai mat khau cua ban.",
+      });
+    } catch (error) {
       openToast({
         kind: "error",
-        title: "Không tìm thấy email",
-        message: "Vui lòng kiểm tra lại hoặc tạo tài khoản mới.",
+        title: "Gui that bai",
+        message: "Vui long thu lai sau.",
       });
-      return;
     }
-
-    setSubmitted(true);
-    openToast({
-      kind: "success",
-      title: "Đã gửi hướng dẫn",
-      message: "Kiểm tra email để đặt lại mật khẩu của bạn.",
-    });
   };
 
   const dismissToast = () => {

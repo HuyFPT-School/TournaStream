@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Toast } from "@/app/components/Toast";
-import { createUser, findUserByEmail } from "@/app/lib/authStorage";
+import { registerUser } from "@/app/lib/authStorage";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -57,7 +57,7 @@ export default function RegisterPage() {
     }
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const newErrors: Record<string, string> = {};
     const normalizedEmail = email.trim().toLowerCase();
@@ -92,23 +92,39 @@ export default function RegisterPage() {
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
 
-    if (findUserByEmail(normalizedEmail)) {
-      setErrors({ email: "Email đã được sử dụng" });
-      openToast({
-        kind: "error",
-        title: "Email đã tồn tại",
-        message: "Vui lòng dùng email khác để đăng ký.",
+    try {
+      const result = await registerUser({
+        fullName: trimmedName,
+        email: normalizedEmail,
+        password,
       });
-      return;
+
+      if (result.requiresVerification) {
+        openToast({
+          kind: "success",
+          title: "Da gui email xac thuc",
+          message: "Vui long kiem tra hop thu de kich hoat tai khoan.",
+        });
+      }
+
+      router.push("/login?registered=1");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Loi dang ky";
+      if (message.toLowerCase().includes("exists")) {
+        setErrors({ email: "Email đã được sử dụng" });
+        openToast({
+          kind: "error",
+          title: "Email da ton tai",
+          message: "Vui long dung email khac de dang ky.",
+        });
+      } else {
+        openToast({
+          kind: "error",
+          title: "Dang ky that bai",
+          message: "Vui long thu lai sau.",
+        });
+      }
     }
-
-    createUser({
-      fullName: trimmedName,
-      email: normalizedEmail,
-      password,
-    });
-
-    router.push("/login?registered=1");
   };
 
   const dismissToast = () => {
