@@ -34,6 +34,15 @@ function writeJson(key: string, value: unknown) {
 }
 
 function getApiBaseUrl() {
+  if (typeof window !== "undefined") {
+    const isLocalHost =
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1";
+    if (isLocalHost) {
+      return "http://localhost:4000/api";
+    }
+  }
+
   return process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000/api";
 }
 

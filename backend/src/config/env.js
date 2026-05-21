@@ -19,6 +19,12 @@ const env = {
   skipEmailVerification: toBool(process.env.SKIP_EMAIL_VERIFICATION, true),
   mailerUser: process.env.MAILER_USER || "",
   mailerPassword: process.env.MAILER_PASSWORD || "",
+  sepayApiKey: process.env.SEPAY_API_KEY || "",
+  sepayWebhookSecret: process.env.SEPAY_WEBHOOK_SECRET || "",
+  sepayBankName: process.env.SEPAY_BANK_NAME || "",
+  sepayAccountNumber: process.env.SEPAY_ACCOUNT_NUMBER || "",
+  sepayAccountName: process.env.SEPAY_ACCOUNT_NAME || "",
+  sepayQrImageUrl: process.env.SEPAY_QR_IMAGE_URL || "",
 };
 
 module.exports = { env };
