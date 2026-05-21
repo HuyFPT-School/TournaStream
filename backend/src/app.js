@@ -13,12 +13,7 @@ const app = express();
 
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
-app.use(
-  cors({
-    origin: env.frontendUrl,
-    credentials: true,
-  }),
-);
+app.use(cors());
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
