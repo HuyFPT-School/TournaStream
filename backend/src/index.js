@@ -1,6 +1,6 @@
 const { env } = require("./config/env");
 const { connectDatabase } = require("./db/connect");
-const { app } = require("./app");
+const app = require("./app");
 
 connectDatabase()
   .then(() => {
