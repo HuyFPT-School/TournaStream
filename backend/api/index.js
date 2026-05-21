@@ -1,4 +1,4 @@
-const { app } = require("../src/app");
+const app = require("../src/app");
 const { connectDatabase } = require("../src/db/connect");
 
 module.exports = async (req, res) => {

@@ -31,4 +31,4 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ message: "Server error" });
 });
 
-module.exports = { app };
+module.exports = app;
