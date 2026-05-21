@@ -13,7 +13,25 @@ const app = express();
 
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
-app.use(cors());
+const allowedOrigins = [
+  "http://localhost:3000", // Allow local dev
+  "https://tourna-stream-cktn.vercel.app", // Replace with real Vercel domain
+];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Blocked by CORS: invalid origin"));
+    },
+    credentials: true,
+  }),
+);
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
