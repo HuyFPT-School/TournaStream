@@ -14,11 +14,15 @@ function verifySignature(req) {
   const signatureHeader = req.get("x-sepay-signature") || "";
   if (!signatureHeader) return false;
 
+  const timestamp = req.get("x-sepay-timestamp") || "";
+  if (!timestamp) return false;
+
   const secret = (env.sepayWebhookSecret || "").trim();
   if (!secret) return null;
 
   const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
-  const digest = crypto.createHmac("sha256", secret).update(rawBody).digest();
+  const payload = `${timestamp}.${rawBody.toString("utf8")}`;
+  const digest = crypto.createHmac("sha256", secret).update(payload).digest();
   const expected = `sha256=${digest.toString("hex")}`;
 
   return safeEqual(signatureHeader, expected);
@@ -63,6 +67,8 @@ async function handleSepayWebhook(req, res) {
         bodyKeys: req.body ? Object.keys(req.body) : null,
         signatureHeader: req.get("x-sepay-signature"),
         secretLength: secret ? secret.length : 0,
+        secretPrefix: secret ? secret.substring(0, 8) : null,
+        secretSuffix: secret ? secret.substring(secret.length - 4) : null,
       }
     });
   }
