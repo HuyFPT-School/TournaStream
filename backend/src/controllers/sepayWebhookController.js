@@ -14,15 +14,11 @@ function verifySignature(req) {
   const signatureHeader = req.get("x-sepay-signature") || "";
   if (!signatureHeader) return false;
 
-  const timestamp = req.get("x-sepay-timestamp") || "";
-  if (!timestamp) return false;
-
   const secret = env.sepayWebhookSecret;
   if (!secret) return null;
 
   const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
-  const payload = `${timestamp}.${rawBody.toString("utf8")}`;
-  const digest = crypto.createHmac("sha256", secret).update(payload).digest();
+  const digest = crypto.createHmac("sha256", secret).update(rawBody).digest();
   const expected = `sha256=${digest.toString("hex")}`;
 
   return safeEqual(signatureHeader, expected);
