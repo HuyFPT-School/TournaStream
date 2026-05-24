@@ -14,7 +14,7 @@ function verifySignature(req) {
   const signatureHeader = req.get("x-sepay-signature") || "";
   if (!signatureHeader) return false;
 
-  const secret = env.sepayWebhookSecret;
+  const secret = (env.sepayWebhookSecret || "").trim();
   if (!secret) return null;
 
   const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
@@ -42,22 +42,35 @@ function parseTransactionDate(value) {
   const fallback = new Date(normalized);
   return Number.isNaN(fallback.getTime()) ? null : fallback;
 }
-
 async function handleSepayWebhook(req, res) {
   const signatureValid = verifySignature(req);
+  const secret = env.sepayWebhookSecret;
+
   if (signatureValid === null) {
     return res
       .status(500)
       .json({ message: "SEPAY_WEBHOOK_SECRET is not configured" });
   }
+
   if (!signatureValid) {
-    return res.status(401).json({ message: "Invalid signature" });
+    return res.status(401).json({
+      message: "Invalid signature",
+      debug: {
+        hasRawBody: !!req.rawBody,
+        rawBodyType: req.rawBody ? typeof req.rawBody : null,
+        rawBodyLength: req.rawBody ? req.rawBody.length : null,
+        bodyType: typeof req.body,
+        bodyKeys: req.body ? Object.keys(req.body) : null,
+        signatureHeader: req.get("x-sepay-signature"),
+        secretLength: secret ? secret.length : 0,
+      }
+    });
   }
 
   const payload = req.body || {};
   const orderCode = extractOrderCode(payload);
   const sepayId = Number(payload.id);
-  const amount = Number(payload.amount || 0);
+  const amount = Number(payload.transferAmount || payload.amount || 0);
 
   if (!Number.isFinite(sepayId) || !Number.isFinite(amount)) {
     return res.status(400).json({ message: "Invalid payload" });
@@ -77,7 +90,7 @@ async function handleSepayWebhook(req, res) {
     subAccount: payload.subAccount || null,
     amount,
     transferType: payload.transferType || null,
-    transferDesc: payload.transferDesc || null,
+    transferDesc: payload.description || payload.transferDesc || null,
     content: payload.content || null,
     code: payload.code || null,
     orderCode,
