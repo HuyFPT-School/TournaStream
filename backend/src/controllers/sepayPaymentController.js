@@ -41,6 +41,27 @@ function buildQrImageUrl(qrPayload) {
     return env.sepayQrImageUrl;
   }
 
+  if (qrPayload.includes("BANK=")) {
+    const parts = qrPayload.split("|");
+    const details = {};
+    parts.forEach((p) => {
+      const [key, val] = p.split("=");
+      if (key && val) details[key.trim().toUpperCase()] = val.trim();
+    });
+
+    if (details.BANK && details.ACCOUNT) {
+      const bank = encodeURIComponent(details.BANK);
+      const account = encodeURIComponent(details.ACCOUNT);
+      const amount = encodeURIComponent(details.AMOUNT || "");
+      const content = encodeURIComponent(details.CONTENT || "");
+      const name = encodeURIComponent(details.NAME || "");
+
+      let url = `https://img.vietqr.io/image/${bank}-${account}-compact2.png?amount=${amount}&addInfo=${content}`;
+      if (name) url += `&accountName=${name}`;
+      return url;
+    }
+  }
+
   return `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(
     qrPayload,
   )}`;
@@ -105,4 +126,29 @@ async function createSepayCheckout(req, res) {
   });
 }
 
-module.exports = { createSepayCheckout };
+async function getSepayTransactionStatus(req, res) {
+  try {
+    const { checkoutCode } = req.params;
+    if (!checkoutCode) {
+      return res.status(400).json({ message: "Checkout code is required" });
+    }
+
+    const transaction = await Transaction.findOne({
+      checkoutCode: String(checkoutCode).toUpperCase().trim(),
+    }).lean();
+
+    if (!transaction) {
+      return res.status(404).json({ message: "Transaction not found" });
+    }
+
+    return res.status(200).json({
+      checkoutCode: transaction.checkoutCode,
+      status: transaction.status,
+      paidAt: transaction.paidAt || null,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+}
+
+module.exports = { createSepayCheckout, getSepayTransactionStatus };
