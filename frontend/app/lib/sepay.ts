@@ -53,3 +53,12 @@ export async function createSePayCheckout(input: {
     body: JSON.stringify(input),
   });
 }
+
+export async function getSePayTransactionStatus(checkoutCode: string) {
+  return requestJson<{ checkoutCode: string; status: string; paidAt: string | null }>(
+    `/payments/sepay/status/${checkoutCode}`,
+    {
+      method: "GET",
+    }
+  );
+}

@@ -92,6 +92,10 @@ async function handleSepayWebhook(req, res) {
   await payment.save();
 
   if (orderCode) {
+    const transactions = mongoose.connection.collection("transactions");
+    const txn = await transactions.findOne({ checkoutCode: orderCode });
+    const txnAmountMatches = txn ? txn.amount === amount : false;
+
     const orders = mongoose.connection.collection("orders");
     const order = await orders.findOne({
       $or: [{ code: orderCode }, { orderCode }, { orderId: orderCode }],
@@ -102,7 +106,7 @@ async function handleSepayWebhook(req, res) {
       (field) => order && typeof order[field] === "number",
     );
     const orderAmount = orderAmountField ? order[orderAmountField] : null;
-    const amountMatches = orderAmount === null || orderAmount === amount;
+    const amountMatches = orderAmount === null ? (txn ? txnAmountMatches : true) : (orderAmount === amount);
 
     if (order) {
       await orders.updateOne(
@@ -119,25 +123,22 @@ async function handleSepayWebhook(req, res) {
       );
     }
 
-    const transactions = mongoose.connection.collection("transactions");
-    await transactions.updateOne(
-      { checkoutCode: orderCode },
-      {
-        $set: {
-          status: order
-            ? amountMatches
-              ? "paid"
-              : "amount_mismatch"
-            : "unmatched",
-          sepayReference: payload.referenceCode || String(sepayId),
-          matchedOrderAmount: orderAmount,
-          paidAt: amountMatches ? new Date() : null,
+    if (txn) {
+      await transactions.updateOne(
+        { checkoutCode: orderCode },
+        {
+          $set: {
+            status: txnAmountMatches ? "paid" : "amount_mismatch",
+            sepayReference: payload.referenceCode || String(sepayId),
+            matchedOrderAmount: orderAmount,
+            paidAt: txnAmountMatches ? new Date() : null,
+          },
         },
-      },
-    );
+      );
+    }
 
-    payment.status = order
-      ? amountMatches
+    payment.status = (order || txn)
+      ? ((order ? amountMatches : true) && (txn ? txnAmountMatches : true))
         ? "matched"
         : "amount_mismatch"
       : "unmatched";

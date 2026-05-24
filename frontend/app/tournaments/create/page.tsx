@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTournament } from '@/app/contexts/TournamentContext';
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { createSePayCheckout, getSePayTransactionStatus } from '@/app/lib/sepay';
 
 interface Package {
   id: string;
@@ -58,12 +59,85 @@ export default function PackageSelectionPage() {
   const router = useRouter();
   const { setPackage } = useTournament();
   const [selectedPackage, setSelectedPackage] = useState<string>('basic');
+  const [activeCheckout, setActiveCheckout] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleContinue = () => {
+  const bankDetails = useMemo(() => {
+    if (!activeCheckout?.qrPayload) return null;
+    const parts = activeCheckout.qrPayload.split('|');
+    const details: Record<string, string> = {};
+    parts.forEach((p: string) => {
+      const [key, val] = p.split('=');
+      if (key && val) {
+        details[key.trim().toUpperCase()] = val.trim();
+      }
+    });
+    return {
+      bank: details['BANK'] || 'Ngân hàng',
+      account: details['ACCOUNT'] || 'Số tài khoản',
+      name: details['NAME'] || 'Tên tài khoản',
+    };
+  }, [activeCheckout]);
+
+  useEffect(() => {
+    if (!activeCheckout || paymentSuccess) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await getSePayTransactionStatus(activeCheckout.checkoutCode);
+        if (res.status === 'paid') {
+          setPaymentSuccess(true);
+          clearInterval(interval);
+          setTimeout(() => {
+            const pkg = packages.find(p => p.id === selectedPackage);
+            if (pkg) {
+              setPackage(pkg.id, pkg.name, pkg.price);
+              router.push('/tournaments/create/info');
+            }
+          }, 2000);
+        }
+      } catch (err) {
+        console.error('Error polling transaction status:', err);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [activeCheckout, paymentSuccess, selectedPackage, router, setPackage]);
+
+  const handleContinue = async () => {
     const pkg = packages.find(p => p.id === selectedPackage);
-    if (pkg) {
+    if (!pkg) return;
+
+    if (pkg.price === 0) {
       setPackage(pkg.id, pkg.name, pkg.price);
       router.push('/tournaments/create/info');
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMessage('');
+    try {
+      const planKey = pkg.id === 'pro' ? 'premium' : pkg.id;
+      const checkout = await createSePayCheckout({ planKey });
+      setActiveCheckout(checkout);
+      setPaymentSuccess(false);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Không tạo được thông tin thanh toán'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert('Đã copy mã chuyển khoản!');
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
     }
   };
 
@@ -195,6 +269,12 @@ export default function PackageSelectionPage() {
           📌 Miễn phí cho giải đấu đầu tiên! Tối đa 8 đội, đầy đủ tính năng.
         </div>
 
+        {errorMessage && (
+          <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-200">
+            {errorMessage}
+          </div>
+        )}
+
         {/* CTA Buttons */}
         <div className="flex gap-4">
           <Link
@@ -205,12 +285,158 @@ export default function PackageSelectionPage() {
           </Link>
           <button
             onClick={handleContinue}
-            className="flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200"
+            disabled={isLoading}
+            className={`flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200 ${
+              isLoading ? 'opacity-70 cursor-wait' : ''
+            }`}
           >
-            Tiếp tục
+            {isLoading ? 'Đang tạo QR thanh toán...' : 'Tiếp tục'}
           </button>
         </div>
       </section>
+
+      {/* SePay Checkout Modal */}
+      {activeCheckout && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            onClick={() => {
+              if (!paymentSuccess) {
+                setActiveCheckout(null);
+              }
+            }}
+          />
+
+          {/* Modal Container */}
+          <div className="relative z-10 w-full max-w-xl overflow-hidden rounded-3xl border border-white/10 bg-[#0c1118] shadow-[0_30px_120px_rgba(0,0,0,0.8)]">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#22c55e]">
+                  SePay Checkout
+                </p>
+                <h3 className="mt-1 text-lg font-black text-white">
+                  Thanh toán gói {activeCheckout.planName}
+                </h3>
+              </div>
+              {!paymentSuccess && (
+                <button
+                  onClick={() => setActiveCheckout(null)}
+                  className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5 hover:text-white transition-all"
+                >
+                  Đóng
+                </button>
+              )}
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              {paymentSuccess ? (
+                /* SUCCESS STATE */
+                <div className="py-12 flex flex-col items-center justify-center text-center space-y-4">
+                  <div className="w-20 h-20 rounded-full bg-[#22c55e]/15 flex items-center justify-center border border-[#22c55e]/30 animate-pulse">
+                    <svg
+                      width="40"
+                      height="40"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#22c55e"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </div>
+                  <h4 className="text-2xl font-black text-white">Thanh toán thành công!</h4>
+                  <p className="text-white/60 text-sm max-w-sm">
+                    Giao dịch đã được ghi nhận. Đang chuẩn bị chuyển đến màn hình thiết lập thông tin giải đấu...
+                  </p>
+                  <div className="w-12 h-1 bg-white/10 rounded-full overflow-hidden relative">
+                    <div className="absolute inset-y-0 left-0 bg-[#22c55e] w-1/2 rounded-full animate-pulse" />
+                  </div>
+                </div>
+              ) : (
+                /* PAYMENT QR & INFO STATE */
+                <div className="space-y-6">
+                  {/* QR Image & Bank details */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                    <div className="flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-white/10">
+                      <img
+                        src={activeCheckout.qrImageUrl}
+                        alt="SePay QR Code"
+                        className="w-full max-w-[200px] h-auto rounded-lg"
+                      />
+                      <span className="mt-2 text-[10px] font-medium text-black/50 tracking-wider uppercase text-center">
+                        Quét mã bằng ứng dụng ngân hàng
+                      </span>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4">
+                        <span className="text-[10px] text-white/40 uppercase tracking-wider block">Ngân hàng</span>
+                        <span className="text-sm font-bold text-white block mt-0.5">
+                          {bankDetails?.bank || 'MB Bank (Ngân hàng Quân Đội)'}
+                        </span>
+                      </div>
+                      <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4">
+                        <span className="text-[10px] text-white/40 uppercase tracking-wider block">Chủ tài khoản</span>
+                        <span className="text-sm font-bold text-white block mt-0.5">
+                          {bankDetails?.name || 'TOURNAMENT FLOW CO.'}
+                        </span>
+                      </div>
+                      <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4">
+                        <span className="text-[10px] text-white/40 uppercase tracking-wider block">Số tài khoản</span>
+                        <span className="text-sm font-bold text-[#22c55e] block mt-0.5">
+                          {bankDetails?.account || '0987654321'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment instruction & Content Code */}
+                  <div className="border border-white/10 bg-white/[0.03] rounded-2xl p-4 space-y-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <span className="text-[10px] text-white/40 uppercase tracking-wider block">Nội dung chuyển khoản</span>
+                        <span className="text-lg font-mono font-black text-[#22c55e] block mt-0.5 tracking-wide">
+                          {activeCheckout.checkoutCode}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => copyText(activeCheckout.checkoutCode)}
+                        className="px-4 py-2 text-xs font-bold bg-white/10 rounded-xl hover:bg-white/20 transition-all text-white border border-white/5"
+                      >
+                        Copy
+                      </button>
+                    </div>
+
+                    <div className="h-px bg-white/10" />
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] text-white/40 uppercase tracking-wider block">Số tiền cần thanh toán</span>
+                        <span className="text-xl font-black text-white block mt-0.5">
+                          {activeCheckout.amount.toLocaleString('vi-VN')} đ
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Loading / Status Polling message */}
+                  <div className="flex items-center justify-center gap-3 py-2 bg-[#22c55e]/10 border border-[#22c55e]/20 rounded-xl">
+                    <div className="w-2 h-2 rounded-full bg-[#22c55e] animate-ping" />
+                    <span className="text-xs font-bold text-[#d8ffe5] tracking-wide">
+                      Đang chờ hệ thống ghi nhận thanh toán...
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
