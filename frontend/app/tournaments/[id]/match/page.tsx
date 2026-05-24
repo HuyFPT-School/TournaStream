@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import { syncTournamentToBackend, fetchTournamentFromBackend } from '@/app/lib/tournaments';
 
 interface MatchState {
   team1Score: number;
@@ -10,10 +11,12 @@ interface MatchState {
   time: number;
   isRunning: boolean;
   hiep: number;
+  isFinished?: boolean;
 }
 
 export default function LiveMatchPage() {
   const params = useParams();
+  const router = useRouter();
   const tournamentId = params.id as string;
   const [tournament, setTournament] = useState<any>(null);
   const [matchState, setMatchState] = useState<MatchState>({
@@ -22,19 +25,107 @@ export default function LiveMatchPage() {
     time: 0,
     isRunning: false,
     hiep: 1,
+    isFinished: false,
   });
 
+  const [isLoaded, setIsLoaded] = useState(false);
+
   useEffect(() => {
-    // Load tournament from localStorage
-    const saved = localStorage.getItem('currentTournament');
-    if (saved) {
-      setTournament(JSON.parse(saved));
+    const loadTournament = async () => {
+      // 1. Try local storage first
+      const saved = localStorage.getItem('currentTournament');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.id === tournamentId) {
+            setTournament(parsed);
+            if (parsed.matchState) {
+              setMatchState({
+                ...parsed.matchState,
+                isRunning: false, // Pause on load for safety
+                isFinished: !!parsed.matchState.isFinished
+              });
+            }
+            setIsLoaded(true);
+            return;
+          }
+        } catch (e) {
+          console.error('Error parsing currentTournament:', e);
+        }
+      }
+
+      // 2. Fetch from backend if not found or ID mismatch
+      try {
+        const data = await fetchTournamentFromBackend(tournamentId);
+        setTournament(data);
+        if (data.matchState) {
+          setMatchState({
+            ...data.matchState,
+            isRunning: false, // Pause on load for safety
+            isFinished: !!data.matchState.isFinished
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching tournament from backend:', err);
+      }
+      setIsLoaded(true);
+    };
+
+    loadTournament();
+  }, [tournamentId]);
+
+  // Save matchState to currentTournament and tournaments list when it changes
+  useEffect(() => {
+    if (isLoaded && tournament) {
+      const updatedTournament = {
+        ...tournament,
+        matchState: matchState
+      };
+      
+      localStorage.setItem('currentTournament', JSON.stringify(updatedTournament));
+      
+      const savedList = localStorage.getItem('tournaments');
+      if (savedList) {
+        try {
+          const list = JSON.parse(savedList);
+          const index = list.findIndex((t: any) => t.id === tournament.id);
+          if (index > -1) {
+            list[index] = updatedTournament;
+            localStorage.setItem('tournaments', JSON.stringify(list));
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
     }
-  }, []);
+  }, [matchState, tournament, isLoaded]);
+
+  // Sync tournament state to backend on key changes and every 15 seconds of match time
+  useEffect(() => {
+    if (!isLoaded || !tournament) return;
+
+    const updatedTournament = {
+      ...tournament,
+      matchState: matchState
+    };
+
+    syncTournamentToBackend(updatedTournament).catch(err => {
+      console.error('Error syncing tournament to backend:', err);
+    });
+  }, [
+    matchState.team1Score,
+    matchState.team2Score,
+    matchState.isRunning,
+    matchState.hiep,
+    matchState.isFinished,
+    Math.floor(matchState.time / 15),
+    tournament,
+    isLoaded
+  ]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (matchState.isRunning) {
+    if (matchState.isRunning && !matchState.isFinished) {
       interval = setInterval(() => {
         setMatchState(prev => ({
           ...prev,
@@ -43,7 +134,7 @@ export default function LiveMatchPage() {
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [matchState.isRunning]);
+  }, [matchState.isRunning, matchState.isFinished]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -63,6 +154,52 @@ export default function LiveMatchPage() {
         prev[team === 'team1' ? 'team1Score' : 'team2Score'] + delta
       ),
     }));
+  };
+
+  const handleFinishMatch = async () => {
+    if (!window.confirm('Bạn có chắc chắn muốn kết thúc trận đấu này không? Kết quả sẽ được lưu lại vĩnh viễn.')) {
+      return;
+    }
+
+    const finalMatchState = {
+      ...matchState,
+      isRunning: false,
+      isFinished: true,
+    };
+
+    setMatchState(finalMatchState);
+
+    if (tournament) {
+      const updatedTournament = {
+        ...tournament,
+        matchState: finalMatchState
+      };
+      
+      localStorage.setItem('currentTournament', JSON.stringify(updatedTournament));
+      
+      const savedList = localStorage.getItem('tournaments');
+      if (savedList) {
+        try {
+          const list = JSON.parse(savedList);
+          const index = list.findIndex((t: any) => t.id === tournament.id);
+          if (index > -1) {
+            list[index] = updatedTournament;
+            localStorage.setItem('tournaments', JSON.stringify(list));
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      try {
+        await syncTournamentToBackend(updatedTournament);
+      } catch (err) {
+        console.error('Error syncing final state to backend:', err);
+      }
+
+      alert('Trận đấu đã kết thúc thành công!');
+      router.push(`/tournaments/${tournamentId}`);
+    }
   };
 
   if (!tournament) {
@@ -103,7 +240,7 @@ export default function LiveMatchPage() {
             {tournament.name} • {tournament.sport}
           </div>
           <Link
-            href="/tournaments"
+            href={`/tournaments/${tournamentId}`}
             className="text-sm text-white/50 hover:text-white transition-colors px-3 py-1.5"
           >
             Quay lại
@@ -152,25 +289,35 @@ export default function LiveMatchPage() {
             </div>
 
             {/* Start/Stop Button */}
-            <button
-              onClick={handleStartStop}
-              className={`px-6 py-3 rounded-lg font-semibold transition-all duration-200 mb-4 ${
-                matchState.isRunning
-                  ? 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/50'
-                  : 'bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50'
-              }`}
-            >
-              {matchState.isRunning ? '⏸ Tạm dừng' : '▶ Bắt đầu'}
-            </button>
+            {matchState.isFinished ? (
+              <div className="px-6 py-3 rounded-lg font-semibold bg-gray-500/20 border border-gray-500/30 text-gray-400 mb-4 cursor-not-allowed">
+                🏁 Trận đấu đã kết thúc
+              </div>
+            ) : (
+              <button
+                onClick={handleStartStop}
+                className={`px-6 py-3 rounded-lg font-semibold transition-all duration-200 mb-4 ${
+                  matchState.isRunning
+                    ? 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/50'
+                    : 'bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50'
+                }`}
+              >
+                {matchState.isRunning ? '⏸ Tạm dừng' : '▶ Bắt đầu'}
+              </button>
+            )}
 
             {/* Status */}
             <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
-              matchState.isRunning
+              matchState.isFinished
+                ? 'bg-red-500/20 text-red-400 border border-red-500/50'
+                : matchState.isRunning
                 ? 'bg-green-500/20 text-green-400 border border-green-500/50'
                 : 'bg-white/[0.05] text-white/60 border border-white/[0.06]'
             }`}>
-              <div className={`w-2 h-2 rounded-full ${matchState.isRunning ? 'bg-green-400' : 'bg-white/40'}`} />
-              {matchState.isRunning ? 'Đang thi đấu' : 'Tạm dừng'}
+              <div className={`w-2 h-2 rounded-full ${
+                matchState.isFinished ? 'bg-red-400' : matchState.isRunning ? 'bg-green-400' : 'bg-white/40'
+              }`} />
+              {matchState.isFinished ? 'Đã kết thúc' : matchState.isRunning ? 'Đang thi đấu' : 'Tạm dừng'}
             </div>
           </div>
 
@@ -254,16 +401,19 @@ export default function LiveMatchPage() {
         {/* Action Buttons */}
         <div className="flex gap-4">
           <Link
-            href="/tournaments"
+            href={`/tournaments/${tournamentId}`}
             className="flex-1 px-6 py-3 rounded-lg border border-white/[0.06] text-white font-semibold hover:bg-white/[0.05] transition-all duration-200 text-center"
           >
             Quay lại Giải đấu
           </Link>
-          <button
-            className="flex-1 px-6 py-3 rounded-lg bg-red-500/20 text-red-400 border border-red-500/50 font-semibold hover:bg-red-500/30 transition-all duration-200"
-          >
-            Kết thúc trận đấu
-          </button>
+          {!matchState.isFinished && (
+            <button
+              onClick={handleFinishMatch}
+              className="flex-1 px-6 py-3 rounded-lg bg-red-500/20 text-red-400 border border-red-500/50 font-semibold hover:bg-red-500/30 transition-all duration-200"
+            >
+              Kết thúc trận đấu
+            </button>
+          )}
         </div>
       </section>
     </main>

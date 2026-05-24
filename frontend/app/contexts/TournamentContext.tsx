@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 export interface Team {
   id: string;
@@ -46,6 +46,7 @@ interface TournamentContextType {
   removeMember: (teamId: string, memberId: string) => void;
   updateMember: (teamId: string, memberId: string, member: Member) => void;
   resetTournament: () => void;
+  loadTournamentData: (data: TournamentData) => void;
 }
 
 const TournamentContext = createContext<TournamentContextType | undefined>(undefined);
@@ -65,6 +66,29 @@ const initialData: TournamentData = {
 
 export function TournamentProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<TournamentData>(initialData);
+
+  // Load draft on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('tournamentDraft');
+      if (saved) {
+        try {
+          setData(JSON.parse(saved));
+        } catch (e) {
+          console.error('Error parsing tournamentDraft:', e);
+        }
+      }
+    }
+  }, []);
+
+  // Save draft on data change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (data.packageId) {
+        localStorage.setItem('tournamentDraft', JSON.stringify(data));
+      }
+    }
+  }, [data]);
 
   const setPackage = (packageId: string, name: string, price: number) => {
     setData(prev => ({
@@ -141,7 +165,17 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
   };
 
   const resetTournament = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('tournamentDraft');
+    }
     setData(initialData);
+  };
+
+  const loadTournamentData = (newData: TournamentData) => {
+    setData(newData);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('tournamentDraft', JSON.stringify(newData));
+    }
   };
 
   const value: TournamentContextType = {
@@ -155,6 +189,7 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
     removeMember,
     updateMember,
     resetTournament,
+    loadTournamentData,
   };
 
   return (

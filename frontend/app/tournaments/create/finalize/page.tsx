@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTournament } from '@/app/contexts/TournamentContext';
 import { useState, useEffect } from 'react';
+import { syncTournamentToBackend } from '@/app/lib/tournaments';
 
 export default function FinalizeCreatePage() {
   const router = useRouter();
@@ -13,6 +14,8 @@ export default function FinalizeCreatePage() {
   const [shareLink, setShareLink] = useState<string>('');
 
   useEffect(() => {
+    if (tournament) return; // Prevent regenerating ID and details if already set
+
     // Generate a mock tournament ID
     const tournamentId = 'tourn_' + Date.now();
     const mockTournament = {
@@ -31,17 +34,38 @@ export default function FinalizeCreatePage() {
     // In a real app, you would generate an actual QR code here
     // For now, we'll use a placeholder
     setQrCode(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(link)}`);
-  }, [data]);
+  }, [data, tournament]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(shareLink);
     alert('Đã copy link vào clipboard!');
   };
 
-  const handleStartTournament = () => {
+  const handleStartTournament = async () => {
     if (tournament) {
-      // Save tournament to localStorage or API
+      try {
+        // Sync to backend first so spectator page can load it instantly
+        await syncTournamentToBackend(tournament);
+      } catch (err) {
+        console.error('Error syncing tournament to backend:', err);
+      }
+
+      // Save tournament to localStorage list
+      const savedList = localStorage.getItem('tournaments');
+      const list = savedList ? JSON.parse(savedList) : [];
+      const index = list.findIndex((t: any) => t.id === tournament.id);
+      if (index > -1) {
+        list[index] = tournament;
+      } else {
+        list.push(tournament);
+      }
+      localStorage.setItem('tournaments', JSON.stringify(list));
+
+      // Also keep currentTournament for ongoing match compatibility
       localStorage.setItem('currentTournament', JSON.stringify(tournament));
+      
+      // Remove draft as it is now finalized
+      localStorage.removeItem('tournamentDraft');
       resetTournament();
       router.push(`/tournaments/${tournament.id}/match`);
     }

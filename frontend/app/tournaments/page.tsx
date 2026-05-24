@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getSession, logoutUser, SessionUser } from "@/app/lib/authStorage";
+import { useTournament } from "@/app/contexts/TournamentContext";
 
 interface Tournament {
   id: string;
@@ -13,7 +14,9 @@ interface Tournament {
 
 export default function MyTournamentsPage() {
   const router = useRouter();
+  const { loadTournamentData } = useTournament();
   const [tournaments, setTournaments] = useState<any[]>([]);
+  const [draftTournament, setDraftTournament] = useState<any | null>(null);
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
 
   useEffect(() => {
@@ -23,11 +26,50 @@ export default function MyTournamentsPage() {
       return;
     }
     setSessionUser(session);
+
+    // Load finalized tournaments
+    const saved = localStorage.getItem('tournaments');
+    if (saved) {
+      try {
+        setTournaments(JSON.parse(saved));
+      } catch (e) {
+        console.error('Error parsing tournaments:', e);
+      }
+    }
+
+    // Load draft tournament
+    const savedDraft = localStorage.getItem('tournamentDraft');
+    if (savedDraft) {
+      try {
+        setDraftTournament(JSON.parse(savedDraft));
+      } catch (e) {
+        console.error('Error parsing tournamentDraft:', e);
+      }
+    }
   }, [router]);
 
   const handleLogout = async () => {
     await logoutUser();
     router.push("/login");
+  };
+
+  const handleDraftClick = (draft: any) => {
+    loadTournamentData(draft);
+    // Check if all teams have at least 1 member
+    const allTeamsHaveMembers = draft.teams && draft.teams.length > 0 && draft.teams.every((t: any) => t.members && t.members.length > 0);
+
+    // Determine the next creation step based on completeness
+    if (!draft.name) {
+      router.push('/tournaments/create/info');
+    } else if (!draft.teams || draft.teams.length === 0) {
+      router.push('/tournaments/create/teams');
+    } else if (!allTeamsHaveMembers) {
+      router.push('/tournaments/create/members');
+    } else if (!draft.bracketSeeded) {
+      router.push('/tournaments/create/bracket');
+    } else {
+      router.push('/tournaments/create/finalize');
+    }
   };
 
   if (!sessionUser) {
@@ -37,6 +79,8 @@ export default function MyTournamentsPage() {
       </main>
     );
   }
+
+  const isEmpty = tournaments.length === 0 && !draftTournament;
 
   return (
     <main className="min-h-screen bg-[#080b10] text-white font-sans">
@@ -111,7 +155,7 @@ export default function MyTournamentsPage() {
         </div>
 
         {/* Empty State */}
-        {tournaments.length === 0 ? (
+        {isEmpty ? (
           <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-20 text-center">
             {/* Trophy Icon */}
             <div className="flex justify-center mb-6">
@@ -154,21 +198,41 @@ export default function MyTournamentsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Draft Card */}
+            {draftTournament && (
+              <div
+                onClick={() => handleDraftClick(draftTournament)}
+                className="cursor-pointer group rounded-2xl border border-[#eab308]/20 bg-[#eab308]/[0.02] p-6 hover:border-[#eab308]/50 hover:bg-[#eab308]/[0.05] transition-all duration-300 hover:-translate-y-1"
+              >
+                <h3 className="text-lg font-bold mb-2 text-white/90 truncate">
+                  {draftTournament.name || "Bản nháp giải đấu chưa đặt tên"}
+                </h3>
+                <p className="text-sm text-white/50 mb-4">
+                  Gói: {draftTournament.packageName || "Dùng thử"} • {draftTournament.teams?.length || 0} đội
+                </p>
+                <div className="flex items-center gap-2 text-xs text-[#eab308] font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#eab308] animate-pulse" />
+                  Chưa hoàn tất (Bấm để tiếp tục)
+                </div>
+              </div>
+            )}
+
+            {/* Finalized Cards */}
             {tournaments.map((tournament) => (
               <Link
                 key={tournament.id}
                 href={`/tournaments/${tournament.id}`}
                 className="group rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6 hover:border-[#22c55e]/30 hover:bg-[#22c55e]/[0.04] transition-all duration-300 hover:-translate-y-1"
               >
-                <h3 className="text-lg font-bold mb-2 text-white/90">
+                <h3 className="text-lg font-bold mb-2 text-white/90 truncate">
                   {tournament.name}
                 </h3>
                 <p className="text-sm text-white/50 mb-4">
-                  {tournament.teams?.length || 0} đội
+                  Gói: {tournament.packageName || "Cơ bản"} • {tournament.teams?.length || 0} đội
                 </p>
-                <div className="flex items-center gap-2 text-xs text-[#22c55e]">
+                <div className="flex items-center gap-2 text-xs text-[#22c55e] font-semibold">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e]" />
-                  Đang diễn ra
+                  {tournament.matchState ? "Đang thi đấu" : "Sẵn sàng"}
                 </div>
               </Link>
             ))}
