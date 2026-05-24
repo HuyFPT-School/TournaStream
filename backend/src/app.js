@@ -6,6 +6,7 @@ const { env } = require("./config/env");
 const { authRoutes } = require("./routes/authRoutes");
 const { paymentRoutes } = require("./routes/paymentRoutes");
 const { webhookRoutes } = require("./routes/webhookRoutes");
+const { tournamentRoutes } = require("./routes/tournamentRoutes");
 
 if (!env.jwtAccessSecret) {
   throw new Error("JWT_ACCESS_SECRET is required");
@@ -49,6 +50,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/webhooks", webhookRoutes);
+app.use("/api/tournaments", tournamentRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

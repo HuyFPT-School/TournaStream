@@ -2,12 +2,15 @@
 
 import { useParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import { fetchTournamentFromBackend } from '@/app/lib/tournaments';
 
 interface MatchState {
   team1Score: number;
   team2Score: number;
   time: number;
   hiep: number;
+  isRunning?: boolean;
+  isFinished?: boolean;
 }
 
 export default function TournamentLiveViewPage() {
@@ -19,25 +22,75 @@ export default function TournamentLiveViewPage() {
     team2Score: 0,
     time: 0,
     hiep: 1,
+    isRunning: false,
+    isFinished: false,
   });
 
   useEffect(() => {
-    // Load tournament from localStorage or API
-    const saved = localStorage.getItem('currentTournament');
-    if (saved) {
-      setTournament(JSON.parse(saved));
-    }
+    const loadTournament = async () => {
+      try {
+        const data = await fetchTournamentFromBackend(tournamentId);
+        setTournament(data);
+        if (data.matchState) {
+          setMatchState(prev => {
+            const fetchedIsRunning = !!data.matchState.isRunning;
+            const fetchedIsFinished = !!data.matchState.isFinished;
+            const fetchedTime = data.matchState.time || 0;
 
-    // Simulate live updates
-    const interval = setInterval(() => {
-      setMatchState(prev => ({
-        ...prev,
-        time: prev.time + 1,
-      }));
-    }, 1000);
+            // If the match is not running or is finished, strictly sync time from backend
+            if (!fetchedIsRunning || fetchedIsFinished) {
+              return {
+                ...data.matchState,
+                isRunning: fetchedIsRunning,
+                isFinished: fetchedIsFinished,
+              };
+            }
 
+            // If match is running, compare local time with fetched time
+            const diff = prev.time - fetchedTime;
+
+            // If local clock is behind (diff < 0) or creator adjusted time backward/forward significantly (diff > 18)
+            // then we sync/catch up to the backend time.
+            if (diff < 0 || diff > 18) {
+              return {
+                ...data.matchState,
+                isRunning: fetchedIsRunning,
+                isFinished: fetchedIsFinished,
+              };
+            }
+
+            // Otherwise, we keep our local smooth time, but update all other fields (scores, hiep, isRunning, etc.)
+            return {
+              ...data.matchState,
+              time: prev.time,
+              isRunning: fetchedIsRunning,
+              isFinished: fetchedIsFinished,
+            };
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching tournament from backend:', err);
+      }
+    };
+
+    loadTournament();
+
+    const interval = setInterval(loadTournament, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [tournamentId]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (matchState.isRunning && !matchState.isFinished) {
+      interval = setInterval(() => {
+        setMatchState(prev => ({
+          ...prev,
+          time: prev.time + 1,
+        }));
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [matchState.isRunning, matchState.isFinished]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -77,13 +130,22 @@ export default function TournamentLiveViewPage() {
         <div className="max-w-6xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <p className="text-sm font-semibold text-[#22c55e] mb-1">TRỰC TIẾP</p>
+              <p className="text-sm font-semibold text-[#22c55e] mb-1">
+                {matchState.isFinished ? 'TRẬN ĐẤU' : 'TRỰC TIẾP'}
+              </p>
               <h1 className="text-2xl font-black">{tournament.name}</h1>
             </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#22c55e]/20 border border-[#22c55e]/50">
-              <div className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse" />
-              <span className="text-sm font-semibold text-[#22c55e]">LIVE</span>
-            </div>
+            {matchState.isFinished ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/20 border border-red-500/50">
+                <div className="w-2 h-2 rounded-full bg-red-500" />
+                <span className="text-sm font-semibold text-red-400">KẾT THÚC</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#22c55e]/20 border border-[#22c55e]/50">
+                <div className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse" />
+                <span className="text-sm font-semibold text-[#22c55e]">LIVE</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -93,7 +155,9 @@ export default function TournamentLiveViewPage() {
         {/* Match Display */}
         <div className="mb-12">
           <div className="text-center mb-8">
-            <div className="text-lg font-bold mb-4 text-white/80">Hiệp {matchState.hiep}</div>
+            <div className="text-lg font-bold mb-4 text-white/80">
+              {matchState.isFinished ? 'Chung cuộc' : `Hiệp ${matchState.hiep}`}
+            </div>
             <div className="text-7xl font-black mb-8 font-mono tracking-wider">
               {formatTime(matchState.time)}
             </div>

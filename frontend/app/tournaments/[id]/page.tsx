@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import { fetchTournamentFromBackend } from '@/app/lib/tournaments';
 
 export default function TournamentDetailPage() {
   const params = useParams();
@@ -10,19 +11,71 @@ export default function TournamentDetailPage() {
   const [tournament, setTournament] = useState<any>(null);
   const [shareLink, setShareLink] = useState<string>('');
   const [qrCode, setQrCode] = useState<string>('');
+  const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
-    // Load tournament from localStorage
-    const saved = localStorage.getItem('currentTournament');
-    if (saved) {
-      const tourn = JSON.parse(saved);
-      setTournament(tourn);
-
-      // Generate share link and QR code
-      const link = `${window.location.origin}/tournaments/${tournamentId}/live`;
-      setShareLink(link);
-      setQrCode(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(link)}`);
+    let isOwnerUser = false;
+    const savedList = localStorage.getItem('tournaments');
+    if (savedList) {
+      try {
+        const list = JSON.parse(savedList);
+        if (list.some((t: any) => t.id === tournamentId)) {
+          isOwnerUser = true;
+          setIsOwner(true);
+        }
+      } catch (e) {
+        console.error('Error parsing tournaments list:', e);
+      }
     }
+
+    const loadTournament = async () => {
+      // 1. Try local storage first
+      if (savedList) {
+        try {
+          const list = JSON.parse(savedList);
+          const tourn = list.find((t: any) => t.id === tournamentId);
+          if (tourn) {
+            setTournament(tourn);
+            localStorage.setItem('currentTournament', JSON.stringify(tourn));
+            const link = `${window.location.origin}/tournaments/${tournamentId}/live`;
+            setShareLink(link);
+            setQrCode(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(link)}`);
+            return;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      const savedCurrent = localStorage.getItem('currentTournament');
+      if (savedCurrent) {
+        try {
+          const tourn = JSON.parse(savedCurrent);
+          if (tourn.id === tournamentId) {
+            setTournament(tourn);
+            const link = `${window.location.origin}/tournaments/${tournamentId}/live`;
+            setShareLink(link);
+            setQrCode(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(link)}`);
+            return;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      // 2. Fallback to backend if not found locally
+      try {
+        const data = await fetchTournamentFromBackend(tournamentId);
+        setTournament(data);
+        const link = `${window.location.origin}/tournaments/${tournamentId}/live`;
+        setShareLink(link);
+        setQrCode(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(link)}`);
+      } catch (err) {
+        console.error('Error fetching tournament from backend:', err);
+      }
+    };
+
+    loadTournament();
   }, [tournamentId]);
 
   const handleCopyLink = () => {
@@ -62,7 +115,7 @@ export default function TournamentDetailPage() {
         </Link>
         <div className="flex items-center gap-3">
           <Link
-            href="/tournaments"
+            href={isOwner ? "/tournaments" : "/"}
             className="text-sm text-white/50 hover:text-white transition-colors px-3 py-1.5"
           >
             Quay lại
@@ -165,18 +218,37 @@ export default function TournamentDetailPage() {
 
         {/* CTA Buttons */}
         <div className="flex gap-4">
-          <Link
-            href="/tournaments"
-            className="flex-1 px-6 py-3 rounded-lg border border-white/[0.06] text-white font-semibold hover:bg-white/[0.05] transition-all duration-200 text-center"
-          >
-            Quay lại Giải đấu
-          </Link>
-          <Link
-            href={`/tournaments/${tournamentId}/match`}
-            className="flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200 text-center"
-          >
-            Xem trực tiếp
-          </Link>
+          {isOwner ? (
+            <>
+              <Link
+                href={`/tournaments/${tournamentId}/match`}
+                className="flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200 text-center"
+              >
+                Quản lý trận đấu
+              </Link>
+              <Link
+                href={`/tournaments/${tournamentId}/live`}
+                className="flex-1 px-6 py-3 rounded-lg border border-white/[0.06] text-white font-semibold hover:bg-white/[0.05] transition-all duration-200 text-center"
+              >
+                Xem trang Live
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/"
+                className="flex-1 px-6 py-3 rounded-lg border border-white/[0.06] text-white font-semibold hover:bg-white/[0.05] transition-all duration-200 text-center"
+              >
+                Quay lại Trang chủ
+              </Link>
+              <Link
+                href={`/tournaments/${tournamentId}/live`}
+                className="flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200 text-center"
+              >
+                Xem trực tiếp
+              </Link>
+            </>
+          )}
         </div>
       </section>
     </main>

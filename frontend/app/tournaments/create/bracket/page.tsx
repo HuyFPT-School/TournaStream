@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 
 export default function BracketPage() {
   const router = useRouter();
-  const { data } = useTournament();
+  const { data, loadTournamentData } = useTournament();
   const [orderedTeams, setOrderedTeams] = useState(data.teams);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
@@ -59,7 +59,11 @@ export default function BracketPage() {
   };
 
   const handleCreate = () => {
-    // TODO: Create tournament with orderedTeams
+    loadTournamentData({
+      ...data,
+      teams: orderedTeams,
+      bracketSeeded: true,
+    });
     router.push('/tournaments/create/finalize');
   };
 

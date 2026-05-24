@@ -82,6 +82,21 @@ export default function PackageSelectionPage() {
   }, [activeCheckout]);
 
   useEffect(() => {
+    // Check if there is a pending checkout in localStorage on mount
+    const saved = localStorage.getItem('pendingCheckout');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setActiveCheckout(parsed);
+        const planId = parsed.planKey === 'premium' ? 'pro' : parsed.planKey;
+        setSelectedPackage(planId);
+      } catch (e) {
+        console.error('Error parsing pendingCheckout:', e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     if (!activeCheckout || paymentSuccess) return;
 
     const interval = setInterval(async () => {
@@ -89,9 +104,11 @@ export default function PackageSelectionPage() {
         const res = await getSePayTransactionStatus(activeCheckout.checkoutCode);
         if (res.status === 'paid') {
           setPaymentSuccess(true);
+          localStorage.removeItem('pendingCheckout');
           clearInterval(interval);
           setTimeout(() => {
-            const pkg = packages.find(p => p.id === selectedPackage);
+            const planId = activeCheckout.planKey === 'premium' ? 'pro' : activeCheckout.planKey;
+            const pkg = packages.find(p => p.id === planId);
             if (pkg) {
               setPackage(pkg.id, pkg.name, pkg.price);
               router.push('/tournaments/create/info');
@@ -104,7 +121,14 @@ export default function PackageSelectionPage() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [activeCheckout, paymentSuccess, selectedPackage, router, setPackage]);
+  }, [activeCheckout, paymentSuccess, router, setPackage]);
+
+  const handleCancelCheckout = () => {
+    if (!paymentSuccess) {
+      setActiveCheckout(null);
+      localStorage.removeItem('pendingCheckout');
+    }
+  };
 
   const handleContinue = async () => {
     const pkg = packages.find(p => p.id === selectedPackage);
@@ -122,6 +146,7 @@ export default function PackageSelectionPage() {
       const planKey = pkg.id === 'pro' ? 'premium' : pkg.id;
       const checkout = await createSePayCheckout({ planKey });
       setActiveCheckout(checkout);
+      localStorage.setItem('pendingCheckout', JSON.stringify(checkout));
       setPaymentSuccess(false);
     } catch (error) {
       setErrorMessage(
@@ -301,11 +326,7 @@ export default function PackageSelectionPage() {
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/80 backdrop-blur-md"
-            onClick={() => {
-              if (!paymentSuccess) {
-                setActiveCheckout(null);
-              }
-            }}
+            onClick={handleCancelCheckout}
           />
 
           {/* Modal Container */}
@@ -322,7 +343,7 @@ export default function PackageSelectionPage() {
               </div>
               {!paymentSuccess && (
                 <button
-                  onClick={() => setActiveCheckout(null)}
+                  onClick={handleCancelCheckout}
                   className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5 hover:text-white transition-all"
                 >
                   Đóng
