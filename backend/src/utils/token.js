@@ -4,7 +4,7 @@ const { env } = require("../config/env");
 
 function createAccessToken(user) {
   return jwt.sign(
-    { sub: user._id.toString(), email: user.email },
+    { sub: user._id.toString(), email: user.email, role: user.role || "user" },
     env.jwtAccessSecret,
     { expiresIn: env.jwtAccessExpiresIn },
   );

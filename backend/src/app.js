@@ -7,6 +7,7 @@ const { authRoutes } = require("./routes/authRoutes");
 const { paymentRoutes } = require("./routes/paymentRoutes");
 const { webhookRoutes } = require("./routes/webhookRoutes");
 const { tournamentRoutes } = require("./routes/tournamentRoutes");
+const { adminRoutes } = require("./routes/adminRoutes");
 
 if (!env.jwtAccessSecret) {
   throw new Error("JWT_ACCESS_SECRET is required");
@@ -51,6 +52,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/webhooks", webhookRoutes);
 app.use("/api/tournaments", tournamentRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

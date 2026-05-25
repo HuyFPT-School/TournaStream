@@ -2,12 +2,13 @@ export type SessionUser = {
   id: string;
   fullName: string;
   email: string;
+  role?: string;
   loginAt: string;
 };
 
 type AuthResponse = {
   accessToken: string;
-  user: { id: string; fullName: string; email: string };
+  user: { id: string; fullName: string; email: string; role?: string };
 };
 
 const SESSION_KEY = "ts_session";
@@ -120,6 +121,7 @@ export async function loginUser(input: { email: string; password: string }) {
     id: result.user.id,
     fullName: result.user.fullName,
     email: result.user.email,
+    role: result.user.role,
     loginAt: new Date().toISOString(),
   });
   return result;
@@ -172,6 +174,7 @@ export async function refreshSession() {
     id: result.user.id,
     fullName: result.user.fullName,
     email: result.user.email,
+    role: result.user.role,
     loginAt: new Date().toISOString(),
   });
   return result;
