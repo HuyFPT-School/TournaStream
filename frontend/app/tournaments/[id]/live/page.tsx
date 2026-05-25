@@ -3,6 +3,7 @@
 import { useParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { fetchTournamentFromBackend } from '@/app/lib/tournaments';
+import { getPusherClient } from '@/app/lib/pusher';
 
 interface MatchState {
   team1Score: number;
@@ -37,7 +38,6 @@ export default function TournamentLiveViewPage() {
             const fetchedIsFinished = !!data.matchState.isFinished;
             const fetchedTime = data.matchState.time || 0;
 
-            // If the match is not running or is finished, strictly sync time from backend
             if (!fetchedIsRunning || fetchedIsFinished) {
               return {
                 ...data.matchState,
@@ -46,11 +46,7 @@ export default function TournamentLiveViewPage() {
               };
             }
 
-            // If match is running, compare local time with fetched time
             const diff = prev.time - fetchedTime;
-
-            // If local clock is behind (diff < 0) or creator adjusted time backward/forward significantly (diff > 18)
-            // then we sync/catch up to the backend time.
             if (diff < 0 || diff > 18) {
               return {
                 ...data.matchState,
@@ -59,7 +55,6 @@ export default function TournamentLiveViewPage() {
               };
             }
 
-            // Otherwise, we keep our local smooth time, but update all other fields (scores, hiep, isRunning, etc.)
             return {
               ...data.matchState,
               time: prev.time,
@@ -73,10 +68,60 @@ export default function TournamentLiveViewPage() {
       }
     };
 
+    // Load initial data
     loadTournament();
 
-    const interval = setInterval(loadTournament, 3000);
-    return () => clearInterval(interval);
+    // Connect to Pusher channel
+    const pusher = getPusherClient();
+    let channel: any = null;
+
+    if (pusher) {
+      channel = pusher.subscribe(tournamentId);
+
+      channel.bind("tournament_updated", (data: any) => {
+        console.log("Pusher received tournament update:", data);
+        setTournament(data);
+        if (data.matchState) {
+          setMatchState(prev => {
+            const fetchedIsRunning = !!data.matchState.isRunning;
+            const fetchedIsFinished = !!data.matchState.isFinished;
+            const fetchedTime = data.matchState.time || 0;
+
+            if (!fetchedIsRunning || fetchedIsFinished) {
+              return {
+                ...data.matchState,
+                isRunning: fetchedIsRunning,
+                isFinished: fetchedIsFinished,
+              };
+            }
+
+            const diff = prev.time - fetchedTime;
+            // Calibrate immediately on websocket update if drift is more than 2 seconds
+            if (diff < 0 || diff > 2) {
+              return {
+                ...data.matchState,
+                isRunning: fetchedIsRunning,
+                isFinished: fetchedIsFinished,
+              };
+            }
+
+            return {
+              ...data.matchState,
+              time: prev.time,
+              isRunning: fetchedIsRunning,
+              isFinished: fetchedIsFinished,
+            };
+          });
+        }
+      });
+    }
+
+    return () => {
+      if (pusher && channel) {
+        channel.unbind("tournament_updated");
+        pusher.unsubscribe(tournamentId);
+      }
+    };
   }, [tournamentId]);
 
   useEffect(() => {

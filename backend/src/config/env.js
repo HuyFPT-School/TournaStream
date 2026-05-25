@@ -25,6 +25,10 @@ const env = {
   sepayAccountNumber: process.env.SEPAY_ACCOUNT_NUMBER || "",
   sepayAccountName: process.env.SEPAY_ACCOUNT_NAME || "",
   sepayQrImageUrl: process.env.SEPAY_QR_IMAGE_URL || "",
+  pusherAppId: process.env.PUSHER_APP_ID || "",
+  pusherKey: process.env.PUSHER_KEY || "",
+  pusherSecret: process.env.PUSHER_SECRET || "",
+  pusherCluster: process.env.PUSHER_CLUSTER || "ap1",
 };
 
 module.exports = { env };
