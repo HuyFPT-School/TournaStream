@@ -1,4 +1,5 @@
 const { Tournament } = require("../models/Tournament");
+const { triggerTournamentUpdate } = require("../services/pusherService");
 
 async function upsertTournament(req, res) {
   try {
@@ -16,6 +17,10 @@ async function upsertTournament(req, res) {
       { $set: { ...data, ...(userId ? { userId } : {}), updatedAt: new Date() } },
       { new: true, upsert: true, setDefaultsOnInsert: true }
     );
+
+    triggerTournamentUpdate(id, tournament).catch(err => {
+      console.error("Failed to trigger Pusher update:", err);
+    });
 
     return res.status(200).json({ success: true, tournament });
   } catch (error) {
