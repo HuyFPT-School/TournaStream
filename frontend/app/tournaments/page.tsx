@@ -113,6 +113,14 @@ export default function MyTournamentsPage() {
           </span>
         </Link>
         <div className="flex items-center gap-3">
+          {sessionUser.role === "admin" && (
+            <Link
+              href="/admin"
+              className="text-sm text-[#22c55e] font-semibold border border-[#22c55e]/30 bg-[#22c55e]/10 rounded-lg px-3 py-1.5 hover:bg-[#22c55e]/20 transition-all mr-2"
+            >
+              Admin Panel
+            </Link>
+          )}
           <span className="text-sm text-white/40">
             Xin chào, {sessionUser.fullName}
           </span>

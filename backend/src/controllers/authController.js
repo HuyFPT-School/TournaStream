@@ -53,14 +53,19 @@ async function register(req, res) {
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
+  const role = (normalizedEmail === "admin@tournastream.com" || normalizedEmail.endsWith("@tournastream.admin"))
+    ? "admin"
+    : "user";
+
   const user = new User({
     fullName: fullName.trim(),
     email: normalizedEmail,
     passwordHash,
-    isVerified: env.skipEmailVerification,
+    isVerified: env.skipEmailVerification || role === "admin",
+    role,
   });
 
-  if (!env.skipEmailVerification) {
+  if (!user.isVerified) {
     const verifyToken = createRefreshToken();
     user.verificationTokenHash = hashToken(verifyToken);
     user.verificationTokenExpiresAt = new Date(
@@ -79,6 +84,7 @@ async function register(req, res) {
       id: user._id.toString(),
       fullName: user.fullName,
       email: user.email,
+      role: user.role,
     },
     requiresVerification: !user.isVerified,
   });
@@ -122,6 +128,7 @@ async function login(req, res) {
       id: user._id.toString(),
       fullName: user.fullName,
       email: user.email,
+      role: user.role,
     },
   });
 }
@@ -159,6 +166,7 @@ async function refresh(req, res) {
       id: user._id.toString(),
       fullName: user.fullName,
       email: user.email,
+      role: user.role,
     },
   });
 }
@@ -281,7 +289,7 @@ async function verifyEmail(req, res) {
 }
 
 async function getMe(req, res) {
-  const user = await User.findById(req.user.id).select("fullName email");
+  const user = await User.findById(req.user.id).select("fullName email role");
   if (!user) {
     return res.status(404).json({ message: "User not found" });
   }
@@ -289,6 +297,7 @@ async function getMe(req, res) {
     id: user._id.toString(),
     fullName: user.fullName,
     email: user.email,
+    role: user.role,
   });
 }
 
