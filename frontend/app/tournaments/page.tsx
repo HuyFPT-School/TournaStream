@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getSession, logoutUser, SessionUser } from "@/app/lib/authStorage";
 import { useTournament } from "@/app/contexts/TournamentContext";
+import { fetchUserTournamentsFromBackend } from "@/app/lib/tournaments";
 
 interface Tournament {
   id: string;
@@ -27,23 +28,35 @@ export default function MyTournamentsPage() {
     }
     setSessionUser(session);
 
-    // Load finalized tournaments
-    const saved = localStorage.getItem('tournaments');
-    if (saved) {
-      try {
-        setTournaments(JSON.parse(saved));
-      } catch (e) {
-        console.error('Error parsing tournaments:', e);
-      }
-    }
+    const tournamentsKey = `tournaments_${session.id}`;
+    const draftKey = `tournamentDraft_${session.id}`;
 
-    // Load draft tournament
-    const savedDraft = localStorage.getItem('tournamentDraft');
+    // 1. Fetch user's finalized tournaments from backend
+    fetchUserTournamentsFromBackend()
+      .then((data) => {
+        setTournaments(data);
+        localStorage.setItem(tournamentsKey, JSON.stringify(data));
+      })
+      .catch((err) => {
+        console.error("Error fetching tournaments from backend, falling back to local storage:", err);
+        // Fallback to local storage if offline
+        const saved = localStorage.getItem(tournamentsKey);
+        if (saved) {
+          try {
+            setTournaments(JSON.parse(saved));
+          } catch (e) {
+            console.error("Error parsing tournaments:", e);
+          }
+        }
+      });
+
+    // 2. Load draft tournament using user-specific key
+    const savedDraft = localStorage.getItem(draftKey);
     if (savedDraft) {
       try {
         setDraftTournament(JSON.parse(savedDraft));
       } catch (e) {
-        console.error('Error parsing tournamentDraft:', e);
+        console.error("Error parsing tournamentDraft:", e);
       }
     }
   }, [router]);

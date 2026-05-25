@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { getSession, getAccessToken, logoutUser, SessionUser } from '@/app/lib/authStorage';
+import { getSession, getAccessToken, logoutUser, SessionUser, getApiBaseUrl } from '@/app/lib/authStorage';
 
 interface AdminStats {
   users: {
@@ -31,6 +31,7 @@ interface AdminStats {
     status: string;
     createdAt: string;
     note?: string;
+    userId?: { fullName: string; email: string };
   }>;
   recentTournaments: Array<{
     _id: string;
@@ -59,20 +60,11 @@ interface AdminStats {
     createdAt: string;
     paidAt?: string;
     note?: string;
+    userId?: { fullName: string; email: string };
   }>;
 }
 
-function getApiBaseUrl() {
-  if (typeof window !== "undefined") {
-    const isLocalHost =
-      window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1";
-    if (isLocalHost) {
-      return "http://localhost:4000/api";
-    }
-  }
-  return process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000/api";
-}
+
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -522,6 +514,7 @@ export default function AdminDashboardPage() {
                   <tr className="border-b border-white/[0.08] text-white/40 font-semibold text-xs uppercase tracking-wider">
                     <th className="px-6 py-4 w-12 text-center">STT</th>
                     <th className="px-6 py-4">Mã GD</th>
+                    <th className="px-6 py-4">Người mua</th>
                     <th className="px-6 py-4">Gói dịch vụ</th>
                     <th className="px-6 py-4">Số tiền</th>
                     <th className="px-6 py-4">Trạng thái</th>
@@ -533,7 +526,7 @@ export default function AdminDashboardPage() {
                 <tbody className="divide-y divide-white/5">
                   {filteredTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-6 py-8 text-center text-white/40">
+                      <td colSpan={9} className="px-6 py-8 text-center text-white/40">
                         {transactionSearch ? 'Không tìm thấy giao dịch nào phù hợp.' : 'Chưa có giao dịch nào phát sinh.'}
                       </td>
                     </tr>
@@ -542,6 +535,16 @@ export default function AdminDashboardPage() {
                       <tr key={tx._id} className="hover:bg-white/[0.02] transition-colors">
                         <td className="px-6 py-4 text-center text-white/40">{idx + 1}</td>
                         <td className="px-6 py-4 font-mono font-bold text-[#22c55e]">{tx.checkoutCode}</td>
+                        <td className="px-6 py-4">
+                          {tx.userId ? (
+                            <div>
+                              <div className="font-semibold text-white/90">{tx.userId.fullName}</div>
+                              <div className="text-xs text-white/40 font-mono mt-0.5">{tx.userId.email}</div>
+                            </div>
+                          ) : (
+                            <span className="text-white/30">Ẩn danh / Cũ</span>
+                          )}
+                        </td>
                         <td className="px-6 py-4">{tx.planName}</td>
                         <td className="px-6 py-4 font-semibold">{tx.amount.toLocaleString('vi-VN')}đ</td>
                         <td className="px-6 py-4">

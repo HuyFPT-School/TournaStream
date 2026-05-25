@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTournament } from '@/app/contexts/TournamentContext';
 import { useState, useEffect } from 'react';
 import { syncTournamentToBackend } from '@/app/lib/tournaments';
+import { getSession } from '@/app/lib/authStorage';
 
 export default function FinalizeCreatePage() {
   const router = useRouter();
@@ -50,8 +51,13 @@ export default function FinalizeCreatePage() {
         console.error('Error syncing tournament to backend:', err);
       }
 
+      const session = getSession();
+      const tournamentsKey = session ? `tournaments_${session.id}` : 'tournaments';
+      const currentTournamentKey = session ? `currentTournament_${session.id}` : 'currentTournament';
+      const draftKey = session ? `tournamentDraft_${session.id}` : 'tournamentDraft';
+
       // Save tournament to localStorage list
-      const savedList = localStorage.getItem('tournaments');
+      const savedList = localStorage.getItem(tournamentsKey);
       const list = savedList ? JSON.parse(savedList) : [];
       const index = list.findIndex((t: any) => t.id === tournament.id);
       if (index > -1) {
@@ -59,13 +65,13 @@ export default function FinalizeCreatePage() {
       } else {
         list.push(tournament);
       }
-      localStorage.setItem('tournaments', JSON.stringify(list));
+      localStorage.setItem(tournamentsKey, JSON.stringify(list));
 
       // Also keep currentTournament for ongoing match compatibility
-      localStorage.setItem('currentTournament', JSON.stringify(tournament));
+      localStorage.setItem(currentTournamentKey, JSON.stringify(tournament));
       
       // Remove draft as it is now finalized
-      localStorage.removeItem('tournamentDraft');
+      localStorage.removeItem(draftKey);
       resetTournament();
       router.push(`/tournaments/${tournament.id}/match`);
     }

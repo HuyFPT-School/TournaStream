@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTournament } from '@/app/contexts/TournamentContext';
 import { useState, useEffect, useMemo } from 'react';
 import { createSePayCheckout, getSePayTransactionStatus } from '@/app/lib/sepay';
+import { getSession } from '@/app/lib/authStorage';
 
 interface Package {
   id: string;
@@ -64,6 +65,9 @@ export default function PackageSelectionPage() {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  const session = getSession();
+  const pendingCheckoutKey = session ? `pendingCheckout_${session.id}` : 'pendingCheckout';
+
   const bankDetails = useMemo(() => {
     if (!activeCheckout?.qrPayload) return null;
     const parts = activeCheckout.qrPayload.split('|');
@@ -83,7 +87,7 @@ export default function PackageSelectionPage() {
 
   useEffect(() => {
     // Check if there is a pending checkout in localStorage on mount
-    const saved = localStorage.getItem('pendingCheckout');
+    const saved = localStorage.getItem(pendingCheckoutKey);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -94,7 +98,7 @@ export default function PackageSelectionPage() {
         console.error('Error parsing pendingCheckout:', e);
       }
     }
-  }, []);
+  }, [pendingCheckoutKey]);
 
   useEffect(() => {
     if (!activeCheckout || paymentSuccess) return;
@@ -104,7 +108,7 @@ export default function PackageSelectionPage() {
         const res = await getSePayTransactionStatus(activeCheckout.checkoutCode);
         if (res.status === 'paid') {
           setPaymentSuccess(true);
-          localStorage.removeItem('pendingCheckout');
+          localStorage.removeItem(pendingCheckoutKey);
           clearInterval(interval);
           setTimeout(() => {
             const planId = activeCheckout.planKey === 'premium' ? 'pro' : activeCheckout.planKey;
@@ -121,12 +125,12 @@ export default function PackageSelectionPage() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [activeCheckout, paymentSuccess, router, setPackage]);
+  }, [activeCheckout, paymentSuccess, router, setPackage, pendingCheckoutKey]);
 
   const handleCancelCheckout = () => {
     if (!paymentSuccess) {
       setActiveCheckout(null);
-      localStorage.removeItem('pendingCheckout');
+      localStorage.removeItem(pendingCheckoutKey);
     }
   };
 
@@ -146,7 +150,7 @@ export default function PackageSelectionPage() {
       const planKey = pkg.id === 'pro' ? 'premium' : pkg.id;
       const checkout = await createSePayCheckout({ planKey });
       setActiveCheckout(checkout);
-      localStorage.setItem('pendingCheckout', JSON.stringify(checkout));
+      localStorage.setItem(pendingCheckoutKey, JSON.stringify(checkout));
       setPaymentSuccess(false);
     } catch (error) {
       setErrorMessage(

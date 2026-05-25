@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { getSession } from '@/app/lib/authStorage';
 
 export interface Team {
   id: string;
@@ -67,10 +68,16 @@ const initialData: TournamentData = {
 export function TournamentProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<TournamentData>(initialData);
 
+  const getDraftStorageKey = () => {
+    const session = getSession();
+    return session ? `tournamentDraft_${session.id}` : 'tournamentDraft';
+  };
+
   // Load draft on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('tournamentDraft');
+      const key = getDraftStorageKey();
+      const saved = localStorage.getItem(key);
       if (saved) {
         try {
           setData(JSON.parse(saved));
@@ -85,7 +92,8 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       if (data.packageId) {
-        localStorage.setItem('tournamentDraft', JSON.stringify(data));
+        const key = getDraftStorageKey();
+        localStorage.setItem(key, JSON.stringify(data));
       }
     }
   }, [data]);
@@ -166,7 +174,8 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
 
   const resetTournament = () => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('tournamentDraft');
+      const key = getDraftStorageKey();
+      localStorage.removeItem(key);
     }
     setData(initialData);
   };
@@ -174,7 +183,8 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
   const loadTournamentData = (newData: TournamentData) => {
     setData(newData);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('tournamentDraft', JSON.stringify(newData));
+      const key = getDraftStorageKey();
+      localStorage.setItem(key, JSON.stringify(newData));
     }
   };
 

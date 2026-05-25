@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const tournamentSchema = new mongoose.Schema(
   {
     id: { type: String, required: true, unique: true }, // Client-side generated ID e.g. tourn_123
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     name: { type: String, required: true },
     sport: { type: String, default: "" },
     packageId: { type: String, default: "" },

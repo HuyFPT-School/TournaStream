@@ -8,10 +8,12 @@ async function upsertTournament(req, res) {
     }
 
     const { id } = data;
+    const userId = req.user ? req.user.id : null; // Safe check for auth
+    
     // Find and update, or insert if doesn't exist
     const tournament = await Tournament.findOneAndUpdate(
       { id },
-      { $set: { ...data, updatedAt: new Date() } },
+      { $set: { ...data, ...(userId ? { userId } : {}), updatedAt: new Date() } },
       { new: true, upsert: true, setDefaultsOnInsert: true }
     );
 
@@ -36,7 +38,19 @@ async function getTournament(req, res) {
   }
 }
 
+async function getUserTournaments(req, res) {
+  try {
+    const userId = req.user.id;
+    const tournaments = await Tournament.find({ userId }).sort({ createdAt: -1 });
+    return res.status(200).json(tournaments);
+  } catch (error) {
+    console.error("Error fetching user tournaments:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+}
+
 module.exports = {
   upsertTournament,
   getTournament,
+  getUserTournaments,
 };
