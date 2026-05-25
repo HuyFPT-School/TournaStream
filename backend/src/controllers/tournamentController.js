@@ -18,9 +18,11 @@ async function upsertTournament(req, res) {
       { new: true, upsert: true, setDefaultsOnInsert: true }
     );
 
-    triggerTournamentUpdate(id, tournament).catch(err => {
+    try {
+      await triggerTournamentUpdate(id, tournament);
+    } catch (err) {
       console.error("Failed to trigger Pusher update:", err);
-    });
+    }
 
     return res.status(200).json({ success: true, tournament });
   } catch (error) {
