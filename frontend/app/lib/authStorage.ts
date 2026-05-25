@@ -34,13 +34,18 @@ function writeJson(key: string, value: unknown) {
   window.localStorage.setItem(key, JSON.stringify(value));
 }
 
-function getApiBaseUrl() {
+export function getApiBaseUrl() {
   if (typeof window !== "undefined") {
-    const isLocalHost =
-      window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1";
-    if (isLocalHost) {
-      return "http://localhost:4000/api";
+    const hostname = window.location.hostname;
+    const isLocal =
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname.startsWith("192.168.") ||
+      hostname.startsWith("10.") ||
+      hostname.startsWith("172.");
+      
+    if (isLocal) {
+      return `http://${hostname}:4000/api`;
     }
   }
 

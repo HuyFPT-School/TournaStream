@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { syncTournamentToBackend, fetchTournamentFromBackend } from '@/app/lib/tournaments';
+import { getSession } from '@/app/lib/authStorage';
 
 interface MatchState {
   team1Score: number;
@@ -30,10 +31,14 @@ export default function LiveMatchPage() {
 
   const [isLoaded, setIsLoaded] = useState(false);
 
+  const session = getSession();
+  const tournamentsKey = session ? `tournaments_${session.id}` : 'tournaments';
+  const currentTournamentKey = session ? `currentTournament_${session.id}` : 'currentTournament';
+
   useEffect(() => {
     const loadTournament = async () => {
       // 1. Try local storage first
-      const saved = localStorage.getItem('currentTournament');
+      const saved = localStorage.getItem(currentTournamentKey);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
@@ -72,7 +77,7 @@ export default function LiveMatchPage() {
     };
 
     loadTournament();
-  }, [tournamentId]);
+  }, [tournamentId, currentTournamentKey]);
 
   // Save matchState to currentTournament and tournaments list when it changes
   useEffect(() => {
@@ -82,23 +87,23 @@ export default function LiveMatchPage() {
         matchState: matchState
       };
       
-      localStorage.setItem('currentTournament', JSON.stringify(updatedTournament));
+      localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
       
-      const savedList = localStorage.getItem('tournaments');
+      const savedList = localStorage.getItem(tournamentsKey);
       if (savedList) {
         try {
           const list = JSON.parse(savedList);
           const index = list.findIndex((t: any) => t.id === tournament.id);
           if (index > -1) {
             list[index] = updatedTournament;
-            localStorage.setItem('tournaments', JSON.stringify(list));
+            localStorage.setItem(tournamentsKey, JSON.stringify(list));
           }
         } catch (e) {
           console.error(e);
         }
       }
     }
-  }, [matchState, tournament, isLoaded]);
+  }, [matchState, tournament, isLoaded, currentTournamentKey, tournamentsKey]);
 
   // Sync tournament state to backend on key changes and every 15 seconds of match time
   useEffect(() => {
@@ -175,16 +180,16 @@ export default function LiveMatchPage() {
         matchState: finalMatchState
       };
       
-      localStorage.setItem('currentTournament', JSON.stringify(updatedTournament));
+      localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
       
-      const savedList = localStorage.getItem('tournaments');
+      const savedList = localStorage.getItem(tournamentsKey);
       if (savedList) {
         try {
           const list = JSON.parse(savedList);
           const index = list.findIndex((t: any) => t.id === tournament.id);
           if (index > -1) {
             list[index] = updatedTournament;
-            localStorage.setItem('tournaments', JSON.stringify(list));
+            localStorage.setItem(tournamentsKey, JSON.stringify(list));
           }
         } catch (e) {
           console.error(e);

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { fetchTournamentFromBackend } from '@/app/lib/tournaments';
+import { getSession } from '@/app/lib/authStorage';
 
 export default function TournamentDetailPage() {
   const params = useParams();
@@ -14,8 +15,12 @@ export default function TournamentDetailPage() {
   const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
+    const session = getSession();
+    const tournamentsKey = session ? `tournaments_${session.id}` : 'tournaments';
+    const currentTournamentKey = session ? `currentTournament_${session.id}` : 'currentTournament';
+
     let isOwnerUser = false;
-    const savedList = localStorage.getItem('tournaments');
+    const savedList = localStorage.getItem(tournamentsKey);
     if (savedList) {
       try {
         const list = JSON.parse(savedList);
@@ -36,7 +41,7 @@ export default function TournamentDetailPage() {
           const tourn = list.find((t: any) => t.id === tournamentId);
           if (tourn) {
             setTournament(tourn);
-            localStorage.setItem('currentTournament', JSON.stringify(tourn));
+            localStorage.setItem(currentTournamentKey, JSON.stringify(tourn));
             const link = `${window.location.origin}/tournaments/${tournamentId}/live`;
             setShareLink(link);
             setQrCode(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(link)}`);
@@ -47,7 +52,7 @@ export default function TournamentDetailPage() {
         }
       }
 
-      const savedCurrent = localStorage.getItem('currentTournament');
+      const savedCurrent = localStorage.getItem(currentTournamentKey);
       if (savedCurrent) {
         try {
           const tourn = JSON.parse(savedCurrent);

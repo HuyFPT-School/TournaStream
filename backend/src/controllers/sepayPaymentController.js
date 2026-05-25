@@ -95,11 +95,13 @@ async function createSepayCheckout(req, res) {
     });
   }
 
+  const userId = req.user ? req.user.id : null;
   const qrPayload = buildQrPayload({ checkoutCode, amount: plan.amount });
   const qrImageUrl = buildQrImageUrl(qrPayload);
 
   const transaction = await Transaction.create({
     checkoutCode,
+    userId,
     planKey: normalizedPlanKey,
     planName: plan.planName,
     amount: plan.amount,

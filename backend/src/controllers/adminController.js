@@ -31,6 +31,7 @@ async function getAdminStats(req, res) {
 
     // 3. Recent Transactions
     const recentTransactions = await Transaction.find({})
+      .populate("userId", "fullName email")
       .sort({ createdAt: -1 })
       .limit(10)
       .lean();
@@ -49,6 +50,7 @@ async function getAdminStats(req, res) {
 
     // 6. Full Transactions List
     const transactionsList = await Transaction.find({})
+      .populate("userId", "fullName email")
       .sort({ createdAt: -1 })
       .lean();
 

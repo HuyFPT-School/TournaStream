@@ -9,6 +9,7 @@ const transactionSchema = new mongoose.Schema(
       uppercase: true,
       trim: true,
     },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     planKey: { type: String, required: true, trim: true },
     planName: { type: String, required: true, trim: true },
     amount: { type: Number, required: true },
