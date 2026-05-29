@@ -125,8 +125,12 @@ function buildQuarterMatches(tournament: LiveTournament) {
 
   const teams = resolveTournamentTeams(tournament);
   const isLive = !!tournament.matchState?.isRunning && !tournament.matchState?.isFinished;
-  const liveSa = Number.isFinite(tournament.matchState?.team1Score) ? tournament.matchState?.team1Score : null;
-  const liveSb = Number.isFinite(tournament.matchState?.team2Score) ? tournament.matchState?.team2Score : null;
+  const liveSa = Number.isFinite(tournament.matchState?.team1Score)
+    ? (tournament.matchState?.team1Score ?? null)
+    : null;
+  const liveSb = Number.isFinite(tournament.matchState?.team2Score)
+    ? (tournament.matchState?.team2Score ?? null)
+    : null;
 
   const matches = [] as Array<typeof PLACEHOLDER_MATCH>;
   for (let i = 0; i < 8; i += 2) {
