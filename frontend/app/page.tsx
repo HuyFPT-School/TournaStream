@@ -58,7 +58,15 @@ type LiveTournament = {
   };
 };
 
-const PLACEHOLDER_MATCH = { a: "?", b: "?", sa: null, sb: null, done: true };
+type BracketPreviewMatch = {
+  a: string;
+  b: string;
+  sa: number | null;
+  sb: number | null;
+  done: boolean;
+};
+
+const PLACEHOLDER_MATCH: BracketPreviewMatch = { a: "?", b: "?", sa: null, sb: null, done: true };
 
 function resolveTournamentTeams(tournament: LiveTournament) {
   if (tournament.orderedTeams && tournament.orderedTeams.length > 0) {
