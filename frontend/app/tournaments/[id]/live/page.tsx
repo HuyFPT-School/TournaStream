@@ -14,6 +14,41 @@ interface MatchState {
   isFinished?: boolean;
 }
 
+type TeamRef = { id?: string; name?: string };
+
+type BracketState = {
+  rounds: Array<
+    Array<{
+      teamA?: TeamRef;
+      teamB?: TeamRef;
+    }>
+  >;
+  currentRound: number;
+  currentMatch: number;
+};
+
+function getCurrentBracketMatch(bracket?: BracketState) {
+  if (!bracket) return null;
+  const round = bracket.rounds[bracket.currentRound];
+  if (!round) return null;
+  return round[bracket.currentMatch] || null;
+}
+
+function resolveTeamRef(tournament: any, team?: TeamRef) {
+  if (!team) return null;
+  if (team.id) {
+    return tournament.teams?.find((t: any) => t.id === team.id) || team;
+  }
+  if (team.name) {
+    return tournament.teams?.find((t: any) => t.name === team.name) || team;
+  }
+  return team;
+}
+
+function getFallbackTeams(tournament: any) {
+  return tournament.orderedTeams || tournament.teams || [];
+}
+
 export default function TournamentLiveViewPage() {
   const params = useParams();
   const tournamentId = params.id as string;
@@ -155,8 +190,13 @@ export default function TournamentLiveViewPage() {
     );
   }
 
-  const team1 = tournament.teams[0];
-  const team2 = tournament.teams[1];
+  const fallbackTeams = getFallbackTeams(tournament);
+  const matchIndex = tournament.bracket?.currentMatch || 0;
+  const fallbackTeamA = fallbackTeams[matchIndex * 2];
+  const fallbackTeamB = fallbackTeams[matchIndex * 2 + 1];
+  const currentBracketMatch = getCurrentBracketMatch(tournament.bracket);
+  const team1 = resolveTeamRef(tournament, currentBracketMatch?.teamA) || fallbackTeamA || tournament.teams[0];
+  const team2 = resolveTeamRef(tournament, currentBracketMatch?.teamB) || fallbackTeamB || tournament.teams[1];
 
   return (
     <main className="min-h-screen bg-[#080b10] text-white font-sans">
