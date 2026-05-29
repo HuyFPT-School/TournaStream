@@ -172,8 +172,9 @@ function buildRoundMatches(
     let winner: { id?: string; name?: string } | string | null | undefined;
     if (match.teamA && !match.teamB) winner = match.teamA;
     else if (match.teamB && !match.teamA) winner = match.teamB;
-    else if (match.scoreA === null || match.scoreB === null) winner = match.teamA || match.teamB;
-    else if (match.scoreA > match.scoreB) winner = match.teamA;
+    else if (!Number.isFinite(match.scoreA) || !Number.isFinite(match.scoreB)) {
+      winner = match.teamA || match.teamB;
+    } else if (match.scoreA > match.scoreB) winner = match.teamA;
     else if (match.scoreB > match.scoreA) winner = match.teamB;
     else winner = match.teamA || match.teamB;
     // Return a resolved ref so fallback names are always available
