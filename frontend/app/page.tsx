@@ -174,9 +174,13 @@ function buildRoundMatches(
     else if (match.teamB && !match.teamA) winner = match.teamB;
     else if (!Number.isFinite(match.scoreA) || !Number.isFinite(match.scoreB)) {
       winner = match.teamA || match.teamB;
-    } else if (match.scoreA > match.scoreB) winner = match.teamA;
-    else if (match.scoreB > match.scoreA) winner = match.teamB;
-    else winner = match.teamA || match.teamB;
+    } else {
+      const scoreA = match.scoreA as number;
+      const scoreB = match.scoreB as number;
+      if (scoreA > scoreB) winner = match.teamA;
+      else if (scoreB > scoreA) winner = match.teamB;
+      else winner = match.teamA || match.teamB;
+    }
     // Return a resolved ref so fallback names are always available
     if (!winner) return undefined;
     if (typeof winner === "string") return winner;
