@@ -1,10 +1,11 @@
 'use client';
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { fetchLiveTournamentsFromBackend } from "@/app/lib/tournaments";
 
 /* ── Live ticker data ── */
-const TICKER_ITEMS = [
+const DEMO_TICKER_ITEMS = [
   "🔴 LIVE · Dragon FC 3 - 1 Phoenix United",
   "⚽ FT · Storm City 0 - 2 Iron Eagles",
   "🔴 LIVE · Blaze SC 1 - 1 Thunder Boys",
@@ -14,7 +15,7 @@ const TICKER_ITEMS = [
 ];
 
 /* ── Bracket data ── */
-const BRACKET = {
+const DEMO_BRACKET = {
   qf: [
     { a: "Dragon FC",    b: "Storm City",   sa: 3,    sb: 1,    done: true  },
     { a: "Iron Eagles",  b: "Blaze SC",     sa: 2,    sb: 0,    done: true  },
@@ -29,6 +30,189 @@ const BRACKET = {
     { a: "?",           b: "?",            sa: null, sb: null, done: false },
   ],
 };
+
+type LiveTournament = {
+  id: string;
+  name: string;
+  teams?: { id?: string; name?: string }[];
+  orderedTeams?: { id?: string; name?: string }[];
+  bracket?: {
+    rounds?: Array<
+      Array<{
+        teamA?: { id?: string; name?: string };
+        teamB?: { id?: string; name?: string };
+        scoreA?: number | null;
+        scoreB?: number | null;
+        isFinished?: boolean;
+      }>
+    >;
+    currentRound?: number;
+    currentMatch?: number;
+    isFinished?: boolean;
+  };
+  matchState?: {
+    team1Score?: number;
+    team2Score?: number;
+    isRunning?: boolean;
+    isFinished?: boolean;
+  };
+};
+
+const PLACEHOLDER_MATCH = { a: "?", b: "?", sa: null, sb: null, done: true };
+
+function resolveTournamentTeams(tournament: LiveTournament) {
+  if (tournament.orderedTeams && tournament.orderedTeams.length > 0) {
+    return tournament.orderedTeams;
+  }
+  return tournament.teams || [];
+}
+
+function resolveTeamName(
+  tournament: LiveTournament,
+  team?: { id?: string; name?: string } | string | null,
+  fallback?: { id?: string; name?: string } | string | null
+): string {
+  if (!team && !fallback) return "?";
+  const ref = team || fallback;
+  if (!ref) return "?";
+
+  if (typeof ref === "string") {
+    return ref || "?";
+  }
+
+  // Try to look up by id first (full name stored in teams array)
+  if (ref.id) {
+    const found =
+      tournament.teams?.find((t) => t.id === ref.id) ||
+      tournament.orderedTeams?.find((t) => t.id === ref.id);
+    if (found?.name) return found.name;
+  }
+  // Fall back to name stored on the ref itself
+  if (ref.name) return ref.name;
+  return "?";
+}
+
+function buildQuarterMatches(tournament: LiveTournament) {
+  const bracketRound = tournament.bracket?.rounds?.[0];
+  if (bracketRound && bracketRound.length > 0) {
+    const teams = resolveTournamentTeams(tournament);
+    const mapped = bracketRound.map((match, idx) => {
+      const fallbackA = teams[idx * 2];
+      const fallbackB = teams[idx * 2 + 1];
+      const isCurrent = tournament.bracket?.currentRound === 0
+        && tournament.bracket?.currentMatch === idx
+        && tournament.matchState?.isRunning;
+      const sa = isCurrent
+        ? tournament.matchState?.team1Score ?? null
+        : (Number.isFinite(match.scoreA) ? match.scoreA : null);
+      const sb = isCurrent
+        ? tournament.matchState?.team2Score ?? null
+        : (Number.isFinite(match.scoreB) ? match.scoreB : null);
+      const done = !!match.isFinished || !isCurrent;
+
+      return {
+        a: resolveTeamName(tournament, match.teamA, fallbackA),
+        b: resolveTeamName(tournament, match.teamB, fallbackB),
+        sa,
+        sb,
+        done,
+      };
+    });
+
+    while (mapped.length < 4) mapped.push({ ...PLACEHOLDER_MATCH });
+    return mapped.slice(0, 4);
+  }
+
+  const teams = resolveTournamentTeams(tournament);
+  const isLive = !!tournament.matchState?.isRunning && !tournament.matchState?.isFinished;
+  const liveSa = Number.isFinite(tournament.matchState?.team1Score) ? tournament.matchState?.team1Score : null;
+  const liveSb = Number.isFinite(tournament.matchState?.team2Score) ? tournament.matchState?.team2Score : null;
+
+  const matches = [] as Array<typeof PLACEHOLDER_MATCH>;
+  for (let i = 0; i < 8; i += 2) {
+    const teamA = teams[i]?.name || "?";
+    const teamB = teams[i + 1]?.name || "?";
+    const isLiveMatch = isLive && i === 0;
+    matches.push({
+      a: teamA,
+      b: teamB,
+      sa: isLiveMatch ? liveSa : null,
+      sb: isLiveMatch ? liveSb : null,
+      done: !isLiveMatch,
+    });
+  }
+
+  if (matches.every((m) => m.a === "?" && m.b === "?")) {
+    return [PLACEHOLDER_MATCH, PLACEHOLDER_MATCH, PLACEHOLDER_MATCH, PLACEHOLDER_MATCH];
+  }
+
+  return matches;
+}
+
+function buildRoundMatches(
+  tournament: LiveTournament,
+  roundIndex: number,
+  size: number
+) {
+  const round = tournament.bracket?.rounds?.[roundIndex] || [];
+  const prevRound = tournament.bracket?.rounds?.[roundIndex - 1] || [];
+  const prevWinners = prevRound.map((match) => {
+    let winner: { id?: string; name?: string } | string | null | undefined;
+    if (match.teamA && !match.teamB) winner = match.teamA;
+    else if (match.teamB && !match.teamA) winner = match.teamB;
+    else if (match.scoreA === null || match.scoreB === null) winner = match.teamA || match.teamB;
+    else if (match.scoreA > match.scoreB) winner = match.teamA;
+    else if (match.scoreB > match.scoreA) winner = match.teamB;
+    else winner = match.teamA || match.teamB;
+    // Return a resolved ref so fallback names are always available
+    if (!winner) return undefined;
+    if (typeof winner === "string") return winner;
+    const teams = resolveTournamentTeams(tournament);
+    const found =
+      (winner.id && (tournament.teams?.find((t) => t.id === winner.id) || tournament.orderedTeams?.find((t) => t.id === winner.id))) ||
+      (winner.name && teams.find((t) => t.name === winner.name));
+    return found || winner;
+  });
+  const mapped = round.map((match, idx) => {
+    const isCurrent = tournament.bracket?.currentRound === roundIndex
+      && tournament.bracket?.currentMatch === idx
+      && tournament.matchState?.isRunning;
+    const sa = isCurrent
+      ? tournament.matchState?.team1Score ?? null
+      : (Number.isFinite(match.scoreA) ? match.scoreA : null);
+    const sb = isCurrent
+      ? tournament.matchState?.team2Score ?? null
+      : (Number.isFinite(match.scoreB) ? match.scoreB : null);
+    const done = !!match.isFinished || !isCurrent;
+
+    const fallbackA = prevWinners[idx * 2];
+    const fallbackB = prevWinners[idx * 2 + 1];
+
+    return {
+      a: resolveTeamName(tournament, match.teamA, fallbackA),
+      b: resolveTeamName(tournament, match.teamB, fallbackB),
+      sa,
+      sb,
+      done,
+    };
+  });
+
+  while (mapped.length < size) mapped.push({ ...PLACEHOLDER_MATCH });
+  return mapped.slice(0, size);
+}
+
+function getTickerItem(tournament: LiveTournament) {
+  const teamA = tournament.teams?.[0]?.name;
+  const teamB = tournament.teams?.[1]?.name;
+  const sa = Number.isFinite(tournament.matchState?.team1Score) ? tournament.matchState?.team1Score : 0;
+  const sb = Number.isFinite(tournament.matchState?.team2Score) ? tournament.matchState?.team2Score : 0;
+
+  if (teamA && teamB) {
+    return `🔴 LIVE · ${teamA} ${sa} - ${sb} ${teamB}`;
+  }
+
+  return `🔴 LIVE · ${tournament.name}`;
+}
 
 /* ── Stats ── */
 const STATS = [
@@ -167,6 +351,68 @@ export default function HomePage() {
   const year = new Date().getFullYear();
   const [tickerPaused, setTickerPaused] = useState(false);
   const { visible: bracketVisible, ref: bracketRef } = useBracketVisible();
+  const [liveTournaments, setLiveTournaments] = useState<LiveTournament[]>([]);
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const [selectedLiveId, setSelectedLiveId] = useState<string>("");
+
+  useEffect(() => {
+    let active = true;
+
+    const loadLive = async () => {
+      try {
+        const data = await fetchLiveTournamentsFromBackend(8);
+        if (!active) return;
+        setLiveTournaments(Array.isArray(data) ? data : []);
+        setLiveError(null);
+      } catch (err) {
+        console.error("Error fetching live tournaments:", err);
+        if (!active) return;
+        setLiveError("Không thể tải giải đấu trực tiếp");
+      }
+    };
+
+    loadLive();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const liveMatches = useMemo(
+    () => liveTournaments.filter((t) => t.matchState?.isRunning && !t.matchState?.isFinished),
+    [liveTournaments]
+  );
+
+  useEffect(() => {
+    if (liveMatches.length === 0) {
+      setSelectedLiveId("");
+      return;
+    }
+
+    const current = liveMatches.find((t) => t.id === selectedLiveId);
+    if (!current) {
+      setSelectedLiveId(liveMatches[0].id);
+    }
+  }, [liveMatches, selectedLiveId]);
+
+  const tickerItems = useMemo(
+    () => (liveMatches.length > 0 ? liveMatches.map(getTickerItem) : DEMO_TICKER_ITEMS),
+    [liveMatches]
+  );
+
+  const bracketData = useMemo(() => {
+    if (liveMatches.length === 0) return DEMO_BRACKET;
+
+    const selected = liveMatches.find((t) => t.id === selectedLiveId) || liveMatches[0];
+    const qf = buildQuarterMatches(selected);
+    const sf = selected.bracket?.rounds?.[1]
+      ? buildRoundMatches(selected, 1, 2)
+      : [PLACEHOLDER_MATCH, PLACEHOLDER_MATCH];
+    const f = selected.bracket?.rounds?.[2]
+      ? buildRoundMatches(selected, 2, 1)
+      : [PLACEHOLDER_MATCH];
+
+    return { qf, sf, f };
+  }, [liveMatches, selectedLiveId]);
 
   return (
     <main className="min-h-screen bg-[#080b10] text-white font-sans overflow-x-hidden">
@@ -223,7 +469,7 @@ export default function HomePage() {
               className="ticker-track flex gap-16 whitespace-nowrap py-2.5"
               style={{ animationPlayState: tickerPaused ? "paused" : "running" }}
             >
-              {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
+              {[...tickerItems, ...tickerItems].map((item, i) => (
                 <span key={i} className="text-[12px] text-white/60 font-medium shrink-0">{item}</span>
               ))}
             </div>
@@ -289,15 +535,36 @@ export default function HomePage() {
       {/* ── Live Bracket Preview ── */}
       <section className="relative z-10 px-6 pb-16">
         <div id="bracket" ref={bracketRef} className="w-full max-w-5xl mx-auto">
-          <p
-            className="text-[11px] font-bold tracking-widest text-white/25 uppercase mb-6 transition-all duration-500"
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 mb-2 transition-all duration-500"
             style={{
               opacity: bracketVisible ? 1 : 0,
               transform: bracketVisible ? "translateY(0)" : "translateY(8px)",
             }}
           >
-            🏆 Giải Vô Địch Mùa Hè 2026 · Đang diễn ra
-          </p>
+            <p className="text-[11px] font-bold tracking-widest text-white/25 uppercase">
+              🏆 {liveMatches.length > 0 ? `Đang diễn ra · ${liveMatches.length} giải` : "Demo bracket"}
+            </p>
+            {liveMatches.length > 0 && (
+              <label className="flex items-center gap-2 text-[11px] text-white/50">
+                Chọn giải
+                <select
+                  value={selectedLiveId}
+                  onChange={(event) => setSelectedLiveId(event.target.value)}
+                  className="rounded-lg bg-[#0f1419] border border-white/[0.08] px-2 py-1 text-white/80 text-[11px]"
+                >
+                  {liveMatches.map((tournament) => (
+                    <option key={tournament.id} value={tournament.id}>
+                      {tournament.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+          {liveError && liveMatches.length === 0 && (
+            <p className="text-[11px] text-red-300/70 mb-4">{liveError}</p>
+          )}
 
           <div className="bracket-container flex items-center justify-center gap-8 overflow-x-auto pb-4">
 
@@ -312,7 +579,7 @@ export default function HomePage() {
               }}
             >
               <p className="text-[10px] font-black tracking-widest text-white/20 uppercase text-center mb-1">Tứ kết</p>
-              {BRACKET.qf.map((m, i) => (
+              {bracketData.qf.map((m, i) => (
                 <div key={i} className="flex items-center">
                   <BracketMatch {...m} delay={bracketVisible ? 300 + i * 80 : 99999} />
                   <div
@@ -352,7 +619,7 @@ export default function HomePage() {
               }}
             >
               <p className="text-[10px] font-black tracking-widest text-white/20 uppercase text-center mb-1">Bán kết</p>
-              {BRACKET.sf.map((m, i) => (
+              {bracketData.sf.map((m, i) => (
                 <div key={i} className="flex items-center">
                   <BracketMatch {...m} delay={bracketVisible ? 380 + i * 100 : 99999} />
                   <div
@@ -393,7 +660,7 @@ export default function HomePage() {
               <p className="text-[10px] font-black tracking-widest text-[#22c55e]/60 uppercase text-center mb-2">⚡ Chung kết</p>
               <div className="relative">
                 <div className="absolute -inset-2 rounded-2xl bg-[#22c55e]/10 blur-md" />
-                <BracketMatch {...BRACKET.f[0]} delay={bracketVisible ? 950 : 99999} />
+                <BracketMatch {...bracketData.f[0]} delay={bracketVisible ? 950 : 99999} />
               </div>
             </div>
           </div>

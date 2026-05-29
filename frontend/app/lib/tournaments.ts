@@ -75,3 +75,9 @@ export async function fetchUserTournamentsFromBackend() {
     method: "GET",
   });
 }
+
+export async function fetchLiveTournamentsFromBackend(limit = 8) {
+  return requestJson<any[]>(`/tournaments/live?limit=${limit}`, {
+    method: "GET",
+  });
+}

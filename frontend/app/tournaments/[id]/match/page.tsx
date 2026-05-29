@@ -15,6 +15,135 @@ interface MatchState {
   isFinished?: boolean;
 }
 
+type TeamRef = { id?: string; name?: string };
+
+type BracketMatch = {
+  teamA?: TeamRef;
+  teamB?: TeamRef;
+  scoreA: number | null;
+  scoreB: number | null;
+  isFinished: boolean;
+  winner?: TeamRef;
+};
+
+type BracketState = {
+  rounds: BracketMatch[][];
+  currentRound: number;
+  currentMatch: number;
+  isFinished: boolean;
+};
+
+function buildInitialBracket(teams: TeamRef[]): BracketState {
+  const roundOne: BracketMatch[] = [];
+  for (let i = 0; i < teams.length; i += 2) {
+    roundOne.push({
+      teamA: teams[i],
+      teamB: teams[i + 1],
+      scoreA: null,
+      scoreB: null,
+      isFinished: false,
+    });
+  }
+
+  return {
+    rounds: [roundOne],
+    currentRound: 0,
+    currentMatch: 0,
+    isFinished: false,
+  };
+}
+
+function getCurrentBracketMatch(bracket?: BracketState) {
+  if (!bracket) return null;
+  const round = bracket.rounds[bracket.currentRound];
+  if (!round) return null;
+  return round[bracket.currentMatch] || null;
+}
+
+function normalizeBracket(bracket: BracketState) {
+  const roundIndex = Math.max(0, Math.min(bracket.currentRound, bracket.rounds.length - 1));
+  const round = bracket.rounds[roundIndex] || [];
+  const maxMatchIndex = Math.max(0, round.length - 1);
+  const matchIndex = Math.max(0, Math.min(bracket.currentMatch, maxMatchIndex));
+
+  if (roundIndex === bracket.currentRound && matchIndex === bracket.currentMatch) {
+    return bracket;
+  }
+
+  return {
+    ...bracket,
+    currentRound: roundIndex,
+    currentMatch: matchIndex,
+  };
+}
+
+function getFallbackTeams(tournament: any) {
+  return tournament.orderedTeams || tournament.teams || [];
+}
+
+function resolveTeamRef(tournament: any, team?: TeamRef) {
+  if (!team) return null;
+  if (team.id) {
+    return tournament.teams?.find((t: any) => t.id === team.id) || team;
+  }
+  if (team.name) {
+    return tournament.teams?.find((t: any) => t.name === team.name) || team;
+  }
+  return team;
+}
+
+function pickWinner(teamA: TeamRef | undefined, teamB: TeamRef | undefined, scoreA: number, scoreB: number) {
+  if (!teamB) return teamA;
+  if (!teamA) return teamB;
+  if (scoreA > scoreB) return teamA;
+  if (scoreB > scoreA) return teamB;
+  return teamA;
+}
+
+function buildNextRound(winners: TeamRef[]) {
+  const round: BracketMatch[] = [];
+  for (let i = 0; i < winners.length; i += 2) {
+    round.push({
+      teamA: winners[i],
+      teamB: winners[i + 1],
+      scoreA: null,
+      scoreB: null,
+      isFinished: false,
+    });
+  }
+  return round;
+}
+
+// Repairs old saved data where teamA/teamB/winner are missing names
+function migrateBracketNames(tournament: any): any {
+  if (!tournament?.bracket?.rounds?.length || !tournament?.teams?.length) return tournament;
+
+  const teams: any[] = tournament.teams;
+
+  function resolveRef(ref: any): any {
+    if (!ref) return ref;
+    if (ref.id && !ref.name) {
+      const found = teams.find((t: any) => t.id === ref.id);
+      if (found) return { id: found.id, name: found.name };
+    }
+    return ref;
+  }
+
+  const rounds = tournament.bracket.rounds.map((round: any[]) =>
+    round.map((match: any) => ({
+      ...match,
+      teamA: resolveRef(match.teamA),
+      teamB: resolveRef(match.teamB),
+      winner: resolveRef(match.winner),
+    }))
+  );
+
+  return {
+    ...tournament,
+    bracket: { ...tournament.bracket, rounds },
+  };
+}
+
 export default function LiveMatchPage() {
   const params = useParams();
   const router = useRouter();
@@ -43,7 +172,7 @@ export default function LiveMatchPage() {
         try {
           const parsed = JSON.parse(saved);
           if (parsed.id === tournamentId) {
-            setTournament(parsed);
+            setTournament(migrateBracketNames(parsed));
             if (parsed.matchState) {
               setMatchState({
                 ...parsed.matchState,
@@ -62,7 +191,7 @@ export default function LiveMatchPage() {
       // 2. Fetch from backend if not found or ID mismatch
       try {
         const data = await fetchTournamentFromBackend(tournamentId);
-        setTournament(data);
+        setTournament(migrateBracketNames(data));
         if (data.matchState) {
           setMatchState({
             ...data.matchState,
@@ -78,6 +207,41 @@ export default function LiveMatchPage() {
 
     loadTournament();
   }, [tournamentId, currentTournamentKey]);
+
+  useEffect(() => {
+    if (!tournament || tournament.bracket?.rounds?.length) return;
+
+    const teams = getFallbackTeams(tournament);
+    const bracket = buildInitialBracket(teams);
+    const updatedTournament = {
+      ...tournament,
+      bracket,
+    };
+
+    setTournament(updatedTournament);
+    localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
+    syncTournamentToBackend(updatedTournament).catch(err => {
+      console.error('Error syncing bracket to backend:', err);
+    });
+  }, [tournament, currentTournamentKey]);
+
+  useEffect(() => {
+    if (!tournament?.bracket?.rounds?.length) return;
+
+    const normalized = normalizeBracket(tournament.bracket);
+    if (normalized === tournament.bracket) return;
+
+    const updatedTournament = {
+      ...tournament,
+      bracket: normalized,
+    };
+
+    setTournament(updatedTournament);
+    localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
+    syncTournamentToBackend(updatedTournament).catch(err => {
+      console.error('Error syncing bracket index:', err);
+    });
+  }, [tournament, currentTournamentKey]);
 
   // Save matchState to currentTournament and tournaments list when it changes
   useEffect(() => {
@@ -166,43 +330,113 @@ export default function LiveMatchPage() {
       return;
     }
 
-    const finalMatchState = {
-      ...matchState,
+    if (!tournament) {
+      return;
+    }
+
+    const baseTeams = getFallbackTeams(tournament);
+    const bracket: BracketState = tournament.bracket?.rounds?.length
+      ? JSON.parse(JSON.stringify(tournament.bracket))
+      : buildInitialBracket(baseTeams);
+
+    const roundIndex = bracket.currentRound;
+    const matchIndex = bracket.currentMatch;
+    const round = bracket.rounds[roundIndex] || [];
+    const match = round[matchIndex];
+
+    if (!match) {
+      return;
+    }
+
+    match.scoreA = matchState.team1Score;
+    match.scoreB = matchState.team2Score;
+    match.isFinished = true;
+
+    // Resolve teamA/teamB to full { id, name } before saving (in case name was missing)
+    if (match.teamA?.id && !match.teamA.name) {
+      const resolved = tournament.teams?.find((t: any) => t.id === match.teamA!.id);
+      if (resolved) match.teamA = { id: resolved.id, name: resolved.name };
+    }
+    if (match.teamB?.id && !match.teamB.name) {
+      const resolved = tournament.teams?.find((t: any) => t.id === match.teamB!.id);
+      if (resolved) match.teamB = { id: resolved.id, name: resolved.name };
+    }
+
+    // Always resolve winner to full { id, name } so later rounds have the name
+    const rawWinner = pickWinner(match.teamA, match.teamB, matchState.team1Score, matchState.team2Score);
+    match.winner = rawWinner?.id
+      ? (tournament.teams?.find((t: any) => t.id === rawWinner.id) || rawWinner)
+      : rawWinner;
+
+    let nextMatchState: MatchState = {
+      team1Score: 0,
+      team2Score: 0,
+      time: 0,
       isRunning: false,
-      isFinished: true,
+      hiep: 1,
+      isFinished: false,
     };
 
-    setMatchState(finalMatchState);
-
-    if (tournament) {
-      const updatedTournament = {
-        ...tournament,
-        matchState: finalMatchState
-      };
-      
-      localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
-      
-      const savedList = localStorage.getItem(tournamentsKey);
-      if (savedList) {
-        try {
-          const list = JSON.parse(savedList);
-          const index = list.findIndex((t: any) => t.id === tournament.id);
-          if (index > -1) {
-            list[index] = updatedTournament;
-            localStorage.setItem(tournamentsKey, JSON.stringify(list));
-          }
-        } catch (e) {
-          console.error(e);
+    if (matchIndex + 1 < round.length) {
+      bracket.currentMatch = matchIndex + 1;
+    } else {
+      const winners = round.map(m => m.winner).filter(Boolean) as TeamRef[];
+      // Ensure each winner has name resolved from tournament.teams
+      const resolvedWinners = winners.map(w =>
+        w.id ? (tournament.teams?.find((t: any) => t.id === w.id) || w) : w
+      );
+      if (resolvedWinners.length > 1) {
+        const nextRound = buildNextRound(resolvedWinners);
+        if (bracket.rounds[roundIndex + 1]) {
+          bracket.rounds[roundIndex + 1] = nextRound;
+        } else {
+          bracket.rounds.push(nextRound);
         }
+        bracket.currentRound = roundIndex + 1;
+        bracket.currentMatch = 0;
+      } else {
+        bracket.isFinished = true;
+        nextMatchState = {
+          ...matchState,
+          isRunning: false,
+          isFinished: true,
+        };
       }
+    }
 
+    const updatedTournament = {
+      ...tournament,
+      bracket,
+      matchState: nextMatchState,
+    };
+
+    setTournament(updatedTournament);
+    setMatchState(nextMatchState);
+
+    localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
+
+    const savedList = localStorage.getItem(tournamentsKey);
+    if (savedList) {
       try {
-        await syncTournamentToBackend(updatedTournament);
-      } catch (err) {
-        console.error('Error syncing final state to backend:', err);
+        const list = JSON.parse(savedList);
+        const index = list.findIndex((t: any) => t.id === tournament.id);
+        if (index > -1) {
+          list[index] = updatedTournament;
+          localStorage.setItem(tournamentsKey, JSON.stringify(list));
+        }
+      } catch (e) {
+        console.error(e);
       }
+    }
 
-      alert('Trận đấu đã kết thúc thành công!');
+    try {
+      await syncTournamentToBackend(updatedTournament);
+    } catch (err) {
+      console.error('Error syncing final state to backend:', err);
+    }
+
+    if (bracket.isFinished) {
+      alert('Giải đấu đã kết thúc!');
       router.push(`/tournaments/${tournamentId}`);
     }
   };
@@ -215,8 +449,16 @@ export default function LiveMatchPage() {
     );
   }
 
-  const team1 = tournament.teams[0];
-  const team2 = tournament.teams[1];
+  const fallbackTeams = getFallbackTeams(tournament);
+  const currentBracketMatch = getCurrentBracketMatch(tournament.bracket);
+  const matchIndex = tournament.bracket?.currentMatch || 0;
+  const fallbackTeamA = fallbackTeams[matchIndex * 2];
+  const fallbackTeamB = fallbackTeams[matchIndex * 2 + 1];
+  const team1 = resolveTeamRef(tournament, currentBracketMatch?.teamA) || fallbackTeamA || tournament.teams[0];
+  const team2 = resolveTeamRef(tournament, currentBracketMatch?.teamB) || fallbackTeamB || tournament.teams[1];
+  const roundLabel = tournament.bracket
+    ? `VÒNG ${tournament.bracket.currentRound + 1} • TRẬN ${tournament.bracket.currentMatch + 1}`
+    : 'VÒNG 1 • TRẬN 1';
 
   return (
     <main className="min-h-screen bg-[#080b10] text-white font-sans">
@@ -257,7 +499,7 @@ export default function LiveMatchPage() {
       <section className="relative z-10 max-w-4xl mx-auto px-6 py-8">
         {/* Match Header */}
         <div className="text-center mb-12">
-          <div className="text-sm font-semibold text-[#22c55e] mb-2">VÒNG 1 • TRẬN 1</div>
+          <div className="text-sm font-semibold text-[#22c55e] mb-2">{roundLabel}</div>
           <div className="text-lg font-bold mb-4">Hiệp {matchState.hiep}</div>
         </div>
 

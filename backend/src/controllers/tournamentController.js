@@ -56,8 +56,29 @@ async function getUserTournaments(req, res) {
   }
 }
 
+async function getLiveTournaments(req, res) {
+  try {
+    const rawLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 50) : 8;
+
+    const tournaments = await Tournament.find({
+      matchState: { $ne: null },
+      "matchState.isRunning": true,
+      "matchState.isFinished": { $ne: true },
+    })
+      .sort({ updatedAt: -1 })
+      .limit(limit);
+
+    return res.status(200).json(tournaments);
+  } catch (error) {
+    console.error("Error fetching live tournaments:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+}
+
 module.exports = {
   upsertTournament,
   getTournament,
   getUserTournaments,
+  getLiveTournaments,
 };

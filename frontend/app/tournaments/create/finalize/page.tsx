@@ -7,6 +7,35 @@ import { useState, useEffect } from 'react';
 import { syncTournamentToBackend } from '@/app/lib/tournaments';
 import { getSession } from '@/app/lib/authStorage';
 
+type TeamRef = { id?: string; name?: string };
+
+function buildInitialBracket(teams: TeamRef[]) {
+  const roundOne = [] as Array<{
+    teamA?: TeamRef;
+    teamB?: TeamRef;
+    scoreA: number | null;
+    scoreB: number | null;
+    isFinished: boolean;
+  }>;
+
+  for (let i = 0; i < teams.length; i += 2) {
+    roundOne.push({
+      teamA: teams[i],
+      teamB: teams[i + 1],
+      scoreA: null,
+      scoreB: null,
+      isFinished: false,
+    });
+  }
+
+  return {
+    rounds: [roundOne],
+    currentRound: 0,
+    currentMatch: 0,
+    isFinished: false,
+  };
+}
+
 export default function FinalizeCreatePage() {
   const router = useRouter();
   const { data, resetTournament } = useTournament();
@@ -19,10 +48,12 @@ export default function FinalizeCreatePage() {
 
     // Generate a mock tournament ID
     const tournamentId = 'tourn_' + Date.now();
+    const bracket = buildInitialBracket(data.teams);
     const mockTournament = {
       id: tournamentId,
       ...data,
       orderedTeams: data.teams, // In real app, would use the ordered teams from bracket page
+      bracket,
       createdAt: new Date().toISOString(),
     };
 
