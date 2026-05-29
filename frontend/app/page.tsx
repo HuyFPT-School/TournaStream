@@ -75,6 +75,10 @@ function resolveTournamentTeams(tournament: LiveTournament) {
   return tournament.teams || [];
 }
 
+function toScore(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function resolveTeamName(
   tournament: LiveTournament,
   team?: { id?: string; name?: string } | string | null,
@@ -111,11 +115,11 @@ function buildQuarterMatches(tournament: LiveTournament) {
         && tournament.bracket?.currentMatch === idx
         && tournament.matchState?.isRunning;
       const sa = isCurrent
-        ? tournament.matchState?.team1Score ?? null
-        : (Number.isFinite(match.scoreA) ? match.scoreA : null);
+        ? (tournament.matchState?.team1Score ?? null)
+        : toScore(match.scoreA);
       const sb = isCurrent
-        ? tournament.matchState?.team2Score ?? null
-        : (Number.isFinite(match.scoreB) ? match.scoreB : null);
+        ? (tournament.matchState?.team2Score ?? null)
+        : toScore(match.scoreB);
       const done = !!match.isFinished || !isCurrent;
 
       return {
@@ -195,11 +199,11 @@ function buildRoundMatches(
       && tournament.bracket?.currentMatch === idx
       && tournament.matchState?.isRunning;
     const sa = isCurrent
-      ? tournament.matchState?.team1Score ?? null
-      : (Number.isFinite(match.scoreA) ? match.scoreA : null);
+      ? (tournament.matchState?.team1Score ?? null)
+      : toScore(match.scoreA);
     const sb = isCurrent
-      ? tournament.matchState?.team2Score ?? null
-      : (Number.isFinite(match.scoreB) ? match.scoreB : null);
+      ? (tournament.matchState?.team2Score ?? null)
+      : toScore(match.scoreB);
     const done = !!match.isFinished || !isCurrent;
 
     const fallbackA = prevWinners[idx * 2];
