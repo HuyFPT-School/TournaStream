@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Toast } from "@/app/components/Toast";
-import { registerUser } from "@/app/lib/authStorage";
+import { registerUser, getSession } from "@/app/lib/authStorage";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -35,6 +35,18 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<ToastState | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
+
+  const dismissToast = () => {
+    setToastVisible(false);
+    setTimeout(() => setToast(null), 200);
+  };
+
+  useEffect(() => {
+    const session = getSession();
+    if (session) {
+      router.replace("/tournaments");
+    }
+  }, [router]);
 
   const openToast = (next: Omit<ToastState, "id">) => {
     setToast({ id: makeToastId(), ...next });
@@ -125,11 +137,6 @@ export default function RegisterPage() {
         });
       }
     }
-  };
-
-  const dismissToast = () => {
-    setToastVisible(false);
-    setTimeout(() => setToast(null), 200);
   };
 
   return (

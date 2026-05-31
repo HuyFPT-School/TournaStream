@@ -65,6 +65,13 @@ export default function PackageSelectionPage() {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  useEffect(() => {
+    const session = getSession();
+    if (!session) {
+      router.replace('/login');
+    }
+  }, [router]);
+
   const session = getSession();
   const pendingCheckoutKey = session ? `pendingCheckout_${session.id}` : 'pendingCheckout';
 

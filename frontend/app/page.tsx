@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchLiveTournamentsFromBackend } from "@/app/lib/tournaments";
+import { getSession } from "@/app/lib/authStorage";
 
 /* ── Live ticker data ── */
 const DEMO_TICKER_ITEMS = [
@@ -375,6 +376,11 @@ export default function HomePage() {
   const [liveTournaments, setLiveTournaments] = useState<LiveTournament[]>([]);
   const [liveError, setLiveError] = useState<string | null>(null);
   const [selectedLiveId, setSelectedLiveId] = useState<string>("");
+  const [sessionUser, setSessionUser] = useState<any>(null);
+
+  useEffect(() => {
+    setSessionUser(getSession());
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -457,20 +463,34 @@ export default function HomePage() {
 
       {/* ── Navbar ── */}
       <nav className="relative z-20 flex items-center justify-between px-8 py-4 border-b border-white/[0.06] backdrop-blur-md bg-[#080b10]/60">
-        <div className="flex items-center gap-2.5">
+        <Link 
+          href={sessionUser ? "/tournaments" : "/"} 
+          className="flex items-center gap-2.5 hover:opacity-80 transition-opacity"
+        >
           <div className="w-8 h-8 rounded-lg bg-[#22c55e] flex items-center justify-center">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M8 1L10 6.5H15.5L11 9.5L13 15L8 11.5L3 15L5 9.5L0.5 6.5H6L8 1Z" fill="#080b10" />
             </svg>
           </div>
           <span className="text-[15px] font-bold tracking-tight">Tournament Flow</span>
-        </div>
+        </Link>
         <div className="flex items-center gap-3">
           <Link href="/features" className="text-sm text-white/50 hover:text-white transition-colors px-3 py-1.5">Tính năng</Link>
           <Link href="/pricing" className="text-sm text-white/50 hover:text-white transition-colors px-3 py-1.5">Bảng giá</Link>
-          <Link href="/login" className="px-5 py-2 rounded-lg bg-white text-[#080b10] text-sm font-bold hover:bg-[#22c55e] transition-all duration-200">
-            Đăng nhập
-          </Link>
+          {sessionUser ? (
+            <>
+              <span className="text-sm text-white/40 hidden md:inline">
+                Xin chào, {sessionUser.fullName}
+              </span>
+              <Link href="/tournaments" className="px-5 py-2 rounded-lg bg-[#22c55e] text-[#080b10] text-sm font-bold hover:bg-[#16a34a] transition-all duration-200">
+                Giải đấu của tôi
+              </Link>
+            </>
+          ) : (
+            <Link href="/login" className="px-5 py-2 rounded-lg bg-white text-[#080b10] text-sm font-bold hover:bg-[#22c55e] transition-all duration-200">
+              Đăng nhập
+            </Link>
+          )}
         </div>
       </nav>
 
@@ -534,7 +554,7 @@ export default function HomePage() {
             </p>
             <div className="hero-fade-in flex items-center gap-3" style={{ animationDelay: "240ms" }}>
               <Link
-                href="/tournaments/new"
+                href="/tournaments/create"
                 className="group inline-flex items-center gap-2 px-7 py-3.5 rounded-xl bg-[#22c55e] text-[#080b10] text-[15px] font-black hover:bg-[#16a34a] transition-all duration-200 hover:scale-[1.03] active:scale-[0.97] shadow-[0_0_50px_rgba(34,197,94,0.3)]"
               >
                 <svg width="15" height="15" viewBox="0 0 15 15" fill="none" className="group-hover:scale-110 transition-transform">
