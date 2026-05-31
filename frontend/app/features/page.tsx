@@ -112,7 +112,7 @@ export default function FeaturesPage() {
         <div className="max-w-2xl mx-auto px-6 text-center">
           <p className="text-white/50 mb-6">Sẵn sàng tạo giải đấu của bạn?</p>
           <Link
-            href="/tournaments/new"
+            href="/tournaments/create"
             className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-[#22c55e] text-[#080b10] text-base font-bold hover:bg-[#16a34a] transition-all duration-200 hover:scale-[1.03] active:scale-[0.97]"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">

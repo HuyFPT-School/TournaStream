@@ -39,9 +39,17 @@ export default function TeamsPage() {
     }
   };
 
+  const isPowerOfTwo = (n: number) => {
+    return n > 1 && (n & (n - 1)) === 0;
+  };
+
   const handleContinue = () => {
     if (data.teams.length < 2) {
       alert('Vui lòng thêm ít nhất 2 đội');
+      return;
+    }
+    if (!isPowerOfTwo(data.teams.length)) {
+      alert('Số lượng đội thi đấu phải là lũy thừa của 2 (2, 4, 8, 16, 32...) để có sơ đồ thi đấu hợp lệ.');
       return;
     }
     router.push('/tournaments/create/members');
@@ -186,6 +194,17 @@ export default function TeamsPage() {
           </button>
         )}
 
+        {/* Invalid team count warning */}
+        {!isPowerOfTwo(data.teams.length) && data.teams.length > 0 && (
+          <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-sm mb-6 flex items-start gap-2.5">
+            <span className="text-base">⚠️</span>
+            <div>
+              <div className="font-semibold mb-0.5">Số lượng đội không hợp lệ</div>
+              Sơ đồ thi đấu loại trực tiếp yêu cầu số lượng đội phải là lũy thừa của 2 (2, 4, 8, 16 hoặc 32 đội). Hiện tại bạn đang có {data.teams.length} đội.
+            </div>
+          </div>
+        )}
+
         {/* CTA Buttons */}
         <div className="flex gap-4">
           <Link
@@ -196,7 +215,7 @@ export default function TeamsPage() {
           </Link>
           <button
             onClick={handleContinue}
-            disabled={data.teams.length < 2}
+            disabled={data.teams.length < 2 || !isPowerOfTwo(data.teams.length)}
             className="flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Tiếp tục
