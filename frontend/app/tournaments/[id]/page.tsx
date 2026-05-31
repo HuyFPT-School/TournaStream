@@ -379,6 +379,10 @@ export default function TournamentDetailPage() {
   }, [tournamentId, currentTournamentKey, tournamentsKey]);
 
   useEffect(() => {
+    // If the user is the owner, do not subscribe to Pusher updates on this page.
+    // Overwriting the local editing state via Pusher updates triggers an infinite feedback loop (Race Condition).
+    if (isOwner) return;
+
     const pusher = getPusherClient();
     let channel: any = null;
 
@@ -399,7 +403,7 @@ export default function TournamentDetailPage() {
         pusher.unsubscribe(tournamentId);
       }
     };
-  }, [tournamentId]);
+  }, [tournamentId, isOwner]);
 
   // Synchronize timer ticks
   useEffect(() => {

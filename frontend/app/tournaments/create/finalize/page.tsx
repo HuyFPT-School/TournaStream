@@ -104,7 +104,7 @@ export default function FinalizeCreatePage() {
       // Remove draft as it is now finalized
       localStorage.removeItem(draftKey);
       resetTournament();
-      router.push(`/tournaments/${tournament.id}/match`);
+      router.push(`/tournaments/${tournament.id}`);
     }
   };
 
@@ -235,7 +235,7 @@ export default function FinalizeCreatePage() {
             onClick={handleStartTournament}
             className="flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200"
           >
-            Bắt đầu Hiệp 1
+            Bắt đầu Giải đấu
           </button>
         </div>
       </section>
