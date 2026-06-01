@@ -168,7 +168,7 @@ function buildBracketData(tournament: any, onSelect: (round: number, match: numb
       const teamBObj = getTeamForMatch(r, m, 'B');
 
       const isCurrentMatch = tournament.bracket?.currentRound === r && tournament.bracket?.currentMatch === m;
-      const isLive = isCurrentMatch && tournament.matchState && tournament.matchState.isRunning && !tournament.matchState.isFinished;
+      const isLive = isCurrentMatch && tournament.matchState && !tournament.matchState.isFinished;
       const isFinished = dbMatch ? !!dbMatch.isFinished : false;
 
       let scoreA: number | null = null;
@@ -362,7 +362,7 @@ export default function TournamentLiveViewPage() {
     const dbMatch = dbRound[m];
     
     const isCurrentMatch = tournament.bracket?.currentRound === r && tournament.bracket?.currentMatch === m;
-    const isLive = isCurrentMatch && matchState && !matchState.isFinished && matchState.isRunning;
+    const isLive = isCurrentMatch && matchState && !matchState.isFinished;
     const isFinished = dbMatch ? !!dbMatch.isFinished : (isCurrentMatch && !!matchState.isFinished);
     
     const fallbackTeams = getFallbackTeams(tournament);

@@ -181,7 +181,7 @@ function BracketMatchCard({ a, b, sa, sb, done, isLive, onClick }: BracketMatchC
   );
 }
 
-function buildBracketData(tournament: any) {
+function buildBracketData(tournament: any, matchState: any) {
   if (!tournament) return [];
 
   const teams = tournament.orderedTeams || tournament.teams || [];
@@ -197,7 +197,7 @@ function buildBracketData(tournament: any) {
     const match = roundMatches[matchIdx];
     
     const isCurrentMatch = tournament.bracket?.currentRound === roundIdx && tournament.bracket?.currentMatch === matchIdx;
-    const isLive = isCurrentMatch && tournament.matchState && !tournament.matchState.isFinished;
+    const isLive = isCurrentMatch && matchState && !matchState.isFinished;
     if (isLive) return null;
 
     if (match) {
@@ -242,15 +242,15 @@ function buildBracketData(tournament: any) {
       const teamBObj = getTeamForMatch(r, m, 'B');
 
       const isCurrentMatch = tournament.bracket?.currentRound === r && tournament.bracket?.currentMatch === m;
-      const isLive = isCurrentMatch && tournament.matchState && tournament.matchState.isRunning && !tournament.matchState.isFinished;
+      const isLive = isCurrentMatch && tournament.matchState && !tournament.matchState.isFinished;
       const isFinished = dbMatch ? !!dbMatch.isFinished : false;
 
       let scoreA: number | null = null;
       let scoreB: number | null = null;
 
       if (isLive) {
-        scoreA = tournament.matchState?.team1Score ?? 0;
-        scoreB = tournament.matchState?.team2Score ?? 0;
+        scoreA = matchState.team1Score;
+        scoreB = matchState.team2Score;
       } else if (dbMatch) {
         scoreA = dbMatch.scoreA !== undefined ? dbMatch.scoreA : null;
         scoreB = dbMatch.scoreB !== undefined ? dbMatch.scoreB : null;
@@ -857,6 +857,18 @@ export default function TournamentDetailPage() {
     }
 
     if (!tournament || !tournament.bracket) return;
+
+    // If they clicked the currently active match, do not reset anything, just scroll to it
+    if (tournament.bracket.currentRound === roundIdx && tournament.bracket.currentMatch === matchIdx) {
+      setTimeout(() => {
+        const controllerEl = document.getElementById('match-controller');
+        if (controllerEl) {
+          controllerEl.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 100);
+      return;
+    }
+
     const dbRound = tournament.bracket.rounds?.[roundIdx] || [];
     const dbMatch = dbRound[matchIdx];
     if (!dbMatch) return;
@@ -961,7 +973,7 @@ export default function TournamentDetailPage() {
     );
   }
 
-  const isLiveMatchActive = tournament.matchState?.isRunning && !tournament.matchState?.isFinished;
+  const isLiveMatchActive = tournament.matchState && !tournament.matchState.isFinished;
   const currentBracketMatch = getCurrentBracketMatch(tournament?.bracket);
   const matchIndex = tournament?.bracket?.currentMatch || 0;
   const fallbackTeams = getFallbackTeams(tournament);
@@ -1059,13 +1071,13 @@ export default function TournamentDetailPage() {
         
         {/* Bracket Diagram Container */}
         <div className="w-full">
-          {buildBracketData(tournament).length === 0 ? (
+          {buildBracketData(tournament, matchState).length === 0 ? (
             <div className="text-center py-20 bg-[#0f1419] rounded-2xl border border-white/[0.06]">
               <p className="text-white/60 text-lg">Không có dữ liệu sơ đồ cho giải đấu này</p>
             </div>
           ) : (
             <div className="flex items-stretch justify-center gap-8 overflow-x-auto pb-8 pt-4 min-h-[500px]">
-              {buildBracketData(tournament).map((roundMatches, roundIdx, arr) => (
+              {buildBracketData(tournament, matchState).map((roundMatches, roundIdx, arr) => (
                 <div key={roundIdx} className="flex flex-col shrink-0 items-center w-[160px]">
                   <h3 className="text-xs font-black tracking-widest text-[#22c55e]/70 uppercase text-center mb-8">
                     {getRoundLabel(roundIdx, arr.length)}
@@ -1087,16 +1099,34 @@ export default function TournamentDetailPage() {
         </div>
 
         {/* Bảng điều khiển trận đấu (Active Match Controls) */}
-        {showActiveMatch && (
+        {showActiveMatch && isOwner && (
           <div id="match-controller" className="mt-12 bg-[#0f1419] border border-white/[0.06] rounded-2xl p-8 max-w-2xl mx-auto shadow-2xl relative">
             <div className="flex items-center justify-between mb-8 pb-4 border-b border-white/[0.04]">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-                <h3 className="text-sm font-black tracking-widest text-[#22c55e] uppercase">Đang thi đấu</h3>
+                <span className={`w-2.5 h-2.5 rounded-full ${
+                  matchState.isFinished 
+                    ? 'bg-white/30' 
+                    : matchState.isRunning 
+                    ? 'bg-[#22c55e] animate-pulse' 
+                    : 'bg-yellow-500 animate-pulse'
+                }`} />
+                <h3 className={`text-sm font-black tracking-widest uppercase ${
+                  matchState.isFinished 
+                    ? 'text-white/40' 
+                    : matchState.isRunning 
+                    ? 'text-[#22c55e]' 
+                    : 'text-yellow-500'
+                }`}>
+                  {matchState.isFinished ? 'Đã kết thúc' : matchState.isRunning ? 'Đang thi đấu' : 'Tạm dừng'}
+                </h3>
               </div>
-              <div className="px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] font-black tracking-wider uppercase flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                Hiệp {matchState.hiep} • {formatTime(matchState.time)}
+              <div className={`px-3 py-1.5 rounded-lg border text-[10px] font-black tracking-wider uppercase flex items-center gap-1.5 ${
+                matchState.isFinished
+                  ? 'bg-white/[0.02] border-white/10 text-white/40'
+                  : 'bg-red-500/10 border border-red-500/20 text-red-500'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${matchState.isFinished ? 'bg-white/20' : 'bg-red-500 animate-pulse'}`} />
+                {tournament?.sport === 'tennis' || tournament?.sport === 'volleyball' ? 'Set' : 'Hiệp'} {matchState.hiep} • {formatTime(matchState.time)}
               </div>
             </div>
 
@@ -1391,7 +1421,7 @@ export default function TournamentDetailPage() {
         )}
 
         {/* Trận chờ bắt đầu (Pending matches) */}
-        {getPendingMatches().length > 0 && (
+        {getPendingMatches().length > 0 && isOwner && (
           <div className="mt-8 bg-[#0f1419] border border-white/[0.06] rounded-2xl p-8 max-w-2xl mx-auto shadow-2xl">
             <h3 className="text-sm font-black tracking-widest text-white/50 uppercase mb-6 pb-2 border-b border-white/[0.04]">
               Trận chờ bắt đầu
