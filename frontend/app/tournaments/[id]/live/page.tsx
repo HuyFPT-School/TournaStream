@@ -167,16 +167,15 @@ function buildBracketData(tournament: any, onSelect: (round: number, match: numb
       const teamAObj = getTeamForMatch(r, m, 'A');
       const teamBObj = getTeamForMatch(r, m, 'B');
 
-      const isCurrentMatch = tournament.bracket?.currentRound === r && tournament.bracket?.currentMatch === m;
-      const isLive = isCurrentMatch && tournament.matchState && tournament.matchState.isRunning && !tournament.matchState.isFinished;
+      const isLive = dbMatch?.matchState?.isRunning && !dbMatch?.isFinished && !dbMatch?.matchState?.isFinished;
       const isFinished = dbMatch ? !!dbMatch.isFinished : false;
 
       let scoreA: number | null = null;
       let scoreB: number | null = null;
 
-      if (isLive) {
-        scoreA = tournament.matchState?.team1Score ?? 0;
-        scoreB = tournament.matchState?.team2Score ?? 0;
+      if (dbMatch?.matchState) {
+        scoreA = dbMatch.matchState.team1Score ?? 0;
+        scoreB = dbMatch.matchState.team2Score ?? 0;
       } else if (dbMatch) {
         scoreA = dbMatch.scoreA !== undefined ? dbMatch.scoreA : null;
         scoreB = dbMatch.scoreB !== undefined ? dbMatch.scoreB : null;
@@ -327,16 +326,50 @@ export default function TournamentLiveViewPage() {
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (matchState.isRunning && !matchState.isFinished) {
+    const hasRunningMatches = tournament?.bracket?.rounds?.some((round: any) =>
+      round.some((m: any) => m.matchState?.isRunning && !m.matchState.isFinished && !m.isFinished)
+    );
+
+    if (hasRunningMatches) {
       interval = setInterval(() => {
-        setMatchState(prev => ({
-          ...prev,
-          time: prev.time + 1,
-        }));
+        setTournament((prev: any) => {
+          if (!prev || !prev.bracket || !prev.bracket.rounds) return prev;
+          
+          const updatedBracket = { ...prev.bracket };
+          updatedBracket.rounds = updatedBracket.rounds.map((round: any[]) =>
+            round.map((m: any) => {
+              if (m.matchState?.isRunning && !m.matchState.isFinished && !m.isFinished) {
+                const nextTime = (m.matchState.time || 0) + 1;
+                return {
+                  ...m,
+                  matchState: {
+                    ...m.matchState,
+                    time: nextTime,
+                  },
+                };
+              }
+              return m;
+            })
+          );
+
+          // Update local matchState if it matches the currently selected match
+          if (selectedMatch) {
+            const { round: r, match: m } = selectedMatch;
+            const activeMatch = updatedBracket.rounds[r]?.[m];
+            if (activeMatch && activeMatch.matchState) {
+              setMatchState(activeMatch.matchState);
+            }
+          }
+
+          return {
+            ...prev,
+            bracket: updatedBracket,
+          };
+        });
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [matchState.isRunning, matchState.isFinished]);
+  }, [tournament?.bracket?.rounds, selectedMatch]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -361,9 +394,8 @@ export default function TournamentLiveViewPage() {
     const dbRound = tournament.bracket?.rounds?.[r] || [];
     const dbMatch = dbRound[m];
     
-    const isCurrentMatch = tournament.bracket?.currentRound === r && tournament.bracket?.currentMatch === m;
-    const isLive = isCurrentMatch && matchState && !matchState.isFinished && matchState.isRunning;
-    const isFinished = dbMatch ? !!dbMatch.isFinished : (isCurrentMatch && !!matchState.isFinished);
+    const isLive = dbMatch?.matchState?.isRunning && !dbMatch?.isFinished && !dbMatch?.matchState?.isFinished;
+    const isFinished = dbMatch ? !!dbMatch.isFinished : false;
     
     const fallbackTeams = getFallbackTeams(tournament);
     
@@ -410,13 +442,13 @@ export default function TournamentLiveViewPage() {
     let team1SetPoints = null;
     let team2SetPoints = null;
     
-    if (isCurrentMatch && !matchState.isFinished) {
-      scoreA = matchState.team1Score;
-      scoreB = matchState.team2Score;
-      time = matchState.time;
-      hiep = matchState.hiep;
-      team1SetPoints = matchState.team1SetPoints ?? 0;
-      team2SetPoints = matchState.team2SetPoints ?? 0;
+    if (dbMatch && dbMatch.matchState) {
+      scoreA = dbMatch.matchState.team1Score;
+      scoreB = dbMatch.matchState.team2Score;
+      time = dbMatch.matchState.time;
+      hiep = dbMatch.matchState.hiep;
+      team1SetPoints = dbMatch.matchState.team1SetPoints !== undefined ? dbMatch.matchState.team1SetPoints : null;
+      team2SetPoints = dbMatch.matchState.team2SetPoints !== undefined ? dbMatch.matchState.team2SetPoints : null;
     } else if (dbMatch) {
       scoreA = dbMatch.scoreA;
       scoreB = dbMatch.scoreB;

@@ -54,6 +54,12 @@ async function getAdminStats(req, res) {
       .sort({ createdAt: -1 })
       .lean();
 
+    // 7. Full Tournaments Feedbacks List
+    const feedbacksList = await Tournament.find({ feedbacks: { $exists: true, $not: { $size: 0 } } })
+      .select("name sport feedbacks updatedAt")
+      .sort({ updatedAt: -1 })
+      .lean();
+
     return res.status(200).json({
       users: {
         total: totalUsers,
@@ -75,7 +81,8 @@ async function getAdminStats(req, res) {
       recentTransactions,
       recentTournaments,
       usersList,
-      transactionsList
+      transactionsList,
+      feedbacksList
     });
   } catch (error) {
     console.error("Error gathering admin stats:", error);

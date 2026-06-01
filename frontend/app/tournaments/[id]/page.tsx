@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { fetchTournamentFromBackend, syncTournamentToBackend } from '@/app/lib/tournaments';
 import { getSession } from '@/app/lib/authStorage';
 import { getPusherClient } from '@/app/lib/pusher';
@@ -308,6 +308,48 @@ export default function TournamentDetailPage() {
   const tournamentsKey = session ? `tournaments_${session.id}` : 'tournaments';
   const currentTournamentKey = session ? `currentTournament_${session.id}` : 'currentTournament';
 
+  const syncQueueRef = useRef<{
+    isSyncing: boolean;
+    pendingData: any;
+    debounceTimeout: NodeJS.Timeout | null;
+  }>({
+    isSyncing: false,
+    pendingData: null,
+    debounceTimeout: null,
+  });
+
+  const triggerSync = (data: any) => {
+    const queue = syncQueueRef.current;
+    if (queue.debounceTimeout) {
+      clearTimeout(queue.debounceTimeout);
+    }
+    queue.debounceTimeout = setTimeout(() => {
+      queue.debounceTimeout = null;
+      if (queue.isSyncing) {
+        queue.pendingData = data;
+        return;
+      }
+      executeSync(data);
+    }, 300);
+  };
+
+  const executeSync = async (data: any) => {
+    const queue = syncQueueRef.current;
+    queue.isSyncing = true;
+    try {
+      await syncTournamentToBackend(data);
+    } catch (err) {
+      console.error('Error syncing tournament to backend:', err);
+    } finally {
+      queue.isSyncing = false;
+      if (queue.pendingData) {
+        const nextData = queue.pendingData;
+        queue.pendingData = null;
+        executeSync(nextData);
+      }
+    }
+  };
+
   useEffect(() => {
     let isOwnerUser = false;
     const savedList = localStorage.getItem(tournamentsKey);
@@ -405,25 +447,83 @@ export default function TournamentDetailPage() {
     };
   }, [tournamentId, isOwner]);
 
-  // Synchronize timer ticks
+  // Keep tournamentRef updated with latest state to prevent dependency loops in sync
+  const tournamentRef = useRef(tournament);
+  useEffect(() => {
+    tournamentRef.current = tournament;
+  }, [tournament]);
+
+  // Synchronize timer ticks for all running matches concurrently
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (matchState.isRunning && !matchState.isFinished) {
+    const hasRunningMatches = tournament?.bracket?.rounds?.some((round: any) =>
+      round.some((m: any) => m.matchState?.isRunning && !m.matchState.isFinished && !m.isFinished)
+    );
+
+    if (hasRunningMatches) {
       interval = setInterval(() => {
-        setMatchState(prev => ({
-          ...prev,
-          time: prev.time + 1,
-        }));
+        setTournament((prev: any) => {
+          if (!prev || !prev.bracket || !prev.bracket.rounds) return prev;
+          
+          const updatedBracket = { ...prev.bracket };
+          updatedBracket.rounds = updatedBracket.rounds.map((round: any[]) =>
+            round.map((m: any) => {
+              if (m.matchState?.isRunning && !m.matchState.isFinished && !m.isFinished) {
+                const nextTime = (m.matchState.time || 0) + 1;
+                return {
+                  ...m,
+                  matchState: {
+                    ...m.matchState,
+                    time: nextTime,
+                  },
+                };
+              }
+              return m;
+            })
+          );
+
+          // Update local matchState if it matches the currently selected match
+          const currentRoundIdx = updatedBracket.currentRound ?? 0;
+          const currentMatchIdx = updatedBracket.currentMatch ?? 0;
+          const activeMatch = updatedBracket.rounds[currentRoundIdx]?.[currentMatchIdx];
+          if (activeMatch && activeMatch.matchState) {
+            setMatchState(activeMatch.matchState);
+          }
+
+          return {
+            ...prev,
+            bracket: updatedBracket,
+          };
+        });
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [matchState.isRunning, matchState.isFinished]);
+  }, [tournament?.bracket?.rounds, isLoaded]);
 
   // Sync to local storage
   useEffect(() => {
     if (isLoaded && tournament) {
+      const updatedBracket = tournament.bracket 
+        ? JSON.parse(JSON.stringify(tournament.bracket)) 
+        : null;
+        
+      if (updatedBracket) {
+        const r = updatedBracket.currentRound ?? 0;
+        const m = updatedBracket.currentMatch ?? 0;
+        if (updatedBracket.rounds?.[r]?.[m]) {
+          updatedBracket.rounds[r][m].matchState = matchState;
+          if (!updatedBracket.rounds[r][m].isFinished) {
+            updatedBracket.rounds[r][m].scoreA = matchState.team1Score;
+            updatedBracket.rounds[r][m].scoreB = matchState.team2Score;
+            updatedBracket.rounds[r][m].team1SetPoints = matchState.team1SetPoints;
+            updatedBracket.rounds[r][m].team2SetPoints = matchState.team2SetPoints;
+          }
+        }
+      }
+
       const updatedTournament = {
         ...tournament,
+        bracket: updatedBracket,
         matchState: matchState
       };
       
@@ -447,16 +547,33 @@ export default function TournamentDetailPage() {
 
   // Sync to backend on score/running/hiep/buGio changes and periodic time
   useEffect(() => {
-    if (!isLoaded || !tournament) return;
+    if (!isLoaded || !tournamentRef.current) return;
+
+    const updatedBracket = tournamentRef.current.bracket 
+      ? JSON.parse(JSON.stringify(tournamentRef.current.bracket)) 
+      : null;
+      
+    if (updatedBracket) {
+      const r = updatedBracket.currentRound ?? 0;
+      const m = updatedBracket.currentMatch ?? 0;
+      if (updatedBracket.rounds?.[r]?.[m]) {
+        updatedBracket.rounds[r][m].matchState = matchState;
+        if (!updatedBracket.rounds[r][m].isFinished) {
+          updatedBracket.rounds[r][m].scoreA = matchState.team1Score;
+          updatedBracket.rounds[r][m].scoreB = matchState.team2Score;
+          updatedBracket.rounds[r][m].team1SetPoints = matchState.team1SetPoints;
+          updatedBracket.rounds[r][m].team2SetPoints = matchState.team2SetPoints;
+        }
+      }
+    }
 
     const updatedTournament = {
-      ...tournament,
+      ...tournamentRef.current,
+      bracket: updatedBracket,
       matchState: matchState
     };
 
-    syncTournamentToBackend(updatedTournament).catch(err => {
-      console.error('Error syncing tournament to backend:', err);
-    });
+    triggerSync(updatedTournament);
   }, [
     matchState.team1Score,
     matchState.team2Score,
@@ -464,8 +581,9 @@ export default function TournamentDetailPage() {
     matchState.hiep,
     matchState.isFinished,
     matchState.buGio,
+    matchState.team1SetPoints,
+    matchState.team2SetPoints,
     Math.floor(matchState.time / 15),
-    tournament,
     isLoaded
   ]);
 
@@ -645,22 +763,46 @@ export default function TournamentDetailPage() {
       matchState: nextMatchState,
     };
 
-    // Store match info for feedback modal
-    const numRounds = Math.ceil(Math.log2((tournament.orderedTeams || tournament.teams || []).length));
-    setFinishedMatchInfo({
-      teamA: match.teamA?.name || 'Đội 1',
-      teamB: match.teamB?.name || 'Đội 2',
-      scoreA: matchState.team1Score,
-      scoreB: matchState.team2Score,
-      roundLabel: getRoundLabel(roundIndex, numRounds),
-    });
+    if (bracket.isFinished) {
+      const numRounds = Math.ceil(Math.log2((tournament.orderedTeams || tournament.teams || []).length));
+      setFinishedMatchInfo({
+        teamA: match.teamA?.name || 'Đội 1',
+        teamB: match.teamB?.name || 'Đội 2',
+        scoreA: matchState.team1Score,
+        scoreB: matchState.team2Score,
+        roundLabel: getRoundLabel(roundIndex, numRounds),
+      });
 
-    // Save pending data and show feedback modal
-    setPendingFinishData({ bracket, nextMatchState, updatedTournament });
-    setFeedbackRating(0);
-    setFeedbackHover(0);
-    setFeedbackContent('');
-    setShowFeedbackModal(true);
+      setPendingFinishData({ bracket, nextMatchState, updatedTournament });
+      setFeedbackRating(0);
+      setFeedbackHover(0);
+      setFeedbackContent('');
+      setShowFeedbackModal(true);
+    } else {
+      setTournament(updatedTournament);
+      setMatchState(nextMatchState);
+      localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
+
+      const savedList = localStorage.getItem(tournamentsKey);
+      if (savedList) {
+        try {
+          const list = JSON.parse(savedList);
+          const index = list.findIndex((t: any) => t.id === tournament.id);
+          if (index > -1) {
+            list[index] = updatedTournament;
+            localStorage.setItem(tournamentsKey, JSON.stringify(list));
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      try {
+        await syncTournamentToBackend(updatedTournament);
+      } catch (err) {
+        console.error('Error syncing final state to backend:', err);
+      }
+    }
   };
 
   const commitFinishMatch = async (feedback?: { rating: number; content: string }) => {
@@ -668,32 +810,13 @@ export default function TournamentDetailPage() {
 
     const { bracket, nextMatchState, updatedTournament } = pendingFinishData;
 
-    // Attach feedback to the finished match in the bracket
     if (feedback && feedback.rating > 0) {
-      const roundIndex = tournament.bracket?.currentRound ?? 0;
-      const matchIndex = tournament.bracket?.currentMatch ?? 0;
-      const match = bracket.rounds?.[roundIndex]?.[matchIndex];
-      if (match) {
-        (match as any).feedback = {
-          rating: feedback.rating,
-          content: feedback.content,
-          createdAt: new Date().toISOString(),
-        };
-      }
-      // Also store in feedbacks array at tournament level
       const feedbackEntry = {
-        round: roundIndex,
-        match: matchIndex,
-        teamA: finishedMatchInfo?.teamA || '',
-        teamB: finishedMatchInfo?.teamB || '',
-        scoreA: finishedMatchInfo?.scoreA ?? 0,
-        scoreB: finishedMatchInfo?.scoreB ?? 0,
         rating: feedback.rating,
         content: feedback.content,
         createdAt: new Date().toISOString(),
       };
       updatedTournament.feedbacks = [...(tournament.feedbacks || []), feedbackEntry];
-      updatedTournament.bracket = bracket;
     }
 
     setTournament(updatedTournament);
@@ -757,11 +880,6 @@ export default function TournamentDetailPage() {
       return;
     }
 
-    const updatedBracket = {
-      ...tournament.bracket,
-      currentMatch: matchIdx,
-    };
-
     const initialMatchState: MatchState = {
       team1Score: 0,
       team2Score: 0,
@@ -771,6 +889,14 @@ export default function TournamentDetailPage() {
       isFinished: false,
       buGio: 0,
     };
+
+    const updatedBracket = JSON.parse(JSON.stringify(tournament.bracket));
+    updatedBracket.currentMatch = matchIdx;
+    if (updatedBracket.rounds?.[updatedBracket.currentRound]?.[matchIdx]) {
+      updatedBracket.rounds[updatedBracket.currentRound][matchIdx].matchState = initialMatchState;
+      updatedBracket.rounds[updatedBracket.currentRound][matchIdx].scoreA = 0;
+      updatedBracket.rounds[updatedBracket.currentRound][matchIdx].scoreB = 0;
+    }
 
     const updatedTournament = {
       ...tournament,
@@ -825,18 +951,21 @@ export default function TournamentDetailPage() {
       currentMatch: matchIdx,
     };
 
-    let newMatchState: MatchState = {
-      team1Score: dbMatch.scoreA !== null ? dbMatch.scoreA : 0,
-      team2Score: dbMatch.scoreB !== null ? dbMatch.scoreB : 0,
-      time: dbMatch.time || 0,
-      isRunning: false,
-      hiep: dbMatch.hiep || 1,
-      isFinished: !!dbMatch.isFinished,
-      buGio: dbMatch.buGio || 0,
-    };
-
-    if (tournament.bracket.currentRound === roundIdx && tournament.bracket.currentMatch === matchIdx && tournament.matchState) {
-      newMatchState = tournament.matchState;
+    let newMatchState: MatchState;
+    if (dbMatch.matchState) {
+      newMatchState = dbMatch.matchState;
+    } else {
+      newMatchState = {
+        team1Score: dbMatch.scoreA !== null ? dbMatch.scoreA : 0,
+        team2Score: dbMatch.scoreB !== null ? dbMatch.scoreB : 0,
+        time: dbMatch.time || 0,
+        isRunning: false,
+        hiep: dbMatch.hiep || 1,
+        isFinished: !!dbMatch.isFinished,
+        buGio: dbMatch.buGio || 0,
+        team1SetPoints: dbMatch.team1SetPoints,
+        team2SetPoints: dbMatch.team2SetPoints,
+      };
     }
 
     const updatedTournament = {

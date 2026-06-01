@@ -62,6 +62,18 @@ interface AdminStats {
     note?: string;
     userId?: { fullName: string; email: string };
   }>;
+  feedbacksList: Array<{
+    _id: string;
+    id: string;
+    name: string;
+    sport: string;
+    feedbacks: Array<{
+      rating: number;
+      content: string;
+      createdAt: string;
+    }>;
+    updatedAt: string;
+  }>;
 }
 
 
@@ -73,12 +85,13 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
-  // Tab control: 'overview' | 'users' | 'transactions'
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'transactions'>('overview');
+  // Tab control: 'overview' | 'users' | 'transactions' | 'feedbacks'
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'transactions' | 'feedbacks'>('overview');
   
   // Search filters
   const [userSearch, setUserSearch] = useState('');
   const [transactionSearch, setTransactionSearch] = useState('');
+  const [feedbackSearch, setFeedbackSearch] = useState('');
 
   useEffect(() => {
     const session = getSession();
@@ -151,6 +164,16 @@ export default function AdminDashboardPage() {
       tx.planName.toLowerCase().includes(query) ||
       tx.status.toLowerCase().includes(query) ||
       (tx.note && tx.note.toLowerCase().includes(query))
+    );
+  }) || [];
+
+  // Filter feedbacks based on search query
+  const filteredFeedbacks = stats?.feedbacksList.filter(f => {
+    const query = feedbackSearch.toLowerCase().trim();
+    return (
+      f.name.toLowerCase().includes(query) ||
+      f.sport.toLowerCase().includes(query) ||
+      f.feedbacks.some(fb => (fb.content || '').toLowerCase().includes(query))
     );
   }) || [];
 
@@ -260,6 +283,16 @@ export default function AdminDashboardPage() {
               }`}
             >
               Giao dịch ({stats.transactionsList.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('feedbacks')}
+              className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
+                activeTab === 'feedbacks'
+                  ? 'bg-[#22c55e] text-[#080b10]'
+                  : 'text-white/60 hover:text-white'
+              }`}
+            >
+              Đánh giá ({stats.feedbacksList?.length || 0})
             </button>
           </div>
         </div>
@@ -571,6 +604,85 @@ export default function AdminDashboardPage() {
                         </td>
                       </tr>
                     ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: DETAILED FEEDBACKS LIST */}
+        {activeTab === 'feedbacks' && (
+          <div className="space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <h2 className="text-xl font-bold tracking-tight">Đánh giá & Phản hồi giải đấu</h2>
+              
+              {/* Search feedback */}
+              <div className="w-full md:max-w-xs">
+                <input
+                  type="text"
+                  placeholder="Tìm giải đấu, môn thể thao, nội dung..."
+                  value={feedbackSearch}
+                  onChange={(e) => setFeedbackSearch(e.target.value)}
+                  className="w-full px-4 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white placeholder-white/40 text-sm focus:outline-none focus:border-[#22c55e] transition-colors"
+                />
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-white/[0.02] backdrop-blur-md">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-white/[0.08] text-white/40 font-semibold text-xs uppercase tracking-wider">
+                    <th className="px-6 py-4 w-12 text-center">STT</th>
+                    <th className="px-6 py-4">Giải đấu</th>
+                    <th className="px-6 py-4">Môn thể thao</th>
+                    <th className="px-6 py-4">Đánh giá (Sao)</th>
+                    <th className="px-6 py-4">Ý kiến đóng góp</th>
+                    <th className="px-6 py-4">Thời gian gửi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {filteredFeedbacks.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-white/40">
+                        {feedbackSearch ? 'Không tìm thấy đánh giá nào phù hợp.' : 'Chưa có đánh giá nào được gửi.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    (() => {
+                      let globalIdx = 0;
+                      return filteredFeedbacks.flatMap((f) => 
+                        (f.feedbacks || []).map((fb, idx) => {
+                          globalIdx++;
+                          return (
+                            <tr key={`${f._id}-${idx}`} className="hover:bg-white/[0.02] transition-colors">
+                              <td className="px-6 py-4 text-center text-white/40">{globalIdx}</td>
+                              <td className="px-6 py-4 font-bold">{f.name}</td>
+                              <td className="px-6 py-4 text-white/80">{f.sport}</td>
+                              <td className="px-6 py-4 font-semibold text-yellow-400">
+                                <span className="flex items-center gap-1">
+                                  {Array.from({ length: 5 }).map((_, i) => (
+                                    <svg
+                                      key={i}
+                                      className={`w-4 h-4 ${i < fb.rating ? 'fill-yellow-400 text-yellow-400' : 'text-white/20'}`}
+                                      viewBox="0 0 20 20"
+                                      fill="currentColor"
+                                    >
+                                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                    </svg>
+                                  ))}
+                                  <span className="ml-1 text-xs text-white/60">({fb.rating}/5)</span>
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-white/80 whitespace-pre-wrap max-w-md">
+                                {fb.content || <span className="text-white/30 italic">Không có nhận xét</span>}
+                              </td>
+                              <td className="px-6 py-4 text-xs text-white/50">{formatDate(fb.createdAt)}</td>
+                            </tr>
+                          );
+                        })
+                      );
+                    })()
                   )}
                 </tbody>
               </table>
