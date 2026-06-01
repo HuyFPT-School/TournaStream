@@ -1142,7 +1142,7 @@ export default function TournamentDetailPage() {
               </div>
 
               {/* Dynamic Score Controls based on Sport */}
-              <div className="flex items-center justify-center gap-8 mb-6">
+              <div className={`flex items-center justify-center gap-8 mb-6 ${matchState.isFinished ? 'pointer-events-none opacity-50' : ''}`}>
                 {/* Team 1 scoring area */}
                 {tournament?.sport === 'basketball' ? (
                   <div className="flex flex-col gap-1 items-center">
@@ -1388,32 +1388,31 @@ export default function TournamentDetailPage() {
               </div>
 
               <div className="flex justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleStartStop(); }}
-                  className={`px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all ${
-                    matchState.isRunning
-                      ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20'
-                      : 'bg-[#22c55e]/10 border border-[#22c55e]/20 text-[#22c55e] hover:bg-[#22c55e]/20'
-                  }`}
-                >
-                  {matchState.isRunning ? '⏸ Tạm dừng' : '▶ Bắt đầu'}
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSaveScore(); }}
-                  className="px-4 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white font-bold text-xs transition-all"
-                >
-                  Lưu tỉ số
-                </button>
-                {!matchState.isFinished && (
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleEndHalf(); }}
-                    className="px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 font-bold text-xs transition-all"
-                  >
-                    {matchState.hiep === 1 ? '→ Kết thúc H1' : '🏁 Kết thúc trận'}
-                  </button>
+                {matchState.isFinished ? (
+                  <div className="w-full max-w-md text-center py-3 px-4 rounded-xl bg-white/[0.02] border border-white/[0.08] text-white/40 text-xs font-bold select-none">
+                    🏁 Trận đấu đã kết thúc. Kết quả đã lưu vĩnh viễn.
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleStartStop(); }}
+                      className={`px-5 py-2.5 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all duration-200 active:scale-95 ${
+                        matchState.isRunning
+                          ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.15)]'
+                          : 'bg-[#22c55e]/10 border border-[#22c55e]/20 text-[#22c55e] hover:bg-[#22c55e]/20 shadow-[0_0_15px_rgba(34,197,94,0.15)]'
+                      }`}
+                    >
+                      {matchState.isRunning ? '⏸ Tạm dừng' : '▶ Bắt đầu'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleEndHalf(); }}
+                      className="px-5 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 font-black text-xs transition-all duration-200 active:scale-95 flex items-center gap-1 shadow-[0_0_15px_rgba(239,68,68,0.15)]"
+                    >
+                      {matchState.hiep === 1 ? '→ Kết thúc H1' : '🏁 Kết thúc trận'}
+                    </button>
+                  </>
                 )}
               </div>
             </div>
