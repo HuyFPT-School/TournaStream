@@ -447,83 +447,25 @@ export default function TournamentDetailPage() {
     };
   }, [tournamentId, isOwner]);
 
-  // Keep tournamentRef updated with latest state to prevent dependency loops in sync
-  const tournamentRef = useRef(tournament);
-  useEffect(() => {
-    tournamentRef.current = tournament;
-  }, [tournament]);
-
-  // Synchronize timer ticks for all running matches concurrently
+  // Synchronize timer ticks
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    const hasRunningMatches = tournament?.bracket?.rounds?.some((round: any) =>
-      round.some((m: any) => m.matchState?.isRunning && !m.matchState.isFinished && !m.isFinished)
-    );
-
-    if (hasRunningMatches) {
+    if (matchState.isRunning && !matchState.isFinished) {
       interval = setInterval(() => {
-        setTournament((prev: any) => {
-          if (!prev || !prev.bracket || !prev.bracket.rounds) return prev;
-          
-          const updatedBracket = { ...prev.bracket };
-          updatedBracket.rounds = updatedBracket.rounds.map((round: any[]) =>
-            round.map((m: any) => {
-              if (m.matchState?.isRunning && !m.matchState.isFinished && !m.isFinished) {
-                const nextTime = (m.matchState.time || 0) + 1;
-                return {
-                  ...m,
-                  matchState: {
-                    ...m.matchState,
-                    time: nextTime,
-                  },
-                };
-              }
-              return m;
-            })
-          );
-
-          // Update local matchState if it matches the currently selected match
-          const currentRoundIdx = updatedBracket.currentRound ?? 0;
-          const currentMatchIdx = updatedBracket.currentMatch ?? 0;
-          const activeMatch = updatedBracket.rounds[currentRoundIdx]?.[currentMatchIdx];
-          if (activeMatch && activeMatch.matchState) {
-            setMatchState(activeMatch.matchState);
-          }
-
-          return {
-            ...prev,
-            bracket: updatedBracket,
-          };
-        });
+        setMatchState(prev => ({
+          ...prev,
+          time: prev.time + 1,
+        }));
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [tournament?.bracket?.rounds, isLoaded]);
+  }, [matchState.isRunning, matchState.isFinished]);
 
   // Sync to local storage
   useEffect(() => {
     if (isLoaded && tournament) {
-      const updatedBracket = tournament.bracket 
-        ? JSON.parse(JSON.stringify(tournament.bracket)) 
-        : null;
-        
-      if (updatedBracket) {
-        const r = updatedBracket.currentRound ?? 0;
-        const m = updatedBracket.currentMatch ?? 0;
-        if (updatedBracket.rounds?.[r]?.[m]) {
-          updatedBracket.rounds[r][m].matchState = matchState;
-          if (!updatedBracket.rounds[r][m].isFinished) {
-            updatedBracket.rounds[r][m].scoreA = matchState.team1Score;
-            updatedBracket.rounds[r][m].scoreB = matchState.team2Score;
-            updatedBracket.rounds[r][m].team1SetPoints = matchState.team1SetPoints;
-            updatedBracket.rounds[r][m].team2SetPoints = matchState.team2SetPoints;
-          }
-        }
-      }
-
       const updatedTournament = {
         ...tournament,
-        bracket: updatedBracket,
         matchState: matchState
       };
       
@@ -547,29 +489,10 @@ export default function TournamentDetailPage() {
 
   // Sync to backend on score/running/hiep/buGio changes and periodic time
   useEffect(() => {
-    if (!isLoaded || !tournamentRef.current) return;
-
-    const updatedBracket = tournamentRef.current.bracket 
-      ? JSON.parse(JSON.stringify(tournamentRef.current.bracket)) 
-      : null;
-      
-    if (updatedBracket) {
-      const r = updatedBracket.currentRound ?? 0;
-      const m = updatedBracket.currentMatch ?? 0;
-      if (updatedBracket.rounds?.[r]?.[m]) {
-        updatedBracket.rounds[r][m].matchState = matchState;
-        if (!updatedBracket.rounds[r][m].isFinished) {
-          updatedBracket.rounds[r][m].scoreA = matchState.team1Score;
-          updatedBracket.rounds[r][m].scoreB = matchState.team2Score;
-          updatedBracket.rounds[r][m].team1SetPoints = matchState.team1SetPoints;
-          updatedBracket.rounds[r][m].team2SetPoints = matchState.team2SetPoints;
-        }
-      }
-    }
+    if (!isLoaded || !tournament) return;
 
     const updatedTournament = {
-      ...tournamentRef.current,
-      bracket: updatedBracket,
+      ...tournament,
       matchState: matchState
     };
 
@@ -584,6 +507,7 @@ export default function TournamentDetailPage() {
     matchState.team1SetPoints,
     matchState.team2SetPoints,
     Math.floor(matchState.time / 15),
+    tournament,
     isLoaded
   ]);
 
@@ -880,6 +804,11 @@ export default function TournamentDetailPage() {
       return;
     }
 
+    const updatedBracket = {
+      ...tournament.bracket,
+      currentMatch: matchIdx,
+    };
+
     const initialMatchState: MatchState = {
       team1Score: 0,
       team2Score: 0,
@@ -889,14 +818,6 @@ export default function TournamentDetailPage() {
       isFinished: false,
       buGio: 0,
     };
-
-    const updatedBracket = JSON.parse(JSON.stringify(tournament.bracket));
-    updatedBracket.currentMatch = matchIdx;
-    if (updatedBracket.rounds?.[updatedBracket.currentRound]?.[matchIdx]) {
-      updatedBracket.rounds[updatedBracket.currentRound][matchIdx].matchState = initialMatchState;
-      updatedBracket.rounds[updatedBracket.currentRound][matchIdx].scoreA = 0;
-      updatedBracket.rounds[updatedBracket.currentRound][matchIdx].scoreB = 0;
-    }
 
     const updatedTournament = {
       ...tournament,
@@ -951,21 +872,18 @@ export default function TournamentDetailPage() {
       currentMatch: matchIdx,
     };
 
-    let newMatchState: MatchState;
-    if (dbMatch.matchState) {
-      newMatchState = dbMatch.matchState;
-    } else {
-      newMatchState = {
-        team1Score: dbMatch.scoreA !== null ? dbMatch.scoreA : 0,
-        team2Score: dbMatch.scoreB !== null ? dbMatch.scoreB : 0,
-        time: dbMatch.time || 0,
-        isRunning: false,
-        hiep: dbMatch.hiep || 1,
-        isFinished: !!dbMatch.isFinished,
-        buGio: dbMatch.buGio || 0,
-        team1SetPoints: dbMatch.team1SetPoints,
-        team2SetPoints: dbMatch.team2SetPoints,
-      };
+    let newMatchState: MatchState = {
+      team1Score: dbMatch.scoreA !== null ? dbMatch.scoreA : 0,
+      team2Score: dbMatch.scoreB !== null ? dbMatch.scoreB : 0,
+      time: dbMatch.time || 0,
+      isRunning: false,
+      hiep: dbMatch.hiep || 1,
+      isFinished: !!dbMatch.isFinished,
+      buGio: dbMatch.buGio || 0,
+    };
+
+    if (tournament.bracket.currentRound === roundIdx && tournament.bracket.currentMatch === matchIdx && tournament.matchState) {
+      newMatchState = tournament.matchState;
     }
 
     const updatedTournament = {
