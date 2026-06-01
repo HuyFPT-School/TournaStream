@@ -112,12 +112,13 @@ interface BracketMatchCardProps {
   sb: number | null;
   done: boolean;
   isLive: boolean;
+  winner?: string | null;
   onClick: () => void;
 }
 
-function BracketMatchCard({ a, b, sa, sb, done, isLive, onClick }: BracketMatchCardProps) {
-  const winA = sa !== null && sb !== null && sa > sb;
-  const winB = sa !== null && sb !== null && sb > sa;
+function BracketMatchCard({ a, b, sa, sb, done, isLive, winner, onClick }: BracketMatchCardProps) {
+  const winA = done && winner ? a === winner : (sa !== null && sb !== null && sa > sb);
+  const winB = done && winner ? b === winner : (sa !== null && sb !== null && sb > sa);
   
   return (
     <div 
@@ -172,9 +173,9 @@ function BracketMatchCard({ a, b, sa, sb, done, isLive, onClick }: BracketMatchC
         </div>
       )}
       {!isLive && !done && (sa !== null || sb !== null) && (
-        <div className="flex items-center gap-1.5 px-3.5 py-1.5 bg-yellow-500/10 border-t border-yellow-500/20">
-          <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
-          <span className="text-yellow-500 text-[10px] font-black tracking-wider uppercase">TẠM DỪNG</span>
+        <div className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-500/10 border-t border-blue-500/20">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+          <span className="text-blue-500 text-[10px] font-black tracking-wider uppercase">SẴN SÀNG</span>
         </div>
       )}
     </div>
@@ -256,13 +257,29 @@ function buildBracketData(tournament: any, matchState: any) {
         scoreB = dbMatch.scoreB !== undefined ? dbMatch.scoreB : null;
       }
 
+      let winnerName: string | null = null;
+      if (dbMatch?.winner?.name) {
+        winnerName = dbMatch.winner.name;
+      } else if (dbMatch?.winner?.id) {
+        const found = tournament.teams?.find((t: any) => t.id === dbMatch.winner.id);
+        if (found) winnerName = found.name;
+      }
+
+      const doneFlag = isFinished || (!isLive && dbMatch?.isFinished);
+      if (!winnerName && doneFlag && scoreA !== null && scoreB !== null) {
+        if (scoreA > scoreB) winnerName = teamAObj?.name || null;
+        else if (scoreB > scoreA) winnerName = teamBObj?.name || null;
+        else winnerName = teamAObj?.name || null;
+      }
+
       roundMatches.push({
         a: teamAObj?.name || '?',
         b: teamBObj?.name || '?',
         sa: scoreA,
         sb: scoreB,
-        done: isFinished || (!isLive && dbMatch?.isFinished),
+        done: doneFlag,
         isLive: isLive,
+        winner: winnerName,
       });
     }
     roundsData.push(roundMatches);
@@ -527,7 +544,7 @@ export default function TournamentDetailPage() {
   };
 
   const handleStartStop = () => {
-    setMatchState(prev => ({ ...prev, isRunning: !prev.isRunning }));
+    setMatchState(prev => ({ ...prev, isRunning: true }));
   };
 
   const handleScoreChange = (team: 'team1' | 'team2', delta: number) => {
@@ -989,6 +1006,18 @@ export default function TournamentDetailPage() {
     ? checkSetWinCondition(matchState.team1SetPoints ?? 0, matchState.team2SetPoints ?? 0)
     : null;
 
+  const getTournamentWinnerName = () => {
+    if (!tournament || !tournament.bracket || !tournament.bracket.isFinished) return null;
+    const rounds = tournament.bracket.rounds;
+    if (!rounds || rounds.length === 0) return null;
+    const finalRound = rounds[rounds.length - 1];
+    if (!finalRound || finalRound.length === 0) return null;
+    const finalMatch = finalRound[0];
+    if (!finalMatch || !finalMatch.isFinished) return null;
+    return finalMatch.winner?.name || null;
+  };
+  const tournamentWinnerName = getTournamentWinnerName();
+
   return (
     <main className="min-h-screen bg-[#080b10] text-white font-sans">
       {/* Noise overlay */}
@@ -1069,6 +1098,24 @@ export default function TournamentDetailPage() {
       {/* Main Content */}
       <section className="relative z-10 max-w-5xl mx-auto px-6 py-16">
         
+        {tournamentWinnerName && (
+          <div className="mb-12 p-8 rounded-2xl bg-gradient-to-r from-yellow-500/10 via-amber-500/15 to-yellow-500/10 border border-yellow-500/30 text-center shadow-[0_0_30px_rgba(234,179,8,0.2)] relative overflow-hidden animate-pulse">
+            <div className="relative z-10 flex flex-col items-center gap-3">
+              <div className="text-4xl animate-bounce">👑🏆👑</div>
+              <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-amber-300 to-yellow-400 tracking-wider uppercase drop-shadow-[0_0_8px_rgba(250,204,21,0.25)]">
+                Nhà vô địch giải đấu
+              </h2>
+              <p className="text-4xl font-extrabold text-white mt-1 drop-shadow-md">
+                {tournamentWinnerName}
+              </p>
+              <div className="h-[2px] w-32 bg-gradient-to-r from-transparent via-yellow-500/50 to-transparent my-2" />
+              <p className="text-xs text-yellow-500/70 font-bold uppercase tracking-widest">
+                Chúc mừng nhà vô địch đã chiến thắng giải đấu!
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Bracket Diagram Container */}
         <div className="w-full">
           {buildBracketData(tournament, matchState).length === 0 ? (
@@ -1108,16 +1155,16 @@ export default function TournamentDetailPage() {
                     ? 'bg-white/30' 
                     : matchState.isRunning 
                     ? 'bg-[#22c55e] animate-pulse' 
-                    : 'bg-yellow-500 animate-pulse'
+                    : 'bg-blue-500 animate-pulse'
                 }`} />
                 <h3 className={`text-sm font-black tracking-widest uppercase ${
                   matchState.isFinished 
                     ? 'text-white/40' 
                     : matchState.isRunning 
                     ? 'text-[#22c55e]' 
-                    : 'text-yellow-500'
+                    : 'text-blue-400'
                 }`}>
-                  {matchState.isFinished ? 'Đã kết thúc' : matchState.isRunning ? 'Đang thi đấu' : 'Tạm dừng'}
+                  {matchState.isFinished ? 'Đã kết thúc' : matchState.isRunning ? 'Đang thi đấu' : 'Sẵn sàng'}
                 </h3>
               </div>
               <div className={`px-3 py-1.5 rounded-lg border text-[10px] font-black tracking-wider uppercase flex items-center gap-1.5 ${
@@ -1394,17 +1441,15 @@ export default function TournamentDetailPage() {
                   </div>
                 ) : (
                   <>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleStartStop(); }}
-                      className={`px-5 py-2.5 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all duration-200 active:scale-95 ${
-                        matchState.isRunning
-                          ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.15)]'
-                          : 'bg-[#22c55e]/10 border border-[#22c55e]/20 text-[#22c55e] hover:bg-[#22c55e]/20 shadow-[0_0_15px_rgba(34,197,94,0.15)]'
-                      }`}
-                    >
-                      {matchState.isRunning ? '⏸ Tạm dừng' : '▶ Bắt đầu'}
-                    </button>
+                    {!matchState.isRunning && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleStartStop(); }}
+                        className="px-5 py-2.5 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all duration-200 active:scale-95 bg-[#22c55e]/10 border border-[#22c55e]/20 text-[#22c55e] hover:bg-[#22c55e]/20 shadow-[0_0_15px_rgba(34,197,94,0.15)]"
+                      >
+                        ▶ Bắt đầu
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleEndHalf(); }}

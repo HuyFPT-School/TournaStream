@@ -363,7 +363,7 @@ export default function LiveMatchPage() {
   };
 
   const handleStartStop = () => {
-    setMatchState(prev => ({ ...prev, isRunning: !prev.isRunning }));
+    setMatchState(prev => ({ ...prev, isRunning: true }));
   };
 
   const handleScoreChange = (team: 'team1' | 'team2', delta: number) => {
@@ -752,18 +752,14 @@ export default function LiveMatchPage() {
               <div className="px-6 py-3 rounded-lg font-semibold bg-gray-500/20 border border-gray-500/30 text-gray-400 mb-4 cursor-not-allowed">
                 🏁 Trận đấu đã kết thúc
               </div>
-            ) : (
+            ) : !matchState.isRunning ? (
               <button
                 onClick={handleStartStop}
-                className={`px-6 py-3 rounded-lg font-semibold transition-all duration-200 mb-4 ${
-                  matchState.isRunning
-                    ? 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/50'
-                    : 'bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50'
-                }`}
+                className="px-6 py-3 rounded-lg font-semibold transition-all duration-200 mb-4 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50"
               >
-                {matchState.isRunning ? '⏸ Tạm dừng' : '▶ Bắt đầu'}
+                ▶ Bắt đầu
               </button>
-            )}
+            ) : null}
 
             {/* Status */}
             <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
@@ -771,12 +767,12 @@ export default function LiveMatchPage() {
                 ? 'bg-red-500/20 text-red-400 border border-red-500/50'
                 : matchState.isRunning
                 ? 'bg-green-500/20 text-green-400 border border-green-500/50'
-                : 'bg-white/[0.05] text-white/60 border border-white/[0.06]'
+                : 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
             }`}>
               <div className={`w-2 h-2 rounded-full ${
-                matchState.isFinished ? 'bg-red-400' : matchState.isRunning ? 'bg-green-400' : 'bg-white/40'
+                matchState.isFinished ? 'bg-red-400' : matchState.isRunning ? 'bg-green-400' : 'bg-blue-400'
               }`} />
-              {matchState.isFinished ? 'Đã kết thúc' : matchState.isRunning ? 'Đang thi đấu' : 'Tạm dừng'}
+              {matchState.isFinished ? 'Đã kết thúc' : matchState.isRunning ? 'Đang thi đấu' : 'Sẵn sàng'}
             </div>
           </div>
 

@@ -37,14 +37,15 @@ interface BracketMatchCardProps {
   sb: number | null;
   done: boolean;
   isLive: boolean;
+  winner?: string | null;
   roundIdx: number;
   matchIdx: number;
   onSelect: (round: number, match: number) => void;
 }
 
-function BracketMatchCard({ a, b, sa, sb, done, isLive, roundIdx, matchIdx, onSelect }: BracketMatchCardProps) {
-  const winA = sa !== null && sb !== null && sa > sb;
-  const winB = sa !== null && sb !== null && sb > sa;
+function BracketMatchCard({ a, b, sa, sb, done, isLive, winner, roundIdx, matchIdx, onSelect }: BracketMatchCardProps) {
+  const winA = done && winner ? a === winner : (sa !== null && sb !== null && sa > sb);
+  const winB = done && winner ? b === winner : (sa !== null && sb !== null && sb > sa);
   
   return (
     <div className={`w-[160px] rounded-xl border overflow-hidden text-[12px] shadow-lg transition-all duration-300 ${
@@ -182,13 +183,29 @@ function buildBracketData(tournament: any, onSelect: (round: number, match: numb
         scoreB = dbMatch.scoreB !== undefined ? dbMatch.scoreB : null;
       }
 
+      let winnerName: string | null = null;
+      if (dbMatch?.winner?.name) {
+        winnerName = dbMatch.winner.name;
+      } else if (dbMatch?.winner?.id) {
+        const found = tournament.teams?.find((t: any) => t.id === dbMatch.winner.id);
+        if (found) winnerName = found.name;
+      }
+
+      const doneFlag = isFinished || (!isLive && dbMatch?.isFinished);
+      if (!winnerName && doneFlag && scoreA !== null && scoreB !== null) {
+        if (scoreA > scoreB) winnerName = teamAObj?.name || null;
+        else if (scoreB > scoreA) winnerName = teamBObj?.name || null;
+        else winnerName = teamAObj?.name || null;
+      }
+
       roundMatches.push({
         a: teamAObj?.name || '?',
         b: teamBObj?.name || '?',
         sa: scoreA,
         sb: scoreB,
-        done: isFinished || (!isLive && dbMatch?.isFinished),
+        done: doneFlag,
         isLive: isLive,
+        winner: winnerName,
         roundIdx: r,
         matchIdx: m,
         onSelect,
@@ -455,6 +472,18 @@ export default function TournamentLiveViewPage() {
 
   const selectedDetails = getSelectedMatchDetails();
 
+  const getTournamentWinnerName = () => {
+    if (!tournament || !tournament.bracket || !tournament.bracket.isFinished) return null;
+    const rounds = tournament.bracket.rounds;
+    if (!rounds || rounds.length === 0) return null;
+    const finalRound = rounds[rounds.length - 1];
+    if (!finalRound || finalRound.length === 0) return null;
+    const finalMatch = finalRound[0];
+    if (!finalMatch || !finalMatch.isFinished) return null;
+    return finalMatch.winner?.name || null;
+  };
+  const tournamentWinnerName = getTournamentWinnerName();
+
   return (
     <main className="min-h-screen bg-[#080b10] text-white font-sans">
       {/* Noise overlay */}
@@ -510,6 +539,24 @@ export default function TournamentLiveViewPage() {
       {/* Main Content */}
       <section className="relative z-10 max-w-6xl mx-auto px-6 py-16">
         
+        {tournamentWinnerName && (
+          <div className="mb-12 p-8 rounded-2xl bg-gradient-to-r from-yellow-500/10 via-amber-500/15 to-yellow-500/10 border border-yellow-500/30 text-center shadow-[0_0_30px_rgba(234,179,8,0.2)] relative overflow-hidden animate-pulse">
+            <div className="relative z-10 flex flex-col items-center gap-3">
+              <div className="text-4xl animate-bounce">👑🏆👑</div>
+              <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-amber-300 to-yellow-400 tracking-wider uppercase drop-shadow-[0_0_8px_rgba(250,204,21,0.25)]">
+                Nhà vô địch giải đấu
+              </h2>
+              <p className="text-4xl font-extrabold text-white mt-1 drop-shadow-md">
+                {tournamentWinnerName}
+              </p>
+              <div className="h-[2px] w-32 bg-gradient-to-r from-transparent via-yellow-500/50 to-transparent my-2" />
+              <p className="text-xs text-yellow-500/70 font-bold uppercase tracking-widest">
+                Chúc mừng nhà vô địch đã chiến thắng giải đấu!
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Bracket Tree View */}
         <div className="w-full">
           {buildBracketData(tournament, handleSelectMatch).length === 0 ? (
