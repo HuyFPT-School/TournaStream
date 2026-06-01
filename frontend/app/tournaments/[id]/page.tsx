@@ -1103,12 +1103,30 @@ export default function TournamentDetailPage() {
           <div id="match-controller" className="mt-12 bg-[#0f1419] border border-white/[0.06] rounded-2xl p-8 max-w-2xl mx-auto shadow-2xl relative">
             <div className="flex items-center justify-between mb-8 pb-4 border-b border-white/[0.04]">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-                <h3 className="text-sm font-black tracking-widest text-[#22c55e] uppercase">Đang thi đấu</h3>
+                <span className={`w-2.5 h-2.5 rounded-full ${
+                  matchState.isFinished 
+                    ? 'bg-white/30' 
+                    : matchState.isRunning 
+                    ? 'bg-[#22c55e] animate-pulse' 
+                    : 'bg-yellow-500 animate-pulse'
+                }`} />
+                <h3 className={`text-sm font-black tracking-widest uppercase ${
+                  matchState.isFinished 
+                    ? 'text-white/40' 
+                    : matchState.isRunning 
+                    ? 'text-[#22c55e]' 
+                    : 'text-yellow-500'
+                }`}>
+                  {matchState.isFinished ? 'Đã kết thúc' : matchState.isRunning ? 'Đang thi đấu' : 'Tạm dừng'}
+                </h3>
               </div>
-              <div className="px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] font-black tracking-wider uppercase flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                Hiệp {matchState.hiep} • {formatTime(matchState.time)}
+              <div className={`px-3 py-1.5 rounded-lg border text-[10px] font-black tracking-wider uppercase flex items-center gap-1.5 ${
+                matchState.isFinished
+                  ? 'bg-white/[0.02] border-white/10 text-white/40'
+                  : 'bg-red-500/10 border border-red-500/20 text-red-500'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${matchState.isFinished ? 'bg-white/20' : 'bg-red-500 animate-pulse'}`} />
+                {tournament?.sport === 'tennis' || tournament?.sport === 'volleyball' ? 'Set' : 'Hiệp'} {matchState.hiep} • {formatTime(matchState.time)}
               </div>
             </div>
 

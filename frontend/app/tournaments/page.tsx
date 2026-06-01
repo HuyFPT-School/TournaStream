@@ -251,9 +251,25 @@ export default function MyTournamentsPage() {
                 <p className="text-sm text-white/50 mb-4">
                   Gói: {tournament.packageName || "Cơ bản"} • {tournament.teams?.length || 0} đội
                 </p>
-                <div className="flex items-center gap-2 text-xs text-[#22c55e] font-semibold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e]" />
-                  {tournament.matchState ? "Đang thi đấu" : "Sẵn sàng"}
+                <div className={`flex items-center gap-2 text-xs font-semibold ${
+                  tournament.bracket?.isFinished 
+                    ? "text-white/40" 
+                    : tournament.matchState 
+                    ? "text-[#22c55e]" 
+                    : "text-blue-400"
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    tournament.bracket?.isFinished 
+                      ? "bg-white/30" 
+                      : tournament.matchState 
+                      ? "bg-[#22c55e]" 
+                      : "bg-blue-400"
+                  }`} />
+                  {tournament.bracket?.isFinished 
+                    ? "Đã kết thúc" 
+                    : tournament.matchState 
+                    ? "Đang thi đấu" 
+                    : "Sẵn sàng"}
                 </div>
               </Link>
             ))}
