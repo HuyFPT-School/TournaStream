@@ -504,7 +504,32 @@ export default function LiveMatchPage() {
   };
 
   const handleStartStop = () => {
+    if (!tournament || !matchKey) return;
+
+    const [roundIdxStr, matchIdxStr] = matchKey.split('-');
+    const matchIdx = parseInt(matchIdxStr, 10);
+
+    const activeMatches = [...(tournament.bracket?.activeMatches || [])];
+    let bracketUpdated = false;
+    let updatedBracket = tournament.bracket;
+    if (tournament.bracket && !activeMatches.includes(matchIdx)) {
+      activeMatches.push(matchIdx);
+      updatedBracket = {
+        ...tournament.bracket,
+        activeMatches
+      };
+      bracketUpdated = true;
+    }
+
     setMatchState(prev => ({ ...prev, isRunning: true }));
+
+    if (bracketUpdated) {
+      const updatedTournament = {
+        ...tournament,
+        bracket: updatedBracket
+      };
+      setTournament(updatedTournament);
+    }
   };
 
   const handleScoreChange = (team: 'team1' | 'team2', delta: number) => {
