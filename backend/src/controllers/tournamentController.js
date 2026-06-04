@@ -8,13 +8,62 @@ async function upsertTournament(req, res) {
       return res.status(400).json({ message: "Invalid tournament data" });
     }
 
-    const { id } = data;
+    const { id, lastUpdatedMatchKey } = data;
     const userId = req.user ? req.user.id : null; // Safe check for auth
-    
+
+    // Clean up lastUpdatedMatchKey metadata before saving
+    delete data.lastUpdatedMatchKey;
+
+    const existing = await Tournament.findOne({ id });
+    let finalData = { ...data };
+
+    if (existing) {
+      // 1. Merge matchStates map
+      let newMatchStates = { ...(existing.matchStates || {}) };
+      if (lastUpdatedMatchKey) {
+        if (data.matchStates && data.matchStates[lastUpdatedMatchKey]) {
+          newMatchStates[lastUpdatedMatchKey] = data.matchStates[lastUpdatedMatchKey];
+        }
+      } else {
+        newMatchStates = {
+          ...newMatchStates,
+          ...(data.matchStates || {}),
+        };
+      }
+      finalData.matchStates = newMatchStates;
+
+      // 2. Recalculate and merge activeMatches based on merged states for current round
+      const activeMatchIdxs = new Set();
+      const currentRound = data.bracket?.currentRound ?? existing.bracket?.currentRound ?? 0;
+      
+      if (finalData.matchStates) {
+        Object.keys(finalData.matchStates).forEach(key => {
+          const [rStr, mStr] = key.split('-');
+          const r = parseInt(rStr, 10);
+          const m = parseInt(mStr, 10);
+          if (r === currentRound) {
+            const ms = finalData.matchStates[key];
+            if (ms && !ms.isFinished) {
+              activeMatchIdxs.add(m);
+            }
+          }
+        });
+      }
+      
+      if (finalData.bracket) {
+        finalData.bracket.activeMatches = Array.from(activeMatchIdxs);
+      }
+      
+      // Update anyMatchRunning boolean
+      finalData.anyMatchRunning = Object.values(finalData.matchStates).some(
+        (ms) => ms.isRunning && !ms.isFinished
+      );
+    }
+
     // Find and update, or insert if doesn't exist
     const tournament = await Tournament.findOneAndUpdate(
       { id },
-      { $set: { ...data, ...(userId ? { userId } : {}), updatedAt: new Date() } },
+      { $set: { ...finalData, ...(userId ? { userId } : {}), updatedAt: new Date() } },
       { new: true, upsert: true, setDefaultsOnInsert: true }
     );
 
