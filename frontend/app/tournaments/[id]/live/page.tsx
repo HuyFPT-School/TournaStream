@@ -365,30 +365,37 @@ export default function TournamentLiveViewPage() {
     let interval: NodeJS.Timeout;
     
     if (anyMatchRunning) {
+      let lastTick = Date.now();
       interval = setInterval(() => {
-        setTournament((prev: any) => {
-          if (!prev || !prev.matchStates) return prev;
+        const now = Date.now();
+        const delta = Math.floor((now - lastTick) / 1000);
+        if (delta >= 1) {
+          lastTick = lastTick + delta * 1000;
           
-          const nextStates = { ...prev.matchStates };
-          let changed = false;
-          
-          Object.keys(nextStates).forEach(key => {
-            const ms = nextStates[key];
-            if (ms.isRunning && !ms.isFinished) {
-              nextStates[key] = {
-                ...ms,
-                time: ms.time + 1
-              };
-              changed = true;
-            }
+          setTournament((prev: any) => {
+            if (!prev || !prev.matchStates) return prev;
+            
+            const nextStates = { ...prev.matchStates };
+            let changed = false;
+            
+            Object.keys(nextStates).forEach(key => {
+              const ms = nextStates[key];
+              if (ms.isRunning && !ms.isFinished) {
+                nextStates[key] = {
+                  ...ms,
+                  time: ms.time + delta
+                };
+                changed = true;
+              }
+            });
+            
+            if (!changed) return prev;
+            return {
+              ...prev,
+              matchStates: nextStates
+            };
           });
-          
-          if (!changed) return prev;
-          return {
-            ...prev,
-            matchStates: nextStates
-          };
-        });
+        }
       }, 1000);
     }
     
