@@ -536,48 +536,41 @@ export default function TournamentDetailPage() {
     const hasRunning = (matchState.isRunning && !matchState.isFinished);
     
     if (hasRunning || isOwner) {
-      let lastTick = Date.now();
       interval = setInterval(() => {
-        const now = Date.now();
-        const delta = Math.floor((now - lastTick) / 1000);
-        if (delta >= 1) {
-          lastTick = lastTick + delta * 1000;
-
-          // Tick selected match
-          setMatchState(prev => {
-            if (prev.isRunning && !prev.isFinished) {
-              return { ...prev, time: prev.time + delta };
-            }
-            return prev;
-          });
-
-          // Tick all running in tournament map
-          if (isOwner) {
-            setTournament((prev: any) => {
-              if (!prev || !prev.matchStates) return prev;
-              
-              const nextStates = { ...prev.matchStates };
-              let changed = false;
-              
-              Object.keys(nextStates).forEach(key => {
-                const ms = nextStates[key];
-                if (ms.isRunning && !ms.isFinished) {
-                  nextStates[key] = {
-                    ...ms,
-                    time: ms.time + delta
-                  };
-                  changed = true;
-                }
-              });
-              
-              if (!changed) return prev;
-              return {
-                ...prev,
-                matchStates: nextStates,
-                anyMatchRunning: Object.values(nextStates).some((ms: any) => ms.isRunning && !ms.isFinished)
-              };
-            });
+        // Tick selected match
+        setMatchState(prev => {
+          if (prev.isRunning && !prev.isFinished) {
+            return { ...prev, time: prev.time + 1 };
           }
+          return prev;
+        });
+
+        // Tick all running in tournament map
+        if (isOwner) {
+          setTournament((prev: any) => {
+            if (!prev || !prev.matchStates) return prev;
+            
+            const nextStates = { ...prev.matchStates };
+            let changed = false;
+            
+            Object.keys(nextStates).forEach(key => {
+              const ms = nextStates[key];
+              if (ms.isRunning && !ms.isFinished) {
+                nextStates[key] = {
+                  ...ms,
+                  time: ms.time + 1
+                };
+                changed = true;
+              }
+            });
+            
+            if (!changed) return prev;
+            return {
+              ...prev,
+              matchStates: nextStates,
+              anyMatchRunning: Object.values(nextStates).some((ms: any) => ms.isRunning && !ms.isFinished)
+            };
+          });
         }
       }, 1000);
     }

@@ -271,8 +271,8 @@ function reconcileMatchStates(prevMatchStates: any, nextMatchStates: any) {
     
     if (nextMs.isRunning && !nextMs.isFinished && prevMs) {
       const fetchedTime = nextMs.time || 0;
-      const diff = Math.abs(prevMs.time - fetchedTime);
-      if (diff <= 5) {
+      const diff = prevMs.time - fetchedTime;
+      if (diff >= 0 && diff <= 5) {
         reconciled[key] = {
           ...nextMs,
           time: prevMs.time
@@ -294,26 +294,21 @@ export default function TournamentLiveViewPage() {
   const [selectedMatch, setSelectedMatch] = useState<{ round: number; match: number } | null>(null);
 
 
-  const loadTournament = async () => {
-    try {
-      const data = await fetchTournamentFromBackend(tournamentId);
-      const migrated = migrateTournamentData(data);
-      setTournament((prev: any) => {
-        if (prev && prev.matchStates && migrated.matchStates) {
-          migrated.matchStates = reconcileMatchStates(prev.matchStates, migrated.matchStates);
-        }
-        return migrated;
-      });
-      
-      const link = `${window.location.origin}/tournaments/${tournamentId}/live`;
-      setShareLink(link);
-      setQrCode(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(link)}`);
-    } catch (err) {
-      console.error('Error fetching tournament from backend:', err);
-    }
-  };
-
   useEffect(() => {
+    const loadTournament = async () => {
+      try {
+        const data = await fetchTournamentFromBackend(tournamentId);
+        const migrated = migrateTournamentData(data);
+        setTournament(migrated);
+        
+        const link = `${window.location.origin}/tournaments/${tournamentId}/live`;
+        setShareLink(link);
+        setQrCode(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(link)}`);
+      } catch (err) {
+        console.error('Error fetching tournament from backend:', err);
+      }
+    };
+
     loadTournament();
 
     const pusher = getPusherClient();
@@ -344,63 +339,40 @@ export default function TournamentLiveViewPage() {
     };
   }, [tournamentId]);
 
-  // Sync latest tournament data on tab focus/visibility change
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log("Spectator tab became visible, loading tournament...");
-        loadTournament();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [tournamentId]);
-
-  const anyMatchRunning = !!(tournament?.matchStates && Object.values(tournament.matchStates).some((ms: any) => ms.isRunning && !ms.isFinished));
-
   useEffect(() => {
     let interval: NodeJS.Timeout;
+    const hasRunning = tournament?.matchStates && Object.values(tournament.matchStates).some((ms: any) => ms.isRunning && !ms.isFinished);
     
-    if (anyMatchRunning) {
-      let lastTick = Date.now();
+    if (hasRunning) {
       interval = setInterval(() => {
-        const now = Date.now();
-        const delta = Math.floor((now - lastTick) / 1000);
-        if (delta >= 1) {
-          lastTick = lastTick + delta * 1000;
+        setTournament((prev: any) => {
+          if (!prev || !prev.matchStates) return prev;
           
-          setTournament((prev: any) => {
-            if (!prev || !prev.matchStates) return prev;
-            
-            const nextStates = { ...prev.matchStates };
-            let changed = false;
-            
-            Object.keys(nextStates).forEach(key => {
-              const ms = nextStates[key];
-              if (ms.isRunning && !ms.isFinished) {
-                nextStates[key] = {
-                  ...ms,
-                  time: ms.time + delta
-                };
-                changed = true;
-              }
-            });
-            
-            if (!changed) return prev;
-            return {
-              ...prev,
-              matchStates: nextStates
-            };
+          const nextStates = { ...prev.matchStates };
+          let changed = false;
+          
+          Object.keys(nextStates).forEach(key => {
+            const ms = nextStates[key];
+            if (ms.isRunning && !ms.isFinished) {
+              nextStates[key] = {
+                ...ms,
+                time: ms.time + 1
+              };
+              changed = true;
+            }
           });
-        }
+          
+          if (!changed) return prev;
+          return {
+            ...prev,
+            matchStates: nextStates
+          };
+        });
       }, 1000);
     }
     
     return () => clearInterval(interval);
-  }, [anyMatchRunning]);
+  }, [tournament?.matchStates]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -415,7 +387,6 @@ export default function TournamentLiveViewPage() {
 
   const handleSelectMatch = (round: number, match: number) => {
     setSelectedMatch({ round, match });
-    loadTournament();
   };
 
   const getSelectedMatchDetails = () => {
