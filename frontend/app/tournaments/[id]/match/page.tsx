@@ -15,6 +15,7 @@ interface MatchState {
   isFinished?: boolean;
   team1SetPoints?: number;
   team2SetPoints?: number;
+  buGio?: number;
 }
 
 type TeamRef = { id?: string; name?: string };
@@ -360,6 +361,22 @@ export default function LiveMatchPage() {
         return;
       }
 
+      const currentStored = tournament.matchStates?.[matchKey];
+      const isEquivalent = currentStored && 
+        currentStored.team1Score === matchState.team1Score &&
+        currentStored.team2Score === matchState.team2Score &&
+        currentStored.time === matchState.time &&
+        currentStored.isRunning === matchState.isRunning &&
+        currentStored.hiep === matchState.hiep &&
+        currentStored.isFinished === matchState.isFinished &&
+        (currentStored.buGio ?? 0) === (matchState.buGio ?? 0) &&
+        (currentStored.team1SetPoints ?? 0) === (matchState.team1SetPoints ?? 0) &&
+        (currentStored.team2SetPoints ?? 0) === (matchState.team2SetPoints ?? 0);
+
+      if (isEquivalent) {
+        return;
+      }
+
       const updatedMatchStates = {
         ...(tournament.matchStates || {}),
         [matchKey]: matchState
@@ -387,6 +404,8 @@ export default function LiveMatchPage() {
           console.error(e);
         }
       }
+
+      setTournament(updatedTournament);
     }
   }, [matchState, tournament, isLoaded, currentTournamentKey, tournamentsKey, matchKey]);
 
@@ -396,6 +415,22 @@ export default function LiveMatchPage() {
 
     if (backendKeyRef.current !== matchKey) {
       backendKeyRef.current = matchKey;
+      return;
+    }
+
+    const currentStored = tournament.matchStates?.[matchKey];
+    const isEquivalent = currentStored && 
+      currentStored.team1Score === matchState.team1Score &&
+      currentStored.team2Score === matchState.team2Score &&
+      currentStored.time === matchState.time &&
+      currentStored.isRunning === matchState.isRunning &&
+      currentStored.hiep === matchState.hiep &&
+      currentStored.isFinished === matchState.isFinished &&
+      (currentStored.buGio ?? 0) === (matchState.buGio ?? 0) &&
+      (currentStored.team1SetPoints ?? 0) === (matchState.team1SetPoints ?? 0) &&
+      (currentStored.team2SetPoints ?? 0) === (matchState.team2SetPoints ?? 0);
+
+    if (isEquivalent) {
       return;
     }
 
@@ -409,7 +444,6 @@ export default function LiveMatchPage() {
       matchStates: updatedMatchStates,
       matchState: matchState,
       anyMatchRunning: Object.values(updatedMatchStates).some((ms: any) => ms.isRunning && !ms.isFinished),
-      lastUpdatedMatchKey: matchKey,
     };
 
     triggerSync(updatedTournament);
@@ -471,38 +505,6 @@ export default function LiveMatchPage() {
 
   const handleStartStop = () => {
     setMatchState(prev => ({ ...prev, isRunning: true }));
-    if (matchKey && tournament) {
-      const [rIdxStr, mIdxStr] = matchKey.split('-');
-      const mIdx = parseInt(mIdxStr, 10);
-      const activeMatches = [...(tournament.bracket?.activeMatches || [])];
-      if (!activeMatches.includes(mIdx)) {
-        activeMatches.push(mIdx);
-        const updatedBracket = {
-          ...tournament.bracket,
-          activeMatches
-        };
-        const updatedTournament = {
-          ...tournament,
-          bracket: updatedBracket,
-          lastUpdatedMatchKey: matchKey
-        };
-        setTournament(updatedTournament);
-        localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
-        const savedList = localStorage.getItem(tournamentsKey);
-        if (savedList) {
-          try {
-            const list = JSON.parse(savedList);
-            const index = list.findIndex((t: any) => t.id === tournament.id);
-            if (index > -1) {
-              list[index] = updatedTournament;
-              localStorage.setItem(tournamentsKey, JSON.stringify(list));
-            }
-          } catch (e) {
-            console.error(e);
-          }
-        }
-      }
-    }
   };
 
   const handleScoreChange = (team: 'team1' | 'team2', delta: number) => {
@@ -648,7 +650,6 @@ export default function LiveMatchPage() {
       matchStates: updatedMatchStates,
       matchState: nextMatchState,
       anyMatchRunning: Object.values(updatedMatchStates).some((ms: any) => ms.isRunning && !ms.isFinished),
-      lastUpdatedMatchKey: matchKey,
     };
 
     if (bracket.isFinished) {

@@ -586,6 +586,22 @@ export default function TournamentDetailPage() {
         return;
       }
 
+      const currentStored = tournament.matchStates?.[selectedMatchKey];
+      const isEquivalent = currentStored && 
+        currentStored.team1Score === matchState.team1Score &&
+        currentStored.team2Score === matchState.team2Score &&
+        currentStored.time === matchState.time &&
+        currentStored.isRunning === matchState.isRunning &&
+        currentStored.hiep === matchState.hiep &&
+        currentStored.isFinished === matchState.isFinished &&
+        (currentStored.buGio ?? 0) === (matchState.buGio ?? 0) &&
+        (currentStored.team1SetPoints ?? 0) === (matchState.team1SetPoints ?? 0) &&
+        (currentStored.team2SetPoints ?? 0) === (matchState.team2SetPoints ?? 0);
+
+      if (isEquivalent) {
+        return;
+      }
+
       const updatedMatchStates = {
         ...(tournament.matchStates || {}),
         [selectedMatchKey]: matchState
@@ -613,6 +629,8 @@ export default function TournamentDetailPage() {
           console.error(e);
         }
       }
+
+      setTournament(updatedTournament);
     }
   }, [matchState, tournament, isLoaded, currentTournamentKey, tournamentsKey, selectedMatchKey]);
 
@@ -622,6 +640,22 @@ export default function TournamentDetailPage() {
 
     if (backendKeyRef.current !== selectedMatchKey) {
       backendKeyRef.current = selectedMatchKey;
+      return;
+    }
+
+    const currentStored = tournament.matchStates?.[selectedMatchKey];
+    const isEquivalent = currentStored && 
+      currentStored.team1Score === matchState.team1Score &&
+      currentStored.team2Score === matchState.team2Score &&
+      currentStored.time === matchState.time &&
+      currentStored.isRunning === matchState.isRunning &&
+      currentStored.hiep === matchState.hiep &&
+      currentStored.isFinished === matchState.isFinished &&
+      (currentStored.buGio ?? 0) === (matchState.buGio ?? 0) &&
+      (currentStored.team1SetPoints ?? 0) === (matchState.team1SetPoints ?? 0) &&
+      (currentStored.team2SetPoints ?? 0) === (matchState.team2SetPoints ?? 0);
+
+    if (isEquivalent) {
       return;
     }
 
@@ -635,7 +669,6 @@ export default function TournamentDetailPage() {
       matchStates: updatedMatchStates,
       matchState: matchState,
       anyMatchRunning: Object.values(updatedMatchStates).some((ms: any) => ms.isRunning && !ms.isFinished),
-      lastUpdatedMatchKey: selectedMatchKey,
     };
 
     triggerSync(updatedTournament);
@@ -671,38 +704,6 @@ export default function TournamentDetailPage() {
 
   const handleStartStop = () => {
     setMatchState(prev => ({ ...prev, isRunning: true }));
-    if (selectedMatchKey && tournament) {
-      const [rIdxStr, mIdxStr] = selectedMatchKey.split('-');
-      const mIdx = parseInt(mIdxStr, 10);
-      const activeMatches = [...(tournament.bracket?.activeMatches || [])];
-      if (!activeMatches.includes(mIdx)) {
-        activeMatches.push(mIdx);
-        const updatedBracket = {
-          ...tournament.bracket,
-          activeMatches
-        };
-        const updatedTournament = {
-          ...tournament,
-          bracket: updatedBracket,
-          lastUpdatedMatchKey: selectedMatchKey
-        };
-        setTournament(updatedTournament);
-        localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
-        const savedList = localStorage.getItem(tournamentsKey);
-        if (savedList) {
-          try {
-            const list = JSON.parse(savedList);
-            const index = list.findIndex((t: any) => t.id === tournament.id);
-            if (index > -1) {
-              list[index] = updatedTournament;
-              localStorage.setItem(tournamentsKey, JSON.stringify(list));
-            }
-          } catch (e) {
-            console.error(e);
-          }
-        }
-      }
-    }
   };
 
   const handleScoreChange = (team: 'team1' | 'team2', delta: number) => {
@@ -755,8 +756,7 @@ export default function TournamentDetailPage() {
     try {
       const updatedTournament = {
         ...tournament,
-        matchState: matchState,
-        lastUpdatedMatchKey: selectedMatchKey,
+        matchState: matchState
       };
       await syncTournamentToBackend(updatedTournament);
       alert('Đã lưu tỉ số thành công!');
@@ -874,7 +874,6 @@ export default function TournamentDetailPage() {
       matchStates: updatedMatchStates,
       matchState: nextMatchState,
       anyMatchRunning: Object.values(updatedMatchStates).some((ms: any) => ms.isRunning && !ms.isFinished),
-      lastUpdatedMatchKey: selectedMatchKey,
     };
 
     if (bracket.isFinished) {
@@ -1054,7 +1053,6 @@ export default function TournamentDetailPage() {
       matchStates: updatedMatchStates,
       matchState: initialMatchState,
       anyMatchRunning: Object.values(updatedMatchStates).some((ms: any) => ms.isRunning && !ms.isFinished),
-      lastUpdatedMatchKey: matchKey,
     };
 
     setSelectedMatchKey(matchKey);
@@ -1136,7 +1134,6 @@ export default function TournamentDetailPage() {
     const updatedTournament = {
       ...tournament,
       bracket: updatedBracket,
-      lastUpdatedMatchKey: mKey,
     };
 
     setSelectedMatchKey(mKey);
