@@ -38,6 +38,7 @@ type BracketState = {
   currentRound: number;
   currentMatch: number;
   isFinished: boolean;
+  activeMatches?: number[];
 };
 
 function getFallbackTeams(tournament: any) {
@@ -182,7 +183,7 @@ function BracketMatchCard({ a, b, sa, sb, done, isLive, winner, onClick }: Brack
   );
 }
 
-function buildBracketData(tournament: any, matchState: any) {
+function buildBracketData(tournament: any, matchState: any, selectedMatchKey: string | null) {
   if (!tournament) return [];
 
   const teams = tournament.orderedTeams || tournament.teams || [];
@@ -197,14 +198,23 @@ function buildBracketData(tournament: any, matchState: any) {
     const roundMatches = tournament.bracket?.rounds?.[roundIdx] || [];
     const match = roundMatches[matchIdx];
     
-    const isCurrentMatch = tournament.bracket?.currentRound === roundIdx && tournament.bracket?.currentMatch === matchIdx;
-    const isLive = isCurrentMatch && matchState && !matchState.isFinished;
-    if (isLive) return null;
+    const mKey = `${roundIdx}-${matchIdx}`;
+    const isLive = tournament.bracket?.currentRound === roundIdx && (tournament.bracket?.activeMatches || []).includes(matchIdx);
+    
+    let currentMS = tournament.matchStates?.[mKey];
+    if (selectedMatchKey === mKey) {
+      currentMS = matchState;
+    }
+
+    if (isLive && (!currentMS || !currentMS.isFinished)) return null;
 
     if (match) {
       if (match.isFinished && match.winner) return match.winner;
       if (match.isFinished && match.scoreA !== null && match.scoreB !== null) {
         return match.scoreA > match.scoreB ? match.teamA : match.teamB;
+      }
+      if (isLive && currentMS?.isFinished) {
+        return currentMS.team1Score > currentMS.team2Score ? match.teamA : match.teamB;
       }
       return null;
     }
@@ -242,16 +252,22 @@ function buildBracketData(tournament: any, matchState: any) {
       const teamAObj = getTeamForMatch(r, m, 'A');
       const teamBObj = getTeamForMatch(r, m, 'B');
 
-      const isCurrentMatch = tournament.bracket?.currentRound === r && tournament.bracket?.currentMatch === m;
-      const isLive = isCurrentMatch && tournament.matchState && !tournament.matchState.isFinished;
+      const mKey = `${r}-${m}`;
+      const isLive = tournament.bracket?.currentRound === r && (tournament.bracket?.activeMatches || []).includes(m);
+      
+      let currentMS = tournament.matchStates?.[mKey];
+      if (selectedMatchKey === mKey) {
+        currentMS = matchState;
+      }
+
       const isFinished = dbMatch ? !!dbMatch.isFinished : false;
 
       let scoreA: number | null = null;
       let scoreB: number | null = null;
 
-      if (isLive) {
-        scoreA = matchState.team1Score;
-        scoreB = matchState.team2Score;
+      if (isLive && currentMS) {
+        scoreA = currentMS.team1Score;
+        scoreB = currentMS.team2Score;
       } else if (dbMatch) {
         scoreA = dbMatch.scoreA !== undefined ? dbMatch.scoreA : null;
         scoreB = dbMatch.scoreB !== undefined ? dbMatch.scoreB : null;
@@ -265,7 +281,7 @@ function buildBracketData(tournament: any, matchState: any) {
         if (found) winnerName = found.name;
       }
 
-      const doneFlag = isFinished || (!isLive && dbMatch?.isFinished);
+      const doneFlag = isFinished || (isLive && currentMS?.isFinished) || (!isLive && dbMatch?.isFinished);
       if (!winnerName && doneFlag && scoreA !== null && scoreB !== null) {
         if (scoreA > scoreB) winnerName = teamAObj?.name || null;
         else if (scoreB > scoreA) winnerName = teamBObj?.name || null;
@@ -278,7 +294,7 @@ function buildBracketData(tournament: any, matchState: any) {
         sa: scoreA,
         sb: scoreB,
         done: doneFlag,
-        isLive: isLive,
+        isLive: isLive && (!currentMS || !currentMS.isFinished),
         winner: winnerName,
       });
     }
@@ -293,6 +309,31 @@ const getRoundLabel = (r: number, totalRounds: number) => {
   if (r === totalRounds - 3) return "Tứ kết";
   return `Vòng ${r + 1}`;
 };
+
+function migrateTournamentData(t: any): any {
+  if (!t) return t;
+  if (!t.matchStates) {
+    t.matchStates = {};
+  }
+  if (t.matchState && Object.keys(t.matchStates).length === 0) {
+    const roundIdx = t.bracket?.currentRound ?? 0;
+    const matchIdx = t.bracket?.currentMatch ?? 0;
+    const key = `${roundIdx}-${matchIdx}`;
+    t.matchStates[key] = t.matchState;
+  }
+  if (t.bracket && !t.bracket.activeMatches) {
+    t.bracket.activeMatches = [];
+    if (t.bracket.currentMatch !== undefined) {
+      const currentMatchIdx = t.bracket.currentMatch;
+      const round = t.bracket.rounds?.[t.bracket.currentRound] || [];
+      const match = round[currentMatchIdx];
+      if (match && !match.isFinished) {
+        t.bracket.activeMatches.push(currentMatchIdx);
+      }
+    }
+  }
+  return t;
+}
 
 export default function TournamentDetailPage() {
   const params = useParams();
@@ -313,6 +354,7 @@ export default function TournamentDetailPage() {
     isFinished: false,
     buGio: 0,
   });
+  const [selectedMatchKey, setSelectedMatchKey] = useState<string | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [feedbackHover, setFeedbackHover] = useState(0);
@@ -422,10 +464,20 @@ export default function TournamentDetailPage() {
       }
 
       if (loadedTournament) {
+        loadedTournament = migrateTournamentData(loadedTournament);
         setTournament(loadedTournament);
-        if (loadedTournament.matchState) {
+
+        const rIdx = loadedTournament.bracket?.currentRound ?? 0;
+        let mIdx = loadedTournament.bracket?.activeMatches?.[0] ?? loadedTournament.bracket?.currentMatch ?? 0;
+        const defaultKey = `${rIdx}-${mIdx}`;
+        setSelectedMatchKey(defaultKey);
+
+        if (loadedTournament.matchStates?.[defaultKey]) {
+          setMatchState(loadedTournament.matchStates[defaultKey]);
+        } else if (loadedTournament.matchState) {
           setMatchState(loadedTournament.matchState);
         }
+
         localStorage.setItem(currentTournamentKey, JSON.stringify(loadedTournament));
         const link = `${window.location.origin}/tournaments/${tournamentId}/live`;
         setShareLink(link);
@@ -449,9 +501,21 @@ export default function TournamentDetailPage() {
       channel = pusher.subscribe(tournamentId);
       channel.bind("tournament_updated", (data: any) => {
         console.log("Pusher received tournament update in dashboard:", data);
-        setTournament(data);
-        if (data.matchState) {
-          setMatchState(data.matchState);
+        const migrated = migrateTournamentData(data);
+        setTournament(migrated);
+        
+        let mKey = selectedMatchKey;
+        if (!mKey && migrated.bracket) {
+          const rIdx = migrated.bracket.currentRound ?? 0;
+          const mIdx = migrated.bracket.activeMatches?.[0] ?? migrated.bracket.currentMatch ?? 0;
+          mKey = `${rIdx}-${mIdx}`;
+          setSelectedMatchKey(mKey);
+        }
+        
+        if (mKey && migrated.matchStates?.[mKey]) {
+          setMatchState(migrated.matchStates[mKey]);
+        } else if (migrated.matchState) {
+          setMatchState(migrated.matchState);
         }
       });
     }
@@ -464,26 +528,67 @@ export default function TournamentDetailPage() {
     };
   }, [tournamentId, isOwner]);
 
-  // Synchronize timer ticks
+  // Synchronize timer ticks for all active matches
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (matchState.isRunning && !matchState.isFinished) {
+    const hasRunning = (matchState.isRunning && !matchState.isFinished);
+    
+    if (hasRunning || isOwner) {
       interval = setInterval(() => {
-        setMatchState(prev => ({
-          ...prev,
-          time: prev.time + 1,
-        }));
+        // Tick selected match
+        setMatchState(prev => {
+          if (prev.isRunning && !prev.isFinished) {
+            return { ...prev, time: prev.time + 1 };
+          }
+          return prev;
+        });
+
+        // Tick all running in tournament map
+        if (isOwner) {
+          setTournament((prev: any) => {
+            if (!prev || !prev.matchStates) return prev;
+            
+            const nextStates = { ...prev.matchStates };
+            let changed = false;
+            
+            Object.keys(nextStates).forEach(key => {
+              const ms = nextStates[key];
+              if (ms.isRunning && !ms.isFinished) {
+                nextStates[key] = {
+                  ...ms,
+                  time: ms.time + 1
+                };
+                changed = true;
+              }
+            });
+            
+            if (!changed) return prev;
+            return {
+              ...prev,
+              matchStates: nextStates,
+              anyMatchRunning: Object.values(nextStates).some((ms: any) => ms.isRunning && !ms.isFinished)
+            };
+          });
+        }
       }, 1000);
     }
+    
     return () => clearInterval(interval);
-  }, [matchState.isRunning, matchState.isFinished]);
+  }, [matchState.isRunning, matchState.isFinished, isOwner]);
 
   // Sync to local storage
   useEffect(() => {
-    if (isLoaded && tournament) {
+    if (isLoaded && tournament && selectedMatchKey) {
+      const updatedMatchStates = {
+        ...(tournament.matchStates || {}),
+        [selectedMatchKey]: matchState
+      };
+      
       const updatedTournament = {
         ...tournament,
-        matchState: matchState
+        matchStates: updatedMatchStates,
+        matchState: matchState,
+        anyMatchRunning: Object.values(updatedMatchStates).some((ms: any) => ms.isRunning && !ms.isFinished),
       };
       
       localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
@@ -502,15 +607,22 @@ export default function TournamentDetailPage() {
         }
       }
     }
-  }, [matchState, tournament, isLoaded, currentTournamentKey, tournamentsKey]);
+  }, [matchState, tournament, isLoaded, currentTournamentKey, tournamentsKey, selectedMatchKey]);
 
   // Sync to backend on score/running/hiep/buGio changes and periodic time
   useEffect(() => {
-    if (!isLoaded || !tournament) return;
+    if (!isLoaded || !tournament || !selectedMatchKey) return;
+
+    const updatedMatchStates = {
+      ...(tournament.matchStates || {}),
+      [selectedMatchKey]: matchState
+    };
 
     const updatedTournament = {
       ...tournament,
-      matchState: matchState
+      matchStates: updatedMatchStates,
+      matchState: matchState,
+      anyMatchRunning: Object.values(updatedMatchStates).some((ms: any) => ms.isRunning && !ms.isFinished),
     };
 
     triggerSync(updatedTournament);
@@ -525,7 +637,8 @@ export default function TournamentDetailPage() {
     matchState.team2SetPoints,
     Math.floor(matchState.time / 15),
     tournament,
-    isLoaded
+    isLoaded,
+    selectedMatchKey
   ]);
 
   const handleCopyLink = (e?: React.MouseEvent) => {
@@ -627,15 +740,16 @@ export default function TournamentDetailPage() {
       return;
     }
 
-    if (!tournament) return;
+    if (!tournament || !selectedMatchKey) return;
 
     const baseTeams = getFallbackTeams(tournament);
     const bracket: BracketState = tournament.bracket?.rounds?.length
       ? JSON.parse(JSON.stringify(tournament.bracket))
       : buildInitialBracket(baseTeams);
 
-    const roundIndex = bracket.currentRound;
-    const matchIndex = bracket.currentMatch;
+    const [roundIndexStr, matchIndexStr] = selectedMatchKey.split('-');
+    const roundIndex = parseInt(roundIndexStr, 10);
+    const matchIndex = parseInt(matchIndexStr, 10);
     const round = bracket.rounds[roundIndex] || [];
     const match = round[matchIndex];
 
@@ -661,23 +775,38 @@ export default function TournamentDetailPage() {
       ? (tournament.teams?.find((t: any) => t.id === rawWinner.id) || rawWinner)
       : rawWinner;
 
-    let nextMatchState: MatchState = {
-      team1Score: 0,
-      team2Score: 0,
-      time: 0,
+    const nextMatchState: MatchState = {
+      ...matchState,
       isRunning: false,
-      hiep: 1,
-      isFinished: false,
-      buGio: 0,
+      isFinished: true,
     };
 
-    if (matchIndex + 1 < round.length) {
-      bracket.currentMatch = matchIndex + 1;
-    } else {
-      const winners = round.map(m => m.winner).filter(Boolean) as TeamRef[];
+    const updatedMatchStates = {
+      ...(tournament.matchStates || {}),
+      [selectedMatchKey]: nextMatchState,
+    };
+
+    // Remove from active matches
+    const activeMatches = (bracket.activeMatches || []).filter((idx: number) => idx !== matchIndex);
+    bracket.activeMatches = activeMatches;
+
+    // Check if all matches in the current round are finished
+    const allMatchesInRoundFinished = round.every((m: any, idx: number) => {
+      return m.isFinished || idx === matchIndex;
+    });
+
+    if (allMatchesInRoundFinished) {
+      const winners = round.map((m: any, idx: number) => {
+        if (idx === matchIndex) {
+          return pickWinner(m.teamA, m.teamB, matchState.team1Score, matchState.team2Score);
+        }
+        return m.winner;
+      }).filter(Boolean) as TeamRef[];
+
       const resolvedWinners = winners.map(w =>
         w.id ? (tournament.teams?.find((t: any) => t.id === w.id) || w) : w
       );
+
       if (resolvedWinners.length > 1) {
         const nextRound = buildNextRound(resolvedWinners);
         if (bracket.rounds[roundIndex + 1]) {
@@ -687,21 +816,18 @@ export default function TournamentDetailPage() {
         }
         bracket.currentRound = roundIndex + 1;
         bracket.currentMatch = 0;
+        bracket.activeMatches = []; // Reset active matches for new round
       } else {
         bracket.isFinished = true;
-        nextMatchState = {
-          ...matchState,
-          isRunning: false,
-          isFinished: true,
-          buGio: matchState.buGio,
-        };
       }
     }
 
     const updatedTournament = {
       ...tournament,
       bracket,
+      matchStates: updatedMatchStates,
       matchState: nextMatchState,
+      anyMatchRunning: Object.values(updatedMatchStates).some((ms: any) => ms.isRunning && !ms.isFinished),
     };
 
     if (bracket.isFinished) {
@@ -720,8 +846,33 @@ export default function TournamentDetailPage() {
       setFeedbackContent('');
       setShowFeedbackModal(true);
     } else {
+      // Find another active or pending match
+      let nextSelectedKey: string | null = null;
+      if (bracket.activeMatches && bracket.activeMatches.length > 0) {
+        nextSelectedKey = `${bracket.currentRound}-${bracket.activeMatches[0]}`;
+      } else {
+        const pendingIdx = bracket.rounds[bracket.currentRound]?.findIndex((m: any) => !m.isFinished);
+        if (pendingIdx !== -1) {
+          nextSelectedKey = `${bracket.currentRound}-${pendingIdx}`;
+        }
+      }
+
+      setSelectedMatchKey(nextSelectedKey);
+      if (nextSelectedKey && updatedMatchStates[nextSelectedKey]) {
+        setMatchState(updatedMatchStates[nextSelectedKey]);
+      } else {
+        setMatchState({
+          team1Score: 0,
+          team2Score: 0,
+          time: 0,
+          isRunning: false,
+          hiep: 1,
+          isFinished: false,
+          buGio: 0,
+        });
+      }
+
       setTournament(updatedTournament);
-      setMatchState(nextMatchState);
       localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
 
       const savedList = localStorage.getItem(tournamentsKey);
@@ -821,9 +972,18 @@ export default function TournamentDetailPage() {
       return;
     }
 
+    const roundIdx = tournament.bracket.currentRound;
+    const matchKey = `${roundIdx}-${matchIdx}`;
+
+    const activeMatches = [...(tournament.bracket.activeMatches || [])];
+    if (!activeMatches.includes(matchIdx)) {
+      activeMatches.push(matchIdx);
+    }
+
     const updatedBracket = {
       ...tournament.bracket,
       currentMatch: matchIdx,
+      activeMatches,
     };
 
     const initialMatchState: MatchState = {
@@ -836,12 +996,20 @@ export default function TournamentDetailPage() {
       buGio: 0,
     };
 
+    const updatedMatchStates = {
+      ...(tournament.matchStates || {}),
+      [matchKey]: initialMatchState,
+    };
+
     const updatedTournament = {
       ...tournament,
       bracket: updatedBracket,
+      matchStates: updatedMatchStates,
       matchState: initialMatchState,
+      anyMatchRunning: Object.values(updatedMatchStates).some((ms: any) => ms.isRunning && !ms.isFinished),
     };
 
+    setSelectedMatchKey(matchKey);
     setTournament(updatedTournament);
     setMatchState(initialMatchState);
 
@@ -875,8 +1043,9 @@ export default function TournamentDetailPage() {
 
     if (!tournament || !tournament.bracket) return;
 
-    // If they clicked the currently active match, do not reset anything, just scroll to it
-    if (tournament.bracket.currentRound === roundIdx && tournament.bracket.currentMatch === matchIdx) {
+    const mKey = `${roundIdx}-${matchIdx}`;
+
+    if (selectedMatchKey === mKey) {
       setTimeout(() => {
         const controllerEl = document.getElementById('match-controller');
         if (controllerEl) {
@@ -895,32 +1064,33 @@ export default function TournamentDetailPage() {
       return;
     }
 
+    let newMatchState: MatchState;
+    if (tournament.matchStates?.[mKey]) {
+      newMatchState = tournament.matchStates[mKey];
+    } else {
+      newMatchState = {
+        team1Score: dbMatch.scoreA !== null ? dbMatch.scoreA : 0,
+        team2Score: dbMatch.scoreB !== null ? dbMatch.scoreB : 0,
+        time: dbMatch.time || 0,
+        isRunning: false,
+        hiep: dbMatch.hiep || 1,
+        isFinished: !!dbMatch.isFinished,
+        buGio: dbMatch.buGio || 0,
+      };
+    }
+
     const updatedBracket = {
       ...tournament.bracket,
       currentRound: roundIdx,
       currentMatch: matchIdx,
     };
 
-    let newMatchState: MatchState = {
-      team1Score: dbMatch.scoreA !== null ? dbMatch.scoreA : 0,
-      team2Score: dbMatch.scoreB !== null ? dbMatch.scoreB : 0,
-      time: dbMatch.time || 0,
-      isRunning: false,
-      hiep: dbMatch.hiep || 1,
-      isFinished: !!dbMatch.isFinished,
-      buGio: dbMatch.buGio || 0,
-    };
-
-    if (tournament.bracket.currentRound === roundIdx && tournament.bracket.currentMatch === matchIdx && tournament.matchState) {
-      newMatchState = tournament.matchState;
-    }
-
     const updatedTournament = {
       ...tournament,
       bracket: updatedBracket,
-      matchState: newMatchState,
     };
 
+    setSelectedMatchKey(mKey);
     setTournament(updatedTournament);
     setMatchState(newMatchState);
 
@@ -943,7 +1113,6 @@ export default function TournamentDetailPage() {
       console.error('Error syncing selected match:', err);
     });
 
-    // Smooth scroll to the controller
     setTimeout(() => {
       const controllerEl = document.getElementById('match-controller');
       if (controllerEl) {
@@ -957,9 +1126,8 @@ export default function TournamentDetailPage() {
     
     const round = tournament.bracket.rounds?.[tournament.bracket.currentRound] || [];
     return round.map((m: any, idx: number) => {
-      const isCurrentMatch = tournament.bracket.currentMatch === idx;
-      const isLive = isCurrentMatch && tournament.matchState && !tournament.matchState.isFinished && tournament.matchState.isRunning;
-      const done = m.isFinished || (isCurrentMatch && tournament.matchState?.isFinished);
+      const isLive = (tournament.bracket.activeMatches || []).includes(idx);
+      const done = m.isFinished;
       const hasTeams = m.teamA && m.teamB && m.teamA.name !== '?' && m.teamB.name !== '?';
       
       return {
@@ -990,9 +1158,18 @@ export default function TournamentDetailPage() {
     );
   }
 
-  const isLiveMatchActive = tournament.matchState && !tournament.matchState.isFinished;
-  const currentBracketMatch = getCurrentBracketMatch(tournament?.bracket);
-  const matchIndex = tournament?.bracket?.currentMatch || 0;
+  const selectedMatchIndex = selectedMatchKey ? parseInt(selectedMatchKey.split('-')[1], 10) : 0;
+  const isLiveMatchActive = matchState && !matchState.isFinished;
+  
+  const getSelectedBracketMatch = () => {
+    if (!tournament || !tournament.bracket) return null;
+    const round = tournament.bracket.rounds[tournament.bracket.currentRound];
+    if (!round) return null;
+    return round[selectedMatchIndex] || null;
+  };
+  
+  const currentBracketMatch = getSelectedBracketMatch();
+  const matchIndex = selectedMatchIndex;
   const fallbackTeams = getFallbackTeams(tournament);
   const fallbackTeamA = fallbackTeams[matchIndex * 2];
   const fallbackTeamB = fallbackTeams[matchIndex * 2 + 1];
@@ -1017,6 +1194,7 @@ export default function TournamentDetailPage() {
     return finalMatch.winner?.name || null;
   };
   const tournamentWinnerName = getTournamentWinnerName();
+  const activeMatchesCount = tournament?.bracket?.activeMatches?.length || 0;
 
   return (
     <main className="min-h-screen bg-[#080b10] text-white font-sans">
@@ -1044,14 +1222,14 @@ export default function TournamentDetailPage() {
         </Link>
         
         <div className="flex items-center gap-3">
-          {isLiveMatchActive && isOwner && (
+          {activeMatchesCount > 0 && isOwner && (
             <button
               type="button"
               onClick={scrollToController}
               className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-bold transition-all duration-200 flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.35)] animate-pulse"
             >
               <span className="w-2 h-2 rounded-full bg-white" />
-              Trận đang đấu (1)
+              Trận đang đấu ({activeMatchesCount})
             </button>
           )}
           
@@ -1118,13 +1296,13 @@ export default function TournamentDetailPage() {
 
         {/* Bracket Diagram Container */}
         <div className="w-full">
-          {buildBracketData(tournament, matchState).length === 0 ? (
+          {buildBracketData(tournament, matchState, selectedMatchKey).length === 0 ? (
             <div className="text-center py-20 bg-[#0f1419] rounded-2xl border border-white/[0.06]">
               <p className="text-white/60 text-lg">Không có dữ liệu sơ đồ cho giải đấu này</p>
             </div>
           ) : (
             <div className="flex items-stretch justify-center gap-8 overflow-x-auto pb-8 pt-4 min-h-[500px]">
-              {buildBracketData(tournament, matchState).map((roundMatches, roundIdx, arr) => (
+              {buildBracketData(tournament, matchState, selectedMatchKey).map((roundMatches, roundIdx, arr) => (
                 <div key={roundIdx} className="flex flex-col shrink-0 items-center w-[160px]">
                   <h3 className="text-xs font-black tracking-widest text-[#22c55e]/70 uppercase text-center mb-8">
                     {getRoundLabel(roundIdx, arr.length)}
@@ -1148,6 +1326,56 @@ export default function TournamentDetailPage() {
         {/* Bảng điều khiển trận đấu (Active Match Controls) */}
         {showActiveMatch && isOwner && (
           <div id="match-controller" className="mt-12 bg-[#0f1419] border border-white/[0.06] rounded-2xl p-8 max-w-2xl mx-auto shadow-2xl relative">
+            {(() => {
+              const currentRound = tournament.bracket.currentRound;
+              const roundMatches = tournament.bracket.rounds[currentRound] || [];
+              const playableMatches = roundMatches.map((m: any, idx: number) => {
+                const hasTeams = m.teamA && m.teamB && m.teamA.name !== '?' && m.teamB.name !== '?';
+                return { match: m, idx, hasTeams };
+              }).filter((item: any) => item.hasTeams);
+              
+              if (playableMatches.length <= 1) return null;
+              
+              return (
+                <div className="mb-6 flex flex-wrap gap-2 pb-4 border-b border-white/[0.04]">
+                  {playableMatches.map((item: any) => {
+                    const mKey = `${currentRound}-${item.idx}`;
+                    const isSelected = selectedMatchKey === mKey;
+                    
+                    const isActive = (tournament.bracket.activeMatches || []).includes(item.idx);
+                    const mState = tournament.matchStates?.[mKey] || {};
+                    const isRunning = isActive && mState.isRunning && !mState.isFinished;
+                    const isFinished = item.match.isFinished || mState.isFinished;
+                    
+                    let statusColor = "bg-white/20";
+                    if (isRunning) statusColor = "bg-[#22c55e] animate-pulse";
+                    else if (isFinished) statusColor = "bg-white/40";
+                    else if (isActive) statusColor = "bg-blue-500 animate-pulse";
+                    
+                    return (
+                      <button
+                        key={item.idx}
+                        type="button"
+                        onClick={() => handleMatchCardClick(currentRound, item.idx)}
+                        className={`px-4 py-2.5 rounded-xl border text-xs font-black tracking-tight transition-all duration-200 flex items-center gap-2 ${
+                          isSelected
+                            ? "bg-[#22c55e]/10 border-[#22c55e]/30 text-[#22c55e] shadow-[0_0_15px_rgba(34,197,94,0.1)]"
+                            : "bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05] text-white/60 hover:text-white"
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${statusColor}`} />
+                        <span>
+                          {item.match.teamA?.name} vs {item.match.teamB?.name}
+                        </span>
+                        {isFinished && <span className="text-[10px] text-white/30">(🏁)</span>}
+                        {isRunning && <span className="text-[9px] px-1 bg-[#22c55e] text-[#080b10] rounded">LIVE</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
             <div className="flex items-center justify-between mb-8 pb-4 border-b border-white/[0.04]">
               <div className="flex items-center gap-2">
                 <span className={`w-2.5 h-2.5 rounded-full ${

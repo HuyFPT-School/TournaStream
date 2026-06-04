@@ -28,6 +28,7 @@ type BracketState = {
   >;
   currentRound: number;
   currentMatch: number;
+  activeMatches?: number[];
 };
 
 interface BracketMatchCardProps {
@@ -123,14 +124,19 @@ function buildBracketData(tournament: any, onSelect: (round: number, match: numb
     const roundMatches = tournament.bracket?.rounds?.[roundIdx] || [];
     const match = roundMatches[matchIdx];
     
-    const isCurrentMatch = tournament.bracket?.currentRound === roundIdx && tournament.bracket?.currentMatch === matchIdx;
-    const isLive = isCurrentMatch && tournament.matchState && !tournament.matchState.isFinished;
-    if (isLive) return null;
+    const mKey = `${roundIdx}-${matchIdx}`;
+    const isLive = tournament.bracket?.currentRound === roundIdx && (tournament.bracket?.activeMatches || []).includes(matchIdx);
+    
+    const currentMS = tournament.matchStates?.[mKey];
+    if (isLive && (!currentMS || !currentMS.isFinished)) return null;
 
     if (match) {
       if (match.isFinished && match.winner) return match.winner;
       if (match.isFinished && match.scoreA !== null && match.scoreB !== null) {
         return match.scoreA > match.scoreB ? match.teamA : match.teamB;
+      }
+      if (isLive && currentMS?.isFinished) {
+        return currentMS.team1Score > currentMS.team2Score ? match.teamA : match.teamB;
       }
       return null;
     }
@@ -168,16 +174,18 @@ function buildBracketData(tournament: any, onSelect: (round: number, match: numb
       const teamAObj = getTeamForMatch(r, m, 'A');
       const teamBObj = getTeamForMatch(r, m, 'B');
 
-      const isCurrentMatch = tournament.bracket?.currentRound === r && tournament.bracket?.currentMatch === m;
-      const isLive = isCurrentMatch && tournament.matchState && !tournament.matchState.isFinished;
+      const mKey = `${r}-${m}`;
+      const isLive = tournament.bracket?.currentRound === r && (tournament.bracket?.activeMatches || []).includes(m);
+      
+      const currentMS = tournament.matchStates?.[mKey];
       const isFinished = dbMatch ? !!dbMatch.isFinished : false;
 
       let scoreA: number | null = null;
       let scoreB: number | null = null;
 
-      if (isLive) {
-        scoreA = tournament.matchState?.team1Score ?? 0;
-        scoreB = tournament.matchState?.team2Score ?? 0;
+      if (isLive && currentMS) {
+        scoreA = currentMS.team1Score;
+        scoreB = currentMS.team2Score;
       } else if (dbMatch) {
         scoreA = dbMatch.scoreA !== undefined ? dbMatch.scoreA : null;
         scoreB = dbMatch.scoreB !== undefined ? dbMatch.scoreB : null;
@@ -191,7 +199,7 @@ function buildBracketData(tournament: any, onSelect: (round: number, match: numb
         if (found) winnerName = found.name;
       }
 
-      const doneFlag = isFinished || (!isLive && dbMatch?.isFinished);
+      const doneFlag = isFinished || (isLive && currentMS?.isFinished) || (!isLive && dbMatch?.isFinished);
       if (!winnerName && doneFlag && scoreA !== null && scoreB !== null) {
         if (scoreA > scoreB) winnerName = teamAObj?.name || null;
         else if (scoreB > scoreA) winnerName = teamBObj?.name || null;
@@ -204,7 +212,7 @@ function buildBracketData(tournament: any, onSelect: (round: number, match: numb
         sa: scoreA,
         sb: scoreB,
         done: doneFlag,
-        isLive: isLive,
+        isLive: isLive && (!currentMS || !currentMS.isFinished),
         winner: winnerName,
         roundIdx: r,
         matchIdx: m,
@@ -227,6 +235,55 @@ function getFallbackTeams(tournament: any) {
   return tournament.orderedTeams || tournament.teams || [];
 }
 
+function migrateTournamentData(t: any): any {
+  if (!t) return t;
+  if (!t.matchStates) {
+    t.matchStates = {};
+  }
+  if (t.matchState && Object.keys(t.matchStates).length === 0) {
+    const roundIdx = t.bracket?.currentRound ?? 0;
+    const matchIdx = t.bracket?.currentMatch ?? 0;
+    const key = `${roundIdx}-${matchIdx}`;
+    t.matchStates[key] = t.matchState;
+  }
+  if (t.bracket && !t.bracket.activeMatches) {
+    t.bracket.activeMatches = [];
+    if (t.bracket.currentMatch !== undefined) {
+      const currentMatchIdx = t.bracket.currentMatch;
+      const round = t.bracket.rounds?.[t.bracket.currentRound] || [];
+      const match = round[currentMatchIdx];
+      if (match && !match.isFinished) {
+        t.bracket.activeMatches.push(currentMatchIdx);
+      }
+    }
+  }
+  return t;
+}
+
+function reconcileMatchStates(prevMatchStates: any, nextMatchStates: any) {
+  if (!nextMatchStates) return nextMatchStates;
+  if (!prevMatchStates) return nextMatchStates;
+  
+  const reconciled = { ...nextMatchStates };
+  Object.keys(reconciled).forEach(key => {
+    const nextMs = reconciled[key];
+    const prevMs = prevMatchStates[key];
+    
+    if (nextMs.isRunning && !nextMs.isFinished && prevMs) {
+      const fetchedTime = nextMs.time || 0;
+      const diff = prevMs.time - fetchedTime;
+      if (diff >= 0 && diff <= 5) {
+        reconciled[key] = {
+          ...nextMs,
+          time: prevMs.time
+        };
+      }
+    }
+  });
+  
+  return reconciled;
+}
+
 export default function TournamentLiveViewPage() {
   const params = useParams();
   const tournamentId = params.id as string;
@@ -235,55 +292,18 @@ export default function TournamentLiveViewPage() {
   const [qrCode, setQrCode] = useState<string>('');
   const [showQrModal, setShowQrModal] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<{ round: number; match: number } | null>(null);
-  const [matchState, setMatchState] = useState<MatchState>({
-    team1Score: 0,
-    team2Score: 0,
-    time: 0,
-    hiep: 1,
-    isRunning: false,
-    isFinished: false,
-  });
+
 
   useEffect(() => {
     const loadTournament = async () => {
       try {
         const data = await fetchTournamentFromBackend(tournamentId);
-        setTournament(data);
+        const migrated = migrateTournamentData(data);
+        setTournament(migrated);
+        
         const link = `${window.location.origin}/tournaments/${tournamentId}/live`;
         setShareLink(link);
         setQrCode(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(link)}`);
-
-        if (data.matchState) {
-          setMatchState(prev => {
-            const fetchedIsRunning = !!data.matchState.isRunning;
-            const fetchedIsFinished = !!data.matchState.isFinished;
-            const fetchedTime = data.matchState.time || 0;
-
-            if (!fetchedIsRunning || fetchedIsFinished) {
-              return {
-                ...data.matchState,
-                isRunning: fetchedIsRunning,
-                isFinished: fetchedIsFinished,
-              };
-            }
-
-            const diff = prev.time - fetchedTime;
-            if (diff < 0 || diff > 18) {
-              return {
-                ...data.matchState,
-                isRunning: fetchedIsRunning,
-                isFinished: fetchedIsFinished,
-              };
-            }
-
-            return {
-              ...data.matchState,
-              time: prev.time,
-              isRunning: fetchedIsRunning,
-              isFinished: fetchedIsFinished,
-            };
-          });
-        }
       } catch (err) {
         console.error('Error fetching tournament from backend:', err);
       }
@@ -299,38 +319,15 @@ export default function TournamentLiveViewPage() {
 
       channel.bind("tournament_updated", (data: any) => {
         console.log("Pusher received tournament update:", data);
-        setTournament(data);
-        if (data.matchState) {
-          setMatchState(prev => {
-            const fetchedIsRunning = !!data.matchState.isRunning;
-            const fetchedIsFinished = !!data.matchState.isFinished;
-            const fetchedTime = data.matchState.time || 0;
-
-            if (!fetchedIsRunning || fetchedIsFinished) {
-              return {
-                ...data.matchState,
-                isRunning: fetchedIsRunning,
-                isFinished: fetchedIsFinished,
-              };
-            }
-
-            const diff = prev.time - fetchedTime;
-            if (diff < 0 || diff > 2) {
-              return {
-                ...data.matchState,
-                isRunning: fetchedIsRunning,
-                isFinished: fetchedIsFinished,
-              };
-            }
-
-            return {
-              ...data.matchState,
-              time: prev.time,
-              isRunning: fetchedIsRunning,
-              isFinished: fetchedIsFinished,
-            };
-          });
-        }
+        const migrated = migrateTournamentData(data);
+        
+        // Reconcile timers to prevent jumping UI
+        setTournament((prev: any) => {
+          if (prev && prev.matchStates && migrated.matchStates) {
+            migrated.matchStates = reconcileMatchStates(prev.matchStates, migrated.matchStates);
+          }
+          return migrated;
+        });
       });
     }
 
@@ -344,16 +341,38 @@ export default function TournamentLiveViewPage() {
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (matchState.isRunning && !matchState.isFinished) {
+    const hasRunning = tournament?.matchStates && Object.values(tournament.matchStates).some((ms: any) => ms.isRunning && !ms.isFinished);
+    
+    if (hasRunning) {
       interval = setInterval(() => {
-        setMatchState(prev => ({
-          ...prev,
-          time: prev.time + 1,
-        }));
+        setTournament((prev: any) => {
+          if (!prev || !prev.matchStates) return prev;
+          
+          const nextStates = { ...prev.matchStates };
+          let changed = false;
+          
+          Object.keys(nextStates).forEach(key => {
+            const ms = nextStates[key];
+            if (ms.isRunning && !ms.isFinished) {
+              nextStates[key] = {
+                ...ms,
+                time: ms.time + 1
+              };
+              changed = true;
+            }
+          });
+          
+          if (!changed) return prev;
+          return {
+            ...prev,
+            matchStates: nextStates
+          };
+        });
       }, 1000);
     }
+    
     return () => clearInterval(interval);
-  }, [matchState.isRunning, matchState.isFinished]);
+  }, [tournament?.matchStates]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -378,9 +397,10 @@ export default function TournamentLiveViewPage() {
     const dbRound = tournament.bracket?.rounds?.[r] || [];
     const dbMatch = dbRound[m];
     
-    const isCurrentMatch = tournament.bracket?.currentRound === r && tournament.bracket?.currentMatch === m;
-    const isLive = isCurrentMatch && matchState && !matchState.isFinished;
-    const isFinished = dbMatch ? !!dbMatch.isFinished : (isCurrentMatch && !!matchState.isFinished);
+    const mKey = `${r}-${m}`;
+    const liveState = tournament.matchStates?.[mKey];
+    const isLive = tournament.bracket?.currentRound === r && (tournament.bracket?.activeMatches || []).includes(m);
+    const isFinished = dbMatch ? !!dbMatch.isFinished : (liveState ? !!liveState.isFinished : false);
     
     const fallbackTeams = getFallbackTeams(tournament);
     
@@ -405,10 +425,21 @@ export default function TournamentLiveViewPage() {
         if (roundIdx2 < 0) return null;
         const roundMatches2 = tournament.bracket?.rounds?.[roundIdx2] || [];
         const match2 = roundMatches2[matchIdx2];
+        
+        const mKey2 = `${roundIdx2}-${matchIdx2}`;
+        const isLive2 = tournament.bracket?.currentRound === roundIdx2 && (tournament.bracket?.activeMatches || []).includes(matchIdx2);
+        const currentMS2 = tournament.matchStates?.[mKey2];
+        const isFinished2 = match2 ? !!match2.isFinished : (currentMS2 ? !!currentMS2.isFinished : false);
+        
+        if (isLive2 && !isFinished2) return null;
+        
         if (match2) {
           if (match2.isFinished && match2.winner) return match2.winner;
           if (match2.isFinished && match2.scoreA !== null && match2.scoreB !== null) {
             return match2.scoreA > match2.scoreB ? match2.teamA : match2.teamB;
+          }
+          if (isLive2 && currentMS2?.isFinished) {
+            return currentMS2.team1Score > currentMS2.team2Score ? match2.teamA : match2.teamB;
           }
         }
         return null;
@@ -427,13 +458,13 @@ export default function TournamentLiveViewPage() {
     let team1SetPoints = null;
     let team2SetPoints = null;
     
-    if (isCurrentMatch && !matchState.isFinished) {
-      scoreA = matchState.team1Score;
-      scoreB = matchState.team2Score;
-      time = matchState.time;
-      hiep = matchState.hiep;
-      team1SetPoints = matchState.team1SetPoints ?? 0;
-      team2SetPoints = matchState.team2SetPoints ?? 0;
+    if (isLive && liveState) {
+      scoreA = liveState.team1Score;
+      scoreB = liveState.team2Score;
+      time = liveState.time;
+      hiep = liveState.hiep;
+      team1SetPoints = liveState.team1SetPoints ?? 0;
+      team2SetPoints = liveState.team2SetPoints ?? 0;
     } else if (dbMatch) {
       scoreA = dbMatch.scoreA;
       scoreB = dbMatch.scoreB;
