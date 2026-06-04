@@ -62,9 +62,16 @@ async function getLiveTournaments(req, res) {
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 50) : 8;
 
     const tournaments = await Tournament.find({
-      matchState: { $ne: null },
-      "matchState.isRunning": true,
-      "matchState.isFinished": { $ne: true },
+      $or: [
+        {
+          matchState: { $ne: null },
+          "matchState.isRunning": true,
+          "matchState.isFinished": { $ne: true },
+        },
+        {
+          anyMatchRunning: true,
+        },
+      ],
     })
       .sort({ updatedAt: -1 })
       .limit(limit);
