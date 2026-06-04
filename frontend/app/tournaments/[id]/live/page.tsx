@@ -271,8 +271,8 @@ function reconcileMatchStates(prevMatchStates: any, nextMatchStates: any) {
     
     if (nextMs.isRunning && !nextMs.isFinished && prevMs) {
       const fetchedTime = nextMs.time || 0;
-      const diff = prevMs.time - fetchedTime;
-      if (diff >= 0 && diff <= 5) {
+      const diff = Math.abs(prevMs.time - fetchedTime);
+      if (diff <= 5) {
         reconciled[key] = {
           ...nextMs,
           time: prevMs.time
@@ -294,21 +294,26 @@ export default function TournamentLiveViewPage() {
   const [selectedMatch, setSelectedMatch] = useState<{ round: number; match: number } | null>(null);
 
 
-  useEffect(() => {
-    const loadTournament = async () => {
-      try {
-        const data = await fetchTournamentFromBackend(tournamentId);
-        const migrated = migrateTournamentData(data);
-        setTournament(migrated);
-        
-        const link = `${window.location.origin}/tournaments/${tournamentId}/live`;
-        setShareLink(link);
-        setQrCode(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(link)}`);
-      } catch (err) {
-        console.error('Error fetching tournament from backend:', err);
-      }
-    };
+  const loadTournament = async () => {
+    try {
+      const data = await fetchTournamentFromBackend(tournamentId);
+      const migrated = migrateTournamentData(data);
+      setTournament((prev: any) => {
+        if (prev && prev.matchStates && migrated.matchStates) {
+          migrated.matchStates = reconcileMatchStates(prev.matchStates, migrated.matchStates);
+        }
+        return migrated;
+      });
+      
+      const link = `${window.location.origin}/tournaments/${tournamentId}/live`;
+      setShareLink(link);
+      setQrCode(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(link)}`);
+    } catch (err) {
+      console.error('Error fetching tournament from backend:', err);
+    }
+  };
 
+  useEffect(() => {
     loadTournament();
 
     const pusher = getPusherClient();
@@ -339,11 +344,27 @@ export default function TournamentLiveViewPage() {
     };
   }, [tournamentId]);
 
+  // Sync latest tournament data on tab focus/visibility change
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log("Spectator tab became visible, loading tournament...");
+        loadTournament();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [tournamentId]);
+
+  const anyMatchRunning = !!(tournament?.matchStates && Object.values(tournament.matchStates).some((ms: any) => ms.isRunning && !ms.isFinished));
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    const hasRunning = tournament?.matchStates && Object.values(tournament.matchStates).some((ms: any) => ms.isRunning && !ms.isFinished);
     
-    if (hasRunning) {
+    if (anyMatchRunning) {
       interval = setInterval(() => {
         setTournament((prev: any) => {
           if (!prev || !prev.matchStates) return prev;
@@ -372,7 +393,7 @@ export default function TournamentLiveViewPage() {
     }
     
     return () => clearInterval(interval);
-  }, [tournament?.matchStates]);
+  }, [anyMatchRunning]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -387,6 +408,7 @@ export default function TournamentLiveViewPage() {
 
   const handleSelectMatch = (round: number, match: number) => {
     setSelectedMatch({ round, match });
+    loadTournament();
   };
 
   const getSelectedMatchDetails = () => {
