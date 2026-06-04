@@ -465,32 +465,39 @@ export default function LiveMatchPage() {
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (matchState.isRunning && !matchState.isFinished) {
+      let lastTick = Date.now();
       interval = setInterval(() => {
-        setMatchState(prev => {
-          if (prev.isRunning && !prev.isFinished) {
-            return { ...prev, time: prev.time + 1 };
-          }
-          return prev;
-        });
-
-        if (matchKey) {
-          setTournament((prev: any) => {
-            if (!prev || !prev.matchStates || !prev.matchStates[matchKey]) return prev;
-            
-            const nextStates = {
-              ...prev.matchStates,
-              [matchKey]: {
-                ...prev.matchStates[matchKey],
-                time: prev.matchStates[matchKey].time + 1
-              }
-            };
-            
-            return {
-              ...prev,
-              matchStates: nextStates,
-              anyMatchRunning: Object.values(nextStates).some((ms: any) => ms.isRunning && !ms.isFinished)
-            };
+        const now = Date.now();
+        const delta = Math.floor((now - lastTick) / 1000);
+        if (delta >= 1) {
+          lastTick = lastTick + delta * 1000;
+          
+          setMatchState(prev => {
+            if (prev.isRunning && !prev.isFinished) {
+              return { ...prev, time: prev.time + delta };
+            }
+            return prev;
           });
+
+          if (matchKey) {
+            setTournament((prev: any) => {
+              if (!prev || !prev.matchStates || !prev.matchStates[matchKey]) return prev;
+              
+              const nextStates = {
+                ...prev.matchStates,
+                [matchKey]: {
+                  ...prev.matchStates[matchKey],
+                  time: prev.matchStates[matchKey].time + delta
+                }
+              };
+              
+              return {
+                ...prev,
+                matchStates: nextStates,
+                anyMatchRunning: Object.values(nextStates).some((ms: any) => ms.isRunning && !ms.isFinished)
+              };
+            });
+          }
         }
       }, 1000);
     }
