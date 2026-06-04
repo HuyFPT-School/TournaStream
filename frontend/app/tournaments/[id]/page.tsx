@@ -355,6 +355,8 @@ export default function TournamentDetailPage() {
     buGio: 0,
   });
   const [selectedMatchKey, setSelectedMatchKey] = useState<string | null>(null);
+  const localKeyRef = useRef<string | null>(null);
+  const backendKeyRef = useRef<string | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [feedbackHover, setFeedbackHover] = useState(0);
@@ -579,6 +581,11 @@ export default function TournamentDetailPage() {
   // Sync to local storage
   useEffect(() => {
     if (isLoaded && tournament && selectedMatchKey) {
+      if (localKeyRef.current !== selectedMatchKey) {
+        localKeyRef.current = selectedMatchKey;
+        return;
+      }
+
       const updatedMatchStates = {
         ...(tournament.matchStates || {}),
         [selectedMatchKey]: matchState
@@ -612,6 +619,11 @@ export default function TournamentDetailPage() {
   // Sync to backend on score/running/hiep/buGio changes and periodic time
   useEffect(() => {
     if (!isLoaded || !tournament || !selectedMatchKey) return;
+
+    if (backendKeyRef.current !== selectedMatchKey) {
+      backendKeyRef.current = selectedMatchKey;
+      return;
+    }
 
     const updatedMatchStates = {
       ...(tournament.matchStates || {}),

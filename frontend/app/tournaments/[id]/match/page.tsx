@@ -178,6 +178,8 @@ export default function LiveMatchPage() {
   const tournamentId = params.id as string;
   const [tournament, setTournament] = useState<any>(null);
   const [matchKey, setMatchKey] = useState<string | null>(null);
+  const localKeyRef = useRef<string | null>(null);
+  const backendKeyRef = useRef<string | null>(null);
   const [matchState, setMatchState] = useState<MatchState>({
     team1Score: 0,
     team2Score: 0,
@@ -353,6 +355,11 @@ export default function LiveMatchPage() {
   // Save matchState to currentTournament and tournaments list when it changes
   useEffect(() => {
     if (isLoaded && tournament && matchKey) {
+      if (localKeyRef.current !== matchKey) {
+        localKeyRef.current = matchKey;
+        return;
+      }
+
       const updatedMatchStates = {
         ...(tournament.matchStates || {}),
         [matchKey]: matchState
@@ -386,6 +393,11 @@ export default function LiveMatchPage() {
   // Sync tournament state to backend on key changes and every 15 seconds of match time
   useEffect(() => {
     if (!isLoaded || !tournament || !matchKey) return;
+
+    if (backendKeyRef.current !== matchKey) {
+      backendKeyRef.current = matchKey;
+      return;
+    }
 
     const updatedMatchStates = {
       ...(tournament.matchStates || {}),
