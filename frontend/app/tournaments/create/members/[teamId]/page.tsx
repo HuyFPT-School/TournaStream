@@ -79,29 +79,73 @@ export default function MemberDetailsPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(existingMember?.image || null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
-        setImage(dataUrl);
-        setImagePreview(dataUrl);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    // Check size limit: 5MB
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError('Kích thước ảnh tối đa là 5MB');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadError(null);
+
+    // Show local preview immediately while uploading
+    const localUrl = URL.createObjectURL(file);
+    setImagePreview(localUrl);
+
+    try {
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dt6uoyt1t';
+      const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default';
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', uploadPreset);
+
+      const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Không thể tải ảnh lên server Cloudinary');
+      }
+
+      const responseData = await response.json();
+      if (responseData.secure_url) {
+        setImage(responseData.secure_url);
+        setImagePreview(responseData.secure_url);
+      } else {
+        throw new Error('Không nhận được URL ảnh từ Cloudinary');
+      }
+    } catch (err: any) {
+      console.error('Lỗi upload Cloudinary:', err);
+      setUploadError(err.message || 'Lỗi khi tải ảnh lên. Vui lòng thử lại.');
+      // Revert states
+      setImage(null);
+      setImagePreview(null);
+    } finally {
+      setIsUploading(false);
     }
   };
 
   const handleRemoveImage = () => {
     setImage(null);
     setImagePreview(null);
+    setUploadError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
   const handleSave = () => {
+    if (isUploading) return;
+
     const newErrors: Record<string, string> = {};
 
     if (!name.trim()) {
@@ -186,7 +230,15 @@ export default function MemberDetailsPage() {
             <div className="flex gap-6 items-start">
               {/* Preview */}
               <div className="flex-shrink-0">
-                {imagePreview ? (
+                {isUploading ? (
+                  <div className="w-32 h-32 rounded-lg bg-[#0f1419] border border-white/[0.06] flex flex-col items-center justify-center gap-2">
+                    <svg className="animate-spin h-8 w-8 text-[#22c55e]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span className="text-[10px] text-white/50">Đang tải...</span>
+                  </div>
+                ) : imagePreview ? (
                   <div className="relative w-32 h-32">
                     <img
                       src={imagePreview}
@@ -194,6 +246,7 @@ export default function MemberDetailsPage() {
                       className="w-full h-full rounded-lg object-cover"
                     />
                     <button
+                      type="button"
                       onClick={handleRemoveImage}
                       className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600 transition-all duration-200"
                     >
@@ -215,13 +268,19 @@ export default function MemberDetailsPage() {
                   accept="image/*"
                   onChange={handleImageChange}
                   className="hidden"
+                  disabled={isUploading}
                 />
                 <button
+                  type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full px-4 py-3 rounded-lg border-2 border-dashed border-white/[0.06] text-white font-semibold hover:border-white/[0.12] transition-all duration-200 mb-3"
+                  disabled={isUploading}
+                  className="w-full px-4 py-3 rounded-lg border-2 border-dashed border-white/[0.06] text-white font-semibold hover:border-white/[0.12] transition-all duration-200 mb-3 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Chọn ảnh
+                  {isUploading ? 'Đang tải ảnh...' : 'Chọn ảnh'}
                 </button>
+                {uploadError && (
+                  <p className="text-sm text-red-500 mb-2 font-medium">{uploadError}</p>
+                )}
                 <p className="text-sm text-white/50">
                   Định dạng: JPG, PNG, GIF. Kích thước tối đa: 5MB
                 </p>
@@ -268,15 +327,17 @@ export default function MemberDetailsPage() {
         <div className="flex gap-4 mt-12">
           <button
             onClick={() => router.back()}
-            className="flex-1 px-6 py-3 rounded-lg border border-white/[0.06] text-white font-semibold hover:bg-white/[0.05] transition-all duration-200"
+            disabled={isUploading}
+            className="flex-1 px-6 py-3 rounded-lg border border-white/[0.06] text-white font-semibold hover:bg-white/[0.05] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Hủy
           </button>
           <button
             onClick={handleSave}
-            className="flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200"
+            disabled={isUploading}
+            className="flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {existingMember ? 'Cập nhật' : 'Thêm'} thành viên
+            {isUploading ? 'Đang tải ảnh...' : existingMember ? 'Cập nhật' : 'Thêm'} thành viên
           </button>
         </div>
       </section>
