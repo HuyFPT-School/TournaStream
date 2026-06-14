@@ -36,6 +36,123 @@ function buildInitialBracket(teams: TeamRef[]) {
   };
 }
 
+function buildRoundRobinMatches(groupTeams: TeamRef[], groupIdx: number) {
+  const list = [...groupTeams];
+  const matches: any[] = [];
+  const n = list.length;
+  if (n < 2) return [];
+
+  const hasBye = n % 2 !== 0;
+  if (hasBye) {
+    list.push({ id: 'bye', name: 'BYE' });
+  }
+  const numTeams = list.length;
+  const roundsCount = numTeams - 1;
+  const matchesPerRound = numTeams / 2;
+
+  let matchCounter = 0;
+  for (let round = 0; round < roundsCount; round++) {
+    for (let i = 0; i < matchesPerRound; i++) {
+      const teamA = list[i];
+      const teamB = list[numTeams - 1 - i];
+
+      if (teamA.id !== 'bye' && teamB.id !== 'bye') {
+        matches.push({
+          id: `g-${groupIdx}-${matchCounter++}`,
+          teamA,
+          teamB,
+          scoreA: null,
+          scoreB: null,
+          isFinished: false,
+          roundIndex: round
+        });
+      }
+    }
+    // Rotate: keep list[0] fixed, rotate the rest clockwise
+    const rotated = [list[0], list[numTeams - 1], ...list.slice(1, numTeams - 1)];
+    for (let idx = 0; idx < numTeams; idx++) {
+      list[idx] = rotated[idx];
+    }
+  }
+  return matches;
+}
+
+function buildDoubleEliminationBracket(teams: TeamRef[]) {
+  const n = teams.length; // power of 2, e.g. 4, 8, 16, 32
+  const numUpperRounds = Math.ceil(Math.log2(n));
+
+  // 1. Upper Rounds
+  const upperRounds: any[][] = [];
+  // Upper Round 0 matches
+  const u0Matches: any[] = [];
+  for (let i = 0; i < n; i += 2) {
+    u0Matches.push({
+      teamA: teams[i],
+      teamB: teams[i + 1],
+      scoreA: null,
+      scoreB: null,
+      isFinished: false,
+    });
+  }
+  upperRounds.push(u0Matches);
+
+  // Remaining Upper Rounds (with placeholders '?' for names)
+  for (let r = 1; r < numUpperRounds; r++) {
+    const matchesInRound = n / Math.pow(2, r + 1);
+    const roundMatches: any[] = [];
+    for (let m = 0; m < matchesInRound; m++) {
+      roundMatches.push({
+        teamA: { id: '', name: '?' },
+        teamB: { id: '', name: '?' },
+        scoreA: null,
+        scoreB: null,
+        isFinished: false,
+      });
+    }
+    upperRounds.push(roundMatches);
+  }
+
+  // 2. Lower Rounds
+  const lowerRounds: any[][] = [];
+  const totalLowerRounds = 2 * numUpperRounds - 2;
+  for (let r = 0; r < totalLowerRounds; r++) {
+    const k = Math.floor(r / 2);
+    const matchesInRound = n / Math.pow(2, k + 2);
+    const roundMatches: any[] = [];
+    for (let m = 0; m < matchesInRound; m++) {
+      roundMatches.push({
+        teamA: { id: '', name: '?' },
+        teamB: { id: '', name: '?' },
+        scoreA: null,
+        scoreB: null,
+        isFinished: false,
+      });
+    }
+    lowerRounds.push(roundMatches);
+  }
+
+  // 3. Grand Final (up to 2 matches for bracket reset)
+  const grandFinal = [
+    {
+      teamA: { id: '', name: '?' },
+      teamB: { id: '', name: '?' },
+      scoreA: null,
+      scoreB: null,
+      isFinished: false,
+    }
+  ];
+
+  return {
+    upperRounds,
+    lowerRounds,
+    grandFinal,
+    currentRound: 0,
+    currentMatch: 0,
+    isFinished: false,
+    activeMatches: []
+  };
+}
+
 export default function FinalizeCreatePage() {
   const router = useRouter();
   const { data, resetTournament } = useTournament();
@@ -48,12 +165,39 @@ export default function FinalizeCreatePage() {
 
     // Generate a mock tournament ID
     const tournamentId = 'tourn_' + Date.now();
-    const bracket = buildInitialBracket(data.teams);
+    let bracket = null;
+    let groups: any[] | null = null;
+    let stage = null;
+
+    if (data.format === 'round_robin') {
+      const groupsCount = data.groupsCount || 1;
+      groups = Array.from({ length: groupsCount }, (_, gIdx) => ({
+        name: `Bảng ${String.fromCharCode(65 + gIdx)}`,
+        teams: [] as TeamRef[],
+        matches: [] as any[]
+      }));
+      data.teams.forEach((team, idx) => {
+        const gIdx = idx % groupsCount;
+        groups![gIdx].teams.push(team);
+      });
+
+      groups!.forEach((group, gIdx) => {
+        group.matches = buildRoundRobinMatches(group.teams, gIdx);
+      });
+      stage = 'group';
+    } else if (data.format === 'double_elimination') {
+      bracket = buildDoubleEliminationBracket(data.teams);
+    } else {
+      bracket = buildInitialBracket(data.teams);
+    }
+
     const mockTournament = {
       id: tournamentId,
       ...data,
-      orderedTeams: data.teams, // In real app, would use the ordered teams from bracket page
+      orderedTeams: data.teams,
       bracket,
+      groups,
+      stage,
       createdAt: new Date().toISOString(),
     };
 

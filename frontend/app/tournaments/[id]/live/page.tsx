@@ -39,21 +39,23 @@ interface BracketMatchCardProps {
   done: boolean;
   isLive: boolean;
   winner?: string | null;
-  roundIdx: number;
-  matchIdx: number;
-  onSelect: (round: number, match: number) => void;
+  matchKey: string;
+  onSelect: (matchKey: string) => void;
 }
 
-function BracketMatchCard({ a, b, sa, sb, done, isLive, winner, roundIdx, matchIdx, onSelect }: BracketMatchCardProps) {
+function BracketMatchCard({ a, b, sa, sb, done, isLive, winner, matchKey, onSelect }: BracketMatchCardProps) {
   const winA = done && winner ? a === winner : (sa !== null && sb !== null && sa > sb);
   const winB = done && winner ? b === winner : (sa !== null && sb !== null && sb > sa);
   
   return (
-    <div className={`w-[160px] rounded-xl border overflow-hidden text-[12px] shadow-lg transition-all duration-300 ${
-      isLive 
-        ? 'border-[#22c55e] bg-[#22c55e]/[0.05] shadow-[0_0_15px_rgba(34,197,94,0.15)] scale-[1.03]' 
-        : 'border-white/[0.08] bg-[#0f1419] hover:border-white/[0.15]'
-    }`}>
+    <div 
+      onClick={() => onSelect(matchKey)}
+      className={`w-[160px] rounded-xl border overflow-hidden text-[12px] shadow-lg transition-all duration-300 cursor-pointer ${
+        isLive 
+          ? 'border-[#22c55e] bg-[#22c55e]/[0.05] shadow-[0_0_15px_rgba(34,197,94,0.15)] scale-[1.03] hover:scale-[1.05]' 
+          : 'border-white/[0.08] bg-[#0f1419] hover:border-white/[0.15] hover:scale-[1.02]'
+      }`}
+    >
       {/* Team A */}
       <div className={`flex items-center justify-between px-3.5 py-2.5 border-b border-white/[0.04] transition-colors ${
         winA ? 'bg-[#22c55e]/10' : ''
@@ -92,7 +94,7 @@ function BracketMatchCard({ a, b, sa, sb, done, isLive, winner, roundIdx, matchI
 
       {/* Watch Live Button */}
       <button 
-        onClick={() => onSelect(roundIdx, matchIdx)}
+        onClick={() => onSelect(matchKey)}
         className={`w-full py-1.5 border-t text-[10px] font-black tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-1 ${
           isLive 
             ? 'bg-[#22c55e] text-[#080b10] border-[#22c55e]/50 hover:bg-[#16a34a]' 
@@ -109,7 +111,7 @@ function BracketMatchCard({ a, b, sa, sb, done, isLive, winner, roundIdx, matchI
   );
 }
 
-function buildBracketData(tournament: any, onSelect: (round: number, match: number) => void) {
+function buildBracketData(tournament: any, onSelect: (matchKey: string) => void) {
   if (!tournament) return [];
 
   const teams = tournament.orderedTeams || tournament.teams || [];
@@ -214,8 +216,7 @@ function buildBracketData(tournament: any, onSelect: (round: number, match: numb
         done: doneFlag,
         isLive: isLive && (!currentMS || !currentMS.isFinished),
         winner: winnerName,
-        roundIdx: r,
-        matchIdx: m,
+        matchKey: mKey,
         onSelect,
       });
     }
@@ -233,6 +234,102 @@ const getRoundLabel = (r: number, totalRounds: number) => {
 
 function getFallbackTeams(tournament: any) {
   return tournament.orderedTeams || tournament.teams || [];
+}
+
+function resolveTeamRef(tournament: any, team?: TeamRef) {
+  if (!team) return null;
+  if (team.id) {
+    return tournament.teams?.find((t: any) => t.id === team.id) || team;
+  }
+  if (team.name) {
+    return tournament.teams?.find((t: any) => t.name === team.name) || team;
+  }
+  return team;
+}
+
+interface StandingRow {
+  teamId: string;
+  teamName: string;
+  mp: number; // matches played
+  w: number;  // wins
+  d: number;  // draws
+  l: number;  // losses
+  gf: number; // goals for
+  ga: number; // goals against
+  gd: number; // goal difference
+  pts: number; // points
+}
+
+function calculateGroupStandings(groupTeams: any[], groupMatches: any[], matchStates: any): StandingRow[] {
+  const standings: Record<string, StandingRow> = {};
+
+  groupTeams.forEach((team) => {
+    if (team.id) {
+      standings[team.id] = {
+        teamId: team.id,
+        teamName: team.name || '',
+        mp: 0,
+        w: 0,
+        d: 0,
+        l: 0,
+        gf: 0,
+        ga: 0,
+        gd: 0,
+        pts: 0,
+      };
+    }
+  });
+
+  const matchesArray = groupMatches || [];
+  matchesArray.forEach((m) => {
+    const mState = matchStates?.[m.id];
+    const isFinished = m.isFinished || mState?.isFinished;
+    if (!isFinished) return;
+
+    const scoreA = mState ? mState.team1Score : (m.scoreA ?? 0);
+    const scoreB = mState ? mState.team2Score : (m.scoreB ?? 0);
+    const idA = m.teamA?.id;
+    const idB = m.teamB?.id;
+
+    if (idA && standings[idA]) {
+      standings[idA].mp += 1;
+      standings[idA].gf += scoreA;
+      standings[idA].ga += scoreB;
+      standings[idA].gd = standings[idA].gf - standings[idA].ga;
+      if (scoreA > scoreB) {
+        standings[idA].w += 1;
+        standings[idA].pts += 3;
+      } else if (scoreA === scoreB) {
+        standings[idA].d += 1;
+        standings[idA].pts += 1;
+      } else {
+        standings[idA].l += 1;
+      }
+    }
+
+    if (idB && standings[idB]) {
+      standings[idB].mp += 1;
+      standings[idB].gf += scoreB;
+      standings[idB].ga += scoreA;
+      standings[idB].gd = standings[idB].gf - standings[idB].ga;
+      if (scoreB > scoreA) {
+        standings[idB].w += 1;
+        standings[idB].pts += 3;
+      } else if (scoreA === scoreB) {
+        standings[idB].d += 1;
+        standings[idB].pts += 1;
+      } else {
+        standings[idB].l += 1;
+      }
+    }
+  });
+
+  return Object.values(standings).sort((a, b) => {
+    if (b.pts !== a.pts) return b.pts - a.pts;
+    if (b.gd !== a.gd) return b.gd - a.gd;
+    if (b.gf !== a.gf) return b.gf - a.gf;
+    return a.teamName.localeCompare(b.teamName);
+  });
 }
 
 function migrateTournamentData(t: any): any {
@@ -291,7 +388,8 @@ export default function TournamentLiveViewPage() {
   const [shareLink, setShareLink] = useState<string>('');
   const [qrCode, setQrCode] = useState<string>('');
   const [showQrModal, setShowQrModal] = useState(false);
-  const [selectedMatch, setSelectedMatch] = useState<{ round: number; match: number } | null>(null);
+  const [selectedMatchKey, setSelectedMatchKey] = useState<string | null>(null);
+  const [activeDeTab, setActiveDeTab] = useState<'upper' | 'lower' | 'grand'>('upper');
 
 
   useEffect(() => {
@@ -385,79 +483,109 @@ export default function TournamentLiveViewPage() {
     alert('Đã copy link vào clipboard!');
   };
 
-  const handleSelectMatch = (round: number, match: number) => {
-    setSelectedMatch({ round, match });
+  const handleSelectMatch = (matchKey: string) => {
+    setSelectedMatchKey(matchKey);
+  };
+
+  const getMatchLabel = (key: string | null) => {
+    if (!key) return '';
+    const parts = key.split('-');
+    if (key.startsWith('g-')) {
+      const gIdx = parseInt(parts[1], 10) || 0;
+      const mIdx = parseInt(parts[2], 10) || 0;
+      const groupName = tournament.groups?.[gIdx]?.name || String.fromCharCode(65 + gIdx);
+      return `Bảng ${groupName} • Trận ${mIdx + 1}`;
+    }
+    if (key.startsWith('u-')) {
+      const rIdx = parseInt(parts[1], 10) || 0;
+      const mIdx = parseInt(parts[2], 10) || 0;
+      return `Nhánh Thắng - Vòng ${rIdx + 1} • Trận ${mIdx + 1}`;
+    }
+    if (key.startsWith('l-')) {
+      const rIdx = parseInt(parts[1], 10) || 0;
+      const mIdx = parseInt(parts[2], 10) || 0;
+      return `Nhánh Thua - Vòng ${rIdx + 1} • Trận ${mIdx + 1}`;
+    }
+    if (key.startsWith('gf-')) {
+      const mIdx = parseInt(parts[1], 10) || 0;
+      return mIdx === 0 ? 'Chung Kết Tổng - Trận 1' : 'Chung Kết Tổng - Trận Reset';
+    }
+
+    const rIdx = parseInt(parts[0], 10) || 0;
+    const mIdx = parseInt(parts[1], 10) || 0;
+    const numTeams = getFallbackTeams(tournament).length;
+    const numRounds = Math.ceil(Math.log2(numTeams || 2));
+    return `${getRoundLabel(rIdx, numRounds)} • Trận ${mIdx + 1}`;
   };
 
   const getSelectedMatchDetails = () => {
-    if (!selectedMatch || !tournament) return null;
-    const r = selectedMatch.round;
-    const m = selectedMatch.match;
+    if (!selectedMatchKey || !tournament) return null;
     
-    const dbRound = tournament.bracket?.rounds?.[r] || [];
-    const dbMatch = dbRound[m];
-    
-    const mKey = `${r}-${m}`;
+    let dbMatch = null;
+    let isGroup = false;
+    let isUpper = false;
+    let isLower = false;
+    let isGF = false;
+    let roundIndex = 0;
+    let matchIndex = 0;
+
+    if (selectedMatchKey.startsWith('g-')) {
+      const parts = selectedMatchKey.split('-');
+      roundIndex = parseInt(parts[1], 10);
+      matchIndex = parseInt(parts[2], 10);
+      dbMatch = tournament.groups?.[roundIndex]?.matches?.[matchIndex];
+      isGroup = true;
+    } else if (selectedMatchKey.startsWith('u-')) {
+      const parts = selectedMatchKey.split('-');
+      roundIndex = parseInt(parts[1], 10);
+      matchIndex = parseInt(parts[2], 10);
+      dbMatch = tournament.bracket?.upperRounds?.[roundIndex]?.[matchIndex];
+      isUpper = true;
+    } else if (selectedMatchKey.startsWith('l-')) {
+      const parts = selectedMatchKey.split('-');
+      roundIndex = parseInt(parts[1], 10);
+      matchIndex = parseInt(parts[2], 10);
+      dbMatch = tournament.bracket?.lowerRounds?.[roundIndex]?.[matchIndex];
+      isLower = true;
+    } else if (selectedMatchKey.startsWith('gf-')) {
+      const parts = selectedMatchKey.split('-');
+      matchIndex = parseInt(parts[1], 10);
+      dbMatch = tournament.bracket?.grandFinal?.[matchIndex];
+      isGF = true;
+    } else {
+      const parts = selectedMatchKey.split('-');
+      roundIndex = parseInt(parts[0], 10);
+      matchIndex = parseInt(parts[1], 10);
+      dbMatch = tournament.bracket?.rounds?.[roundIndex]?.[matchIndex];
+    }
+
+    if (!dbMatch) return null;
+
+    const mKey = selectedMatchKey;
     const liveState = tournament.matchStates?.[mKey];
-    const isLive = tournament.bracket?.currentRound === r && (tournament.bracket?.activeMatches || []).includes(m);
-    const isFinished = dbMatch ? !!dbMatch.isFinished : (liveState ? !!liveState.isFinished : false);
     
-    const fallbackTeams = getFallbackTeams(tournament);
-    
-    const getTeamForMatch = (roundIdx: number, matchIdx: number, slot: 'A' | 'B'): any => {
-      if (roundIdx === 0) {
-        const idx = matchIdx * 2 + (slot === 'A' ? 0 : 1);
-        return fallbackTeams[idx] || null;
-      }
-      
-      const prevMatchIdx = matchIdx * 2 + (slot === 'A' ? 0 : 1);
-      const roundMatches = tournament.bracket?.rounds?.[roundIdx] || [];
-      const matchObj = roundMatches[matchIdx];
-      
-      if (matchObj) {
-        const teamRef = slot === 'A' ? matchObj.teamA : matchObj.teamB;
-        if (teamRef) {
-          return tournament.teams?.find((t: any) => t.id === teamRef.id || t.name === teamRef.name) || teamRef;
-        }
-      }
-      
-      const getMatchWinner = (roundIdx2: number, matchIdx2: number): any => {
-        if (roundIdx2 < 0) return null;
-        const roundMatches2 = tournament.bracket?.rounds?.[roundIdx2] || [];
-        const match2 = roundMatches2[matchIdx2];
-        
-        const mKey2 = `${roundIdx2}-${matchIdx2}`;
-        const isLive2 = tournament.bracket?.currentRound === roundIdx2 && (tournament.bracket?.activeMatches || []).includes(matchIdx2);
-        const currentMS2 = tournament.matchStates?.[mKey2];
-        const isFinished2 = match2 ? !!match2.isFinished : (currentMS2 ? !!currentMS2.isFinished : false);
-        
-        if (isLive2 && !isFinished2) return null;
-        
-        if (match2) {
-          if (match2.isFinished && match2.winner) return match2.winner;
-          if (match2.isFinished && match2.scoreA !== null && match2.scoreB !== null) {
-            return match2.scoreA > match2.scoreB ? match2.teamA : match2.teamB;
-          }
-          if (isLive2 && currentMS2?.isFinished) {
-            return currentMS2.team1Score > currentMS2.team2Score ? match2.teamA : match2.teamB;
-          }
-        }
-        return null;
-      };
-      
-      return getMatchWinner(roundIdx - 1, prevMatchIdx);
-    };
-    
-    const teamA = getTeamForMatch(r, m, 'A');
-    const teamB = getTeamForMatch(r, m, 'B');
-    
+    let isLive = false;
+    if (isGroup) {
+      isLive = !!liveState?.isRunning && !liveState?.isFinished;
+    } else if (isUpper || isLower || isGF) {
+      isLive = (tournament.bracket?.activeMatches || []).includes(matchIndex) && 
+               ((isUpper && mKey.startsWith('u-')) || (isLower && mKey.startsWith('l-')) || (isGF && mKey.startsWith('gf-')));
+    } else {
+      isLive = tournament.bracket?.currentRound === roundIndex && (tournament.bracket?.activeMatches || []).includes(matchIndex);
+    }
+
+    const isFinished = dbMatch.isFinished || !!liveState?.isFinished;
+
+    const teamA = resolveTeamRef(tournament, dbMatch.teamA) || dbMatch.teamA;
+    const teamB = resolveTeamRef(tournament, dbMatch.teamB) || dbMatch.teamB;
+
     let scoreA = null;
     let scoreB = null;
     let time = 0;
     let hiep = 1;
     let team1SetPoints = null;
     let team2SetPoints = null;
-    
+
     if (isLive && liveState) {
       scoreA = liveState.team1Score;
       scoreB = liveState.team2Score;
@@ -465,15 +593,15 @@ export default function TournamentLiveViewPage() {
       hiep = liveState.hiep;
       team1SetPoints = liveState.team1SetPoints ?? 0;
       team2SetPoints = liveState.team2SetPoints ?? 0;
-    } else if (dbMatch) {
-      scoreA = dbMatch.scoreA;
-      scoreB = dbMatch.scoreB;
-      time = dbMatch.time || 0;
-      hiep = dbMatch.hiep || 1;
-      team1SetPoints = dbMatch.team1SetPoints !== undefined ? dbMatch.team1SetPoints : null;
-      team2SetPoints = dbMatch.team2SetPoints !== undefined ? dbMatch.team2SetPoints : null;
+    } else {
+      scoreA = liveState ? liveState.team1Score : dbMatch.scoreA;
+      scoreB = liveState ? liveState.team2Score : dbMatch.scoreB;
+      time = liveState ? liveState.time : (dbMatch.time || 0);
+      hiep = liveState ? liveState.hiep : (dbMatch.hiep || 1);
+      team1SetPoints = liveState ? (liveState.team1SetPoints ?? null) : (dbMatch.team1SetPoints ?? null);
+      team2SetPoints = liveState ? (liveState.team2SetPoints ?? null) : (dbMatch.team2SetPoints ?? null);
     }
-    
+
     return {
       team1: teamA,
       team2: teamB,
@@ -590,7 +718,173 @@ export default function TournamentLiveViewPage() {
 
         {/* Bracket Tree View */}
         <div className="w-full">
-          {buildBracketData(tournament, handleSelectMatch).length === 0 ? (
+          {tournament.format === 'round_robin' && tournament.stage === 'group' ? (
+            <div className="space-y-12">
+              {tournament.groups?.map((group: any, gIdx: number) => {
+                const standings = calculateGroupStandings(group.teams, group.matches, tournament.matchStates);
+                return (
+                  <div key={gIdx} className="bg-[#0f1419] border border-white/[0.06] rounded-2xl p-6 space-y-6">
+                    <h3 className="text-lg font-black tracking-tight text-[#22c55e] border-b border-white/[0.06] pb-3">
+                      {group.name}
+                    </h3>
+                    
+                    {/* Standings Table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-white/[0.06] text-white/50">
+                            <th className="py-2 px-3">#</th>
+                            <th className="py-2 px-3">Đội bóng</th>
+                            <th className="py-2 px-3 text-center">MP</th>
+                            <th className="py-2 px-3 text-center">W</th>
+                            <th className="py-2 px-3 text-center">D</th>
+                            <th className="py-2 px-3 text-center">L</th>
+                            <th className="py-2 px-3 text-center">GD</th>
+                            <th className="py-2 px-3 text-center font-bold text-white">Pts</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {standings.map((row, idx) => (
+                            <tr key={row.teamId} className="border-b border-white/[0.04] hover:bg-white/[0.02]">
+                              <td className="py-2 px-3 font-semibold text-white/40">{idx + 1}</td>
+                              <td className="py-2 px-3 font-bold text-white">{row.teamName}</td>
+                              <td className="py-2 px-3 text-center">{row.mp}</td>
+                              <td className="py-2 px-3 text-center text-green-500">{row.w}</td>
+                              <td className="py-2 px-3 text-center text-blue-500">{row.d}</td>
+                              <td className="py-2 px-3 text-center text-red-500">{row.l}</td>
+                              <td className={`py-2 px-3 text-center ${row.gd > 0 ? 'text-green-500' : row.gd < 0 ? 'text-red-500' : ''}`}>
+                                {row.gd > 0 ? `+${row.gd}` : row.gd}
+                              </td>
+                              <td className="py-2 px-3 text-center font-black text-[#22c55e]">{row.pts}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Group Matches */}
+                    <div>
+                      <h4 className="text-xs font-black tracking-widest text-white/40 uppercase mb-3">Lịch thi đấu & Kết quả</h4>
+                      <div className="flex flex-wrap gap-4 justify-start">
+                        {group.matches.map((m: any, mIdx: number) => {
+                          const mKey = `g-${gIdx}-${mIdx}`;
+                          const ms = tournament.matchStates?.[mKey];
+                          const isRunning = ms?.isRunning && !ms?.isFinished;
+                          const isFinished = m.isFinished || ms?.isFinished;
+                          const sa = isRunning && ms ? ms.team1Score : (isFinished && ms ? ms.team1Score : m.scoreA);
+                          const sb = isRunning && ms ? ms.team2Score : (isFinished && ms ? ms.team2Score : m.scoreB);
+                          const done = isFinished;
+                          
+                          return (
+                            <div key={mIdx} className="relative flex items-center justify-center py-2">
+                              <BracketMatchCard
+                                a={m.teamA?.name}
+                                b={m.teamB?.name}
+                                sa={sa}
+                                sb={sb}
+                                done={done}
+                                isLive={isRunning}
+                                winner={m.winner?.name}
+                                matchKey={mKey}
+                                onSelect={handleSelectMatch}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : tournament.format === 'double_elimination' ? (
+            <div className="space-y-8">
+              {/* Tab Selector */}
+              <div className="flex justify-center border-b border-white/[0.06] pb-3 mb-6 gap-2 md:gap-4 overflow-x-auto">
+                {(['upper', 'lower', 'grand'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveDeTab(tab)}
+                    className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider uppercase transition-all duration-200 whitespace-nowrap ${
+                      activeDeTab === tab
+                        ? 'bg-[#22c55e]/10 border border-[#22c55e]/30 text-[#22c55e] shadow-[0_0_15px_rgba(34,197,94,0.1)]'
+                        : 'text-white/50 border border-transparent hover:text-white/80'
+                    }`}
+                  >
+                    {tab === 'upper' ? 'Nhánh Thắng (Upper)' : tab === 'lower' ? 'Nhánh Thua (Lower)' : 'Chung Kết Tổng (Grand)'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Render selected rounds */}
+              {(() => {
+                let rounds: any[][] = [];
+                let labelPrefix = '';
+                let keyPrefix = '';
+
+                if (activeDeTab === 'upper') {
+                  rounds = tournament.bracket?.upperRounds || [];
+                  labelPrefix = 'Nhánh Thắng R';
+                  keyPrefix = 'u-';
+                } else if (activeDeTab === 'lower') {
+                  rounds = tournament.bracket?.lowerRounds || [];
+                  labelPrefix = 'Nhánh Thua R';
+                  keyPrefix = 'l-';
+                } else {
+                  rounds = [tournament.bracket?.grandFinal || []];
+                  labelPrefix = 'Chung kết';
+                  keyPrefix = 'gf-';
+                }
+
+                if (rounds.length === 0 || rounds[0].length === 0) {
+                  return (
+                    <div className="text-center py-20 bg-[#0f1419] rounded-2xl border border-white/[0.06]">
+                      <p className="text-white/60 text-lg">Không có dữ liệu nhánh thi đấu</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="flex items-stretch justify-center gap-8 overflow-x-auto pb-8 pt-4 min-h-[400px]">
+                    {rounds.map((roundMatches, roundIdx) => (
+                      <div key={roundIdx} className="flex flex-col shrink-0 items-center w-[160px]">
+                        <h3 className="text-xs font-black tracking-widest text-[#22c55e]/70 uppercase text-center mb-8">
+                          {activeDeTab === 'grand' ? 'Chung Kết Tổng' : `${labelPrefix}${roundIdx + 1}`}
+                        </h3>
+                        <div className="flex flex-col justify-around flex-1 h-full gap-4">
+                          {roundMatches.map((m: any, matchIdx: number) => {
+                            const mKey = activeDeTab === 'grand' ? `gf-${matchIdx}` : `${keyPrefix}${roundIdx}-${matchIdx}`;
+                            const ms = tournament.matchStates?.[mKey];
+                            const isRunning = ms?.isRunning && !ms?.isFinished;
+                            const isFinished = m.isFinished || ms?.isFinished;
+                            const sa = isRunning && ms ? ms.team1Score : (isFinished && ms ? ms.team1Score : m.scoreA);
+                            const sb = isRunning && ms ? ms.team2Score : (isFinished && ms ? ms.team2Score : m.scoreB);
+                            const done = isFinished;
+
+                            return (
+                              <div key={matchIdx} className="relative flex items-center justify-center py-2">
+                                <BracketMatchCard
+                                  a={m.teamA?.name}
+                                  b={m.teamB?.name}
+                                  sa={sa}
+                                  sb={sb}
+                                  done={done}
+                                  isLive={isRunning}
+                                  winner={m.winner?.name}
+                                  matchKey={mKey}
+                                  onSelect={handleSelectMatch}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          ) : buildBracketData(tournament, handleSelectMatch).length === 0 ? (
             <div className="text-center py-20 bg-[#0f1419] rounded-2xl border border-white/[0.06]">
               <p className="text-white/60 text-lg">Không có dữ liệu sơ đồ cho giải đấu này</p>
             </div>
@@ -659,13 +953,13 @@ export default function TournamentLiveViewPage() {
       )}
 
       {/* Match Details Modal Overlay */}
-      {selectedMatch && selectedDetails && (
+      {selectedMatchKey && selectedDetails && (
         <div className="fixed inset-0 z-50 bg-[#080b10]/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#0f1419] border border-white/[0.08] p-6 rounded-2xl w-full max-w-2xl shadow-2xl relative max-h-[90vh] overflow-y-auto">
+          <div className="bg-[#0f1419] border border-white/[0.08] p-6 rounded-2xl w-full max-w-2xl shadow-2xl relative max-h-[90vh] overflow-y-auto animate-scale-in">
             
             {/* Close Button */}
             <button
-              onClick={() => setSelectedMatch(null)}
+              onClick={() => setSelectedMatchKey(null)}
               className="absolute top-4 right-4 text-white/40 hover:text-white transition-colors"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -677,7 +971,7 @@ export default function TournamentLiveViewPage() {
             {/* Modal Title */}
             <div className="text-center mb-6 border-b border-white/[0.06] pb-4">
               <p className="text-xs font-black tracking-widest text-[#22c55e] uppercase mb-1">
-                {getRoundLabel(selectedMatch.round, Math.ceil(Math.log2(getFallbackTeams(tournament).length)))} • Trận {selectedMatch.match + 1}
+                {getMatchLabel(selectedMatchKey)}
               </p>
               <div className="flex justify-center items-center gap-2 mt-2">
                 {selectedDetails.isLive ? (
