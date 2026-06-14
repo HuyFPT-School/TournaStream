@@ -93,6 +93,38 @@ export default function AdminDashboardPage() {
   const [transactionSearch, setTransactionSearch] = useState('');
   const [feedbackSearch, setFeedbackSearch] = useState('');
 
+  // User details modal states
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [userDetails, setUserDetails] = useState<any>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+
+  const handleUserClick = async (userId: string) => {
+    setSelectedUserId(userId);
+    setLoadingDetails(true);
+    setShowDetailsModal(true);
+    setUserDetails(null);
+    try {
+      const token = getAccessToken();
+      const response = await fetch(`${getApiBaseUrl()}/admin/users/${userId}/details`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch user details');
+      }
+      const data = await response.json();
+      setUserDetails(data);
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || 'Có lỗi xảy ra khi tải chi tiết người dùng.');
+      setShowDetailsModal(false);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
   useEffect(() => {
     const session = getSession();
     if (!session) {
@@ -476,7 +508,12 @@ export default function AdminDashboardPage() {
                     filteredUsers.map((user, idx) => {
                       const isActiveNow = user.lastActiveAt && (new Date().getTime() - new Date(user.lastActiveAt).getTime() < 5 * 60 * 1000);
                       return (
-                        <tr key={user._id} className="hover:bg-white/[0.02] transition-colors">
+                        <tr 
+                          key={user._id} 
+                          onClick={() => handleUserClick(user._id)}
+                          className="hover:bg-white/[0.04] transition-colors cursor-pointer"
+                          title="Nhấp để xem chi tiết người dùng"
+                        >
                           <td className="px-6 py-4 text-center text-white/40">{idx + 1}</td>
                           <td className="px-6 py-4 font-bold flex items-center gap-2">
                             {user.fullName}
@@ -690,6 +727,185 @@ export default function AdminDashboardPage() {
           </div>
         )}
       </section>
+      {/* User Details Modal */}
+      {showDetailsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#080b10]/80 backdrop-blur-md">
+          {/* Backdrop click to close */}
+          <div className="absolute inset-0" onClick={() => setShowDetailsModal(false)} />
+          
+          {/* Modal Content */}
+          <div className="relative z-10 w-full max-w-4xl max-h-[85vh] overflow-y-auto bg-[#0f1419] border border-white/[0.08] rounded-2xl p-6 md:p-8 shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col gap-6">
+            
+            {/* Modal Header */}
+            <div className="flex justify-between items-start border-b border-white/[0.06] pb-4">
+              <div>
+                <h3 className="text-2xl font-black tracking-tight text-white flex items-center gap-2.5">
+                  {loadingDetails ? 'Đang tải thông tin...' : userDetails?.user.fullName}
+                  {userDetails?.user.role === 'admin' && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-black bg-red-500/20 text-red-400 border border-red-500/30">
+                      ADMIN
+                    </span>
+                  )}
+                </h3>
+                {!loadingDetails && userDetails?.user && (
+                  <p className="text-white/60 text-sm font-mono mt-1">{userDetails.user.email}</p>
+                )}
+              </div>
+              <button 
+                onClick={() => setShowDetailsModal(false)}
+                className="p-2 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] text-white/60 hover:text-white transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {loadingDetails ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <div className="w-8 h-8 border-3 border-[#22c55e] border-t-transparent rounded-full animate-spin" />
+                <p className="text-white/40 text-xs">Đang truy vấn cơ sở dữ liệu...</p>
+              </div>
+            ) : (
+              userDetails && (
+                <div className="flex flex-col gap-6">
+                  {/* Summary Stats Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="p-4 rounded-xl border border-white/[0.05] bg-white/[0.01]">
+                      <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest block">Giải đấu đã tạo</span>
+                      <span className="text-3xl font-black text-white mt-1 block">{userDetails.tournaments.length}</span>
+                    </div>
+                    <div className="p-4 rounded-xl border border-white/[0.05] bg-white/[0.01]">
+                      <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest block">Tổng số giao dịch</span>
+                      <span className="text-3xl font-black text-white mt-1 block">{userDetails.transactions.length}</span>
+                    </div>
+                    <div className="p-4 rounded-xl border border-white/[0.05] bg-white/[0.01]">
+                      <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest block">Đánh giá nhận được</span>
+                      <span className="text-3xl font-black text-white mt-1 block">
+                        {userDetails.feedbacks.reduce((sum: number, t: any) => sum + (t.feedbacks?.length || 0), 0)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Tab Detail Contents */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Column 1: Tournaments List */}
+                    <div className="lg:col-span-1 flex flex-col gap-4">
+                      <h4 className="text-sm font-bold uppercase tracking-wider text-[#22c55e] border-b border-[#22c55e]/20 pb-2 flex items-center justify-between">
+                        <span>Giải đấu ({userDetails.tournaments.length})</span>
+                      </h4>
+                      <div className="overflow-y-auto max-h-[350px] pr-1 space-y-3">
+                        {userDetails.tournaments.length === 0 ? (
+                          <p className="text-white/30 text-xs italic py-4">Chưa tạo giải đấu nào.</p>
+                        ) : (
+                          userDetails.tournaments.map((t: any) => (
+                            <div key={t._id} className="p-3 rounded-lg border border-white/[0.06] bg-white/[0.01] hover:bg-white/[0.03] transition-colors text-left">
+                              <h5 className="font-bold text-xs truncate text-white" title={t.name}>{t.name}</h5>
+                              <div className="flex justify-between items-center text-[10px] text-white/40 mt-2">
+                                <span>{t.sport.toUpperCase()} • {t.teams?.length || 0} Đội</span>
+                                <span>{new Date(t.createdAt).toLocaleDateString('vi-VN')}</span>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Column 2: Transactions List */}
+                    <div className="lg:col-span-1 flex flex-col gap-4">
+                      <h4 className="text-sm font-bold uppercase tracking-wider text-[#22c55e] border-b border-[#22c55e]/20 pb-2">
+                        Giao dịch ({userDetails.transactions.length})
+                      </h4>
+                      <div className="overflow-y-auto max-h-[350px] pr-1 space-y-3">
+                        {userDetails.transactions.length === 0 ? (
+                          <p className="text-white/30 text-xs italic py-4">Chưa có giao dịch nào.</p>
+                        ) : (
+                          userDetails.transactions.map((tx: any) => (
+                            <div key={tx._id} className="p-3 rounded-lg border border-white/[0.06] bg-white/[0.01] flex flex-col gap-1.5 text-left">
+                              <div className="flex justify-between items-center">
+                                <span className="font-mono font-bold text-xs text-[#22c55e]">{tx.checkoutCode}</span>
+                                <span className={`px-1.5 py-0.5 text-[8px] font-black rounded-full ${
+                                  tx.status === 'paid'
+                                    ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                                    : 'bg-white/10 text-white/60 border border-white/20'
+                                }`}>
+                                  {tx.status === 'paid' ? 'Thành công' : tx.status}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center text-[10px] text-white/50">
+                                <span>{tx.planName}</span>
+                                <span className="font-bold text-white">{tx.amount.toLocaleString('vi-VN')}đ</span>
+                              </div>
+                              <span className="text-[9px] text-white/30 self-end">
+                                {new Date(tx.createdAt).toLocaleDateString('vi-VN')}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Column 3: Feedbacks List */}
+                    <div className="lg:col-span-1 flex flex-col gap-4">
+                      <h4 className="text-sm font-bold uppercase tracking-wider text-[#22c55e] border-b border-[#22c55e]/20 pb-2">
+                        Đánh giá ({userDetails.feedbacks.reduce((sum: number, t: any) => sum + (t.feedbacks?.length || 0), 0)})
+                      </h4>
+                      <div className="overflow-y-auto max-h-[350px] pr-1 space-y-3">
+                        {userDetails.feedbacks.length === 0 ? (
+                          <p className="text-white/30 text-xs italic py-4">Chưa nhận được đánh giá nào.</p>
+                        ) : (
+                          userDetails.feedbacks.flatMap((t: any) => 
+                            (t.feedbacks || []).map((fb: any, index: number) => (
+                              <div key={`${t._id}-${index}`} className="p-3 rounded-lg border border-white/[0.06] bg-white/[0.01] flex flex-col gap-1.5 text-left">
+                                <div className="flex justify-between items-start gap-1">
+                                  <span className="font-bold text-[10px] text-white/80 truncate max-w-[120px]" title={t.name}>
+                                    {t.name}
+                                  </span>
+                                  <span className="flex items-center gap-0.5 text-yellow-400 shrink-0">
+                                    {Array.from({ length: 5 }).map((_, i) => (
+                                      <svg
+                                        key={i}
+                                        className={`w-3.5 h-3.5 ${i < fb.rating ? 'fill-yellow-400 text-yellow-400' : 'text-white/20'}`}
+                                        viewBox="0 0 20 20"
+                                        fill="currentColor"
+                                      >
+                                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                      </svg>
+                                    ))}
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-white/60 italic leading-relaxed whitespace-pre-wrap">
+                                  {fb.content || 'Không có nhận xét'}
+                                </p>
+                                <span className="text-[8px] text-white/30 self-end">
+                                  {new Date(fb.createdAt).toLocaleDateString('vi-VN')}
+                                </span>
+                              </div>
+                            ))
+                          )
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              )
+            )}
+            
+            {/* Modal Footer */}
+            <div className="border-t border-white/[0.06] pt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowDetailsModal(false)}
+                className="px-6 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-white font-semibold text-sm transition-all"
+              >
+                Đóng
+              </button>
+            </div>
+            
+          </div>
+        </div>
+      )}
     </main>
   );
 }
