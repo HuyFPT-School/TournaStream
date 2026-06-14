@@ -5,10 +5,57 @@ import { useRouter, useParams } from 'next/navigation';
 import { useTournament, Member } from '@/app/contexts/TournamentContext';
 import { useState, useRef } from 'react';
 
-const positions = [
-  'Cầu thủ',
+const positionsBySport: Record<string, string[]> = {
+  soccer: [
+    'Tiền đạo',
+    'Tiền vệ',
+    'Hậu vệ',
+    'Thủ môn',
+    'Đội trưởng',
+    'Huấn luyện viên',
+    'Dự bị',
+  ],
+  basketball: [
+    'Hậu vệ dẫn bóng (PG)',
+    'Hậu vệ ghi điểm (SG)',
+    'Tiền phong phụ (SF)',
+    'Tiền phong chính (PF)',
+    'Trung phong (C)',
+    'Đội trưởng',
+    'Huấn luyện viên',
+    'Dự bị',
+  ],
+  volleyball: [
+    'Chuyền hai (Setter)',
+    'Chủ công (Outside Hitter)',
+    'Phụ công (Middle Blocker)',
+    'Đối chuyền (Opposite)',
+    'Libero',
+    'Đội trưởng',
+    'Huấn luyện viên',
+    'Dự bị',
+  ],
+  tennis: [
+    'Tay vợt đơn',
+    'Tay vợt đôi',
+    'Huấn luyện viên',
+    'Dự bị',
+  ],
+  esports: [
+    'Đường đơn (Solo Lane)',
+    'Đường giữa (Mid Lane)',
+    'Đường rồng / Xạ thủ (ADC)',
+    'Hỗ trợ (Support)',
+    'Đi rừng (Jungler)',
+    'Đội trưởng / IGL',
+    'Huấn luyện viên / Coach',
+    'Dự bị',
+  ],
+};
+
+const defaultPositions = [
+  'Thành viên',
   'Đội trưởng',
-  'Thủ môn',
   'Huấn luyện viên',
   'Dự bị',
 ];
@@ -23,8 +70,11 @@ export default function MemberDetailsPage() {
   const team = data.teams.find(t => t.id === teamId);
   const existingMember = team?.members.find(m => m.id === memberId);
 
+  const currentSport = data.sport || 'soccer';
+  const positions = positionsBySport[currentSport] || defaultPositions;
+
   const [name, setName] = useState(existingMember?.name || '');
-  const [position, setPosition] = useState(existingMember?.position || 'Cầu thủ');
+  const [position, setPosition] = useState(existingMember?.position || positions[0]);
   const [image, setImage] = useState<string | null>(existingMember?.image || null);
   const [imagePreview, setImagePreview] = useState<string | null>(existingMember?.image || null);
   const fileInputRef = useRef<HTMLInputElement>(null);
