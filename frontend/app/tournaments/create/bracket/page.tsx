@@ -58,6 +58,15 @@ export default function BracketPage() {
     setOrderedTeams(newTeams);
   };
 
+  const getGroupsOfTeams = (teams: any[], groupsCount: number) => {
+    const groups: any[][] = Array.from({ length: groupsCount }, () => []);
+    teams.forEach((team, idx) => {
+      const groupIdx = idx % groupsCount;
+      groups[groupIdx].push(team);
+    });
+    return groups;
+  };
+
   const handleCreate = () => {
     loadTournamentData({
       ...data,
@@ -216,19 +225,56 @@ export default function BracketPage() {
           ))}
         </div>
 
-        {/* Bracket Info */}
-        <div className="p-4 rounded-lg bg-[#0f1419] border border-white/[0.06] mb-8">
-          <div className="flex gap-3 items-start">
-            <div className="text-lg flex-shrink-0">🎯</div>
-            <div className="flex-1">
-              <div className="font-semibold mb-1">MỞ PHÒNG BẢNG ĐẤU — ⚽ BÓNG ĐÁ</div>
-              <div className="text-sm text-white/60">
-                Trận 1: {orderedTeams[0]?.name} vs {orderedTeams[1]?.name}
-              </div>
-              <div className="text-xs text-white/50 mt-1">2 đội, 1 vòng — 45 phút/hiệp - Có hiệp phụ</div>
+        {/* Seeding Info Preview */}
+        {data.format === 'round_robin' ? (
+          <div className="p-6 rounded-lg bg-[#0f1419] border border-white/[0.06] mb-8 space-y-4">
+            <div className="flex gap-3 items-center pb-3 border-b border-white/[0.06]">
+              <div className="text-xl">📊</div>
+              <div className="font-semibold text-sm">Xem trước phân chia bảng đấu ({data.groupsCount} bảng)</div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {getGroupsOfTeams(orderedTeams, data.groupsCount || 1).map((groupTeams, gIdx) => (
+                <div key={gIdx} className="p-4 rounded-lg bg-[#080b10] border border-white/[0.04] space-y-2">
+                  <div className="text-xs font-bold text-[#22c55e]">BẢNG {String.fromCharCode(65 + gIdx)}</div>
+                  <div className="space-y-1.5">
+                    {groupTeams.map((team, tIdx) => (
+                      <div key={team.id} className="text-xs flex justify-between text-white/80">
+                        <span>{tIdx + 1}. {team.name}</span>
+                        <span className="text-white/30">{team.members.length} TV</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
+        ) : data.format === 'double_elimination' ? (
+          <div className="p-4 rounded-lg bg-[#0f1419] border border-white/[0.06] mb-8">
+            <div className="flex gap-3 items-start">
+              <div className="text-lg flex-shrink-0">🎯</div>
+              <div className="flex-1">
+                <div className="font-semibold mb-1">THỂ THỨC NHÁNH THẮNG - NHÁNH THUA</div>
+                <div className="text-sm text-white/60">
+                  Vòng 1 Nhánh thắng: {orderedTeams[0]?.name} vs {orderedTeams[1]?.name}, {orderedTeams[2]?.name} vs {orderedTeams[3]?.name}...
+                </div>
+                <div className="text-xs text-white/50 mt-1">Đội thua trận đầu tiên sẽ rơi xuống Nhánh thua để thi đấu tiếp.</div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="p-4 rounded-lg bg-[#0f1419] border border-white/[0.06] mb-8">
+            <div className="flex gap-3 items-start">
+              <div className="text-lg flex-shrink-0">🎯</div>
+              <div className="flex-1">
+                <div className="font-semibold mb-1">THỂ THỨC LOẠI TRỰC TIẾP</div>
+                <div className="text-sm text-white/60">
+                  Cặp 1: {orderedTeams[0]?.name} vs {orderedTeams[1]?.name}
+                </div>
+                <div className="text-xs text-white/50 mt-1">Thua 1 trận sẽ bị loại khỏi giải đấu ngay lập tức.</div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* CTA Buttons */}
         <div className="flex gap-4">
@@ -242,7 +288,7 @@ export default function BracketPage() {
             onClick={handleCreate}
             className="flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200"
           >
-            Tạo giải đấu & Sinh bracket
+            Tạo giải đấu & Khởi tạo
           </button>
         </div>
       </section>

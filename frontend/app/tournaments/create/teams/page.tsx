@@ -43,13 +43,32 @@ export default function TeamsPage() {
     return n > 1 && (n & (n - 1)) === 0;
   };
 
-  const handleContinue = () => {
-    if (data.teams.length < 2) {
-      alert('Vui lòng thêm ít nhất 2 đội');
-      return;
+  const isValidTeamCount = () => {
+    const len = data.teams.length;
+    const format = data.format || 'single_elimination';
+    const groupsCount = data.groupsCount || 1;
+
+    if (format === 'single_elimination') {
+      return len >= 2 && isPowerOfTwo(len);
     }
-    if (!isPowerOfTwo(data.teams.length)) {
-      alert('Số lượng đội thi đấu phải là lũy thừa của 2 (2, 4, 8, 16, 32...) để có sơ đồ thi đấu hợp lệ.');
+    if (format === 'double_elimination') {
+      return len >= 4 && isPowerOfTwo(len);
+    }
+    if (format === 'round_robin') {
+      return len >= groupsCount * 2;
+    }
+    return false;
+  };
+
+  const handleContinue = () => {
+    if (!isValidTeamCount()) {
+      if (data.format === 'round_robin') {
+        alert(`Vui lòng thêm ít nhất ${(data.groupsCount || 1) * 2} đội cho thể thức Vòng bảng (${data.groupsCount} bảng).`);
+      } else if (data.format === 'double_elimination') {
+        alert('Thể thức nhánh thắng - thua yêu cầu ít nhất 4 đội và số đội phải là lũy thừa của 2.');
+      } else {
+        alert('Thể thức loại trực tiếp yêu cầu ít nhất 2 đội và số đội phải là lũy thừa của 2.');
+      }
       return;
     }
     router.push('/tournaments/create/members');
@@ -195,12 +214,17 @@ export default function TeamsPage() {
         )}
 
         {/* Invalid team count warning */}
-        {!isPowerOfTwo(data.teams.length) && data.teams.length > 0 && (
+        {!isValidTeamCount() && data.teams.length > 0 && (
           <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-sm mb-6 flex items-start gap-2.5">
             <span className="text-base">⚠️</span>
             <div>
               <div className="font-semibold mb-0.5">Số lượng đội không hợp lệ</div>
-              Sơ đồ thi đấu loại trực tiếp yêu cầu số lượng đội phải là lũy thừa của 2 (2, 4, 8, 16 hoặc 32 đội). Hiện tại bạn đang có {data.teams.length} đội.
+              {data.format === 'round_robin'
+                ? `Thể thức vòng bảng với ${data.groupsCount} bảng yêu cầu tối thiểu ${(data.groupsCount || 1) * 2} đội (tối thiểu 2 đội mỗi bảng). Hiện tại có ${data.teams.length} đội.`
+                : data.format === 'double_elimination'
+                  ? `Thể thức nhánh thắng - thua yêu cầu số lượng đội là lũy thừa của 2 và tối thiểu 4 đội (4, 8, 16 hoặc 32 đội). Hiện tại có ${data.teams.length} đội.`
+                  : `Thể thức loại trực tiếp yêu cầu số lượng đội phải là lũy thừa của 2 (2, 4, 8, 16 hoặc 32 đội). Hiện tại có ${data.teams.length} đội.`
+              }
             </div>
           </div>
         )}
@@ -215,7 +239,7 @@ export default function TeamsPage() {
           </Link>
           <button
             onClick={handleContinue}
-            disabled={data.teams.length < 2 || !isPowerOfTwo(data.teams.length)}
+            disabled={!isValidTeamCount()}
             className="flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Tiếp tục

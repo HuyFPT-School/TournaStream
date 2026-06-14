@@ -105,6 +105,219 @@ function buildInitialBracket(teams: TeamRef[]): BracketState {
   };
 }
 
+interface StandingRow {
+  teamId: string;
+  teamName: string;
+  mp: number; // matches played
+  w: number;  // wins
+  d: number;  // draws
+  l: number;  // losses
+  gf: number; // goals for
+  ga: number; // goals against
+  gd: number; // goal difference
+  pts: number; // points
+}
+
+function calculateGroupStandings(groupTeams: TeamRef[], groupMatches: any[], matchStates: any): StandingRow[] {
+  const standings: Record<string, StandingRow> = {};
+
+  groupTeams.forEach((team) => {
+    if (team.id) {
+      standings[team.id] = {
+        teamId: team.id,
+        teamName: team.name || '',
+        mp: 0,
+        w: 0,
+        d: 0,
+        l: 0,
+        gf: 0,
+        ga: 0,
+        gd: 0,
+        pts: 0,
+      };
+    }
+  });
+
+  const matchesArray = groupMatches || [];
+  matchesArray.forEach((m) => {
+    const mState = matchStates?.[m.id];
+    const isFinished = m.isFinished || mState?.isFinished;
+    if (!isFinished) return;
+
+    const scoreA = mState ? mState.team1Score : (m.scoreA ?? 0);
+    const scoreB = mState ? mState.team2Score : (m.scoreB ?? 0);
+    const idA = m.teamA?.id;
+    const idB = m.teamB?.id;
+
+    if (idA && standings[idA]) {
+      standings[idA].mp += 1;
+      standings[idA].gf += scoreA;
+      standings[idA].ga += scoreB;
+      standings[idA].gd = standings[idA].gf - standings[idA].ga;
+      if (scoreA > scoreB) {
+        standings[idA].w += 1;
+        standings[idA].pts += 3;
+      } else if (scoreA === scoreB) {
+        standings[idA].d += 1;
+        standings[idA].pts += 1;
+      } else {
+        standings[idA].l += 1;
+      }
+    }
+
+    if (idB && standings[idB]) {
+      standings[idB].mp += 1;
+      standings[idB].gf += scoreB;
+      standings[idB].ga += scoreA;
+      standings[idB].gd = standings[idB].gf - standings[idB].ga;
+      if (scoreB > scoreA) {
+        standings[idB].w += 1;
+        standings[idB].pts += 3;
+      } else if (scoreA === scoreB) {
+        standings[idB].d += 1;
+        standings[idB].pts += 1;
+      } else {
+        standings[idB].l += 1;
+      }
+    }
+  });
+
+  return Object.values(standings).sort((a, b) => {
+    if (b.pts !== a.pts) return b.pts - a.pts;
+    if (b.gd !== a.gd) return b.gd - a.gd;
+    if (b.gf !== a.gf) return b.gf - a.gf;
+    return a.teamName.localeCompare(b.teamName);
+  });
+}
+
+function seedKnockoutFromGroups(groups: any[], advancingCount: number, matchStates: any): TeamRef[] {
+  const groupStandings = groups.map((g, gIdx) => {
+    return {
+      groupIdx: gIdx,
+      name: g.name,
+      standings: calculateGroupStandings(g.teams, g.matches, matchStates)
+    };
+  });
+
+  const candidates: Array<{ team: TeamRef; rank: number; groupIdx: number }> = [];
+  groupStandings.forEach((gs) => {
+    for (let r = 0; r < advancingCount; r++) {
+      const row = gs.standings[r];
+      if (row) {
+        candidates.push({
+          team: { id: row.teamId, name: row.teamName },
+          rank: r + 1,
+          groupIdx: gs.groupIdx
+        });
+      }
+    }
+  });
+
+  const seeded: TeamRef[] = [];
+  const numGroups = groups.length;
+
+  if (numGroups === 1) {
+    if (candidates.length === 4) {
+      seeded.push(candidates[0].team, candidates[3].team, candidates[1].team, candidates[2].team);
+    } else {
+      candidates.forEach(c => seeded.push(c.team));
+    }
+  } else if (numGroups === 2) {
+    if (advancingCount === 2) {
+      const a1 = candidates.find(c => c.groupIdx === 0 && c.rank === 1)?.team;
+      const a2 = candidates.find(c => c.groupIdx === 0 && c.rank === 2)?.team;
+      const b1 = candidates.find(c => c.groupIdx === 1 && c.rank === 1)?.team;
+      const b2 = candidates.find(c => c.groupIdx === 1 && c.rank === 2)?.team;
+      if (a1 && b2) seeded.push(a1, b2);
+      if (b1 && a2) seeded.push(b1, a2);
+    } else {
+      const a1 = candidates.find(c => c.groupIdx === 0 && c.rank === 1)?.team;
+      const b1 = candidates.find(c => c.groupIdx === 1 && c.rank === 1)?.team;
+      if (a1 && b1) seeded.push(a1, b1);
+    }
+  } else if (numGroups === 4) {
+    if (advancingCount === 2) {
+      const getCandidate = (g: number, r: number) => candidates.find(c => c.groupIdx === g && c.rank === r)?.team;
+      const a1 = getCandidate(0, 1), a2 = getCandidate(0, 2);
+      const b1 = getCandidate(1, 1), b2 = getCandidate(1, 2);
+      const c1 = getCandidate(2, 1), c2 = getCandidate(2, 2);
+      const d1 = getCandidate(3, 1), d2 = getCandidate(3, 2);
+
+      if (a1 && b2) seeded.push(a1, b2);
+      if (c1 && d2) seeded.push(c1, d2);
+      if (b1 && a2) seeded.push(b1, a2);
+      if (d1 && c2) seeded.push(d1, c2);
+    } else {
+      const getCandidate = (g: number, r: number) => candidates.find(c => c.groupIdx === g && c.rank === r)?.team;
+      const a1 = getCandidate(0, 1);
+      const b1 = getCandidate(1, 1);
+      const c1 = getCandidate(2, 1);
+      const d1 = getCandidate(3, 1);
+      if (a1 && b1) seeded.push(a1, b1);
+      if (c1 && d1) seeded.push(c1, d1);
+    }
+  } else {
+    candidates.forEach(c => seeded.push(c.team));
+  }
+
+  return seeded;
+}
+
+function advanceDoubleElimination(bracket: any, roundIndex: number, matchIndex: number, winner: any, loser: any, isUpper: boolean) {
+  const numUpperRounds = bracket.upperRounds.length;
+  const totalLowerRounds = bracket.lowerRounds.length;
+
+  if (isUpper) {
+    if (roundIndex === numUpperRounds - 1) {
+      bracket.grandFinal[0].teamA = winner;
+      bracket.lowerRounds[totalLowerRounds - 1][0].teamB = loser;
+    } else {
+      const nextMatchIdx = Math.floor(matchIndex / 2);
+      const isTeamA = matchIndex % 2 === 0;
+      const targetMatch = bracket.upperRounds[roundIndex + 1][nextMatchIdx];
+      if (isTeamA) {
+        targetMatch.teamA = winner;
+      } else {
+        targetMatch.teamB = winner;
+      }
+
+      if (roundIndex === 0) {
+        const lowerMatchIdx = Math.floor(matchIndex / 2);
+        const isLowerTeamA = matchIndex % 2 === 0;
+        const targetLowerMatch = bracket.lowerRounds[0][lowerMatchIdx];
+        if (isLowerTeamA) {
+          targetLowerMatch.teamA = loser;
+        } else {
+          targetLowerMatch.teamB = loser;
+        }
+      } else {
+        const lowerRoundIdx = 2 * roundIndex - 1;
+        const targetLowerMatch = bracket.lowerRounds[lowerRoundIdx][matchIndex];
+        targetLowerMatch.teamB = loser;
+      }
+    }
+  } else {
+    if (roundIndex === totalLowerRounds - 1) {
+      bracket.grandFinal[0].teamB = winner;
+    } else {
+      const isMinorRound = roundIndex % 2 === 0;
+      if (isMinorRound) {
+        const targetLowerMatch = bracket.lowerRounds[roundIndex + 1][matchIndex];
+        targetLowerMatch.teamA = winner;
+      } else {
+        const nextLowerMatchIdx = Math.floor(matchIndex / 2);
+        const isLowerTeamA = matchIndex % 2 === 0;
+        const targetLowerMatch = bracket.lowerRounds[roundIndex + 1][nextLowerMatchIdx];
+        if (isLowerTeamA) {
+          targetLowerMatch.teamA = winner;
+        } else {
+          targetLowerMatch.teamB = winner;
+        }
+      }
+    }
+  }
+}
+
 
 interface BracketMatchCardProps {
   a: string;
@@ -345,6 +558,8 @@ export default function TournamentDetailPage() {
   const [isOwner, setIsOwner] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
   const [matchState, setMatchState] = useState<MatchState>({
     team1Score: 0,
     team2Score: 0,
@@ -355,6 +570,7 @@ export default function TournamentDetailPage() {
     buGio: 0,
   });
   const [selectedMatchKey, setSelectedMatchKey] = useState<string | null>(null);
+  const [activeDeTab, setActiveDeTab] = useState<'upper' | 'lower' | 'grand'>('upper');
   const localKeyRef = useRef<string | null>(null);
   const backendKeyRef = useRef<string | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
@@ -705,13 +921,26 @@ export default function TournamentDetailPage() {
   const handleStartStop = () => {
     if (!tournament || !selectedMatchKey) return;
 
-    const [roundIdxStr, matchIdxStr] = selectedMatchKey.split('-');
-    const matchIdx = parseInt(matchIdxStr, 10);
+    let matchIdx = 0;
+    if (selectedMatchKey.startsWith('g-')) {
+      const parts = selectedMatchKey.split('-');
+      matchIdx = parseInt(parts[2], 10);
+    } else if (selectedMatchKey.startsWith('u-') || selectedMatchKey.startsWith('l-')) {
+      const parts = selectedMatchKey.split('-');
+      matchIdx = parseInt(parts[2], 10);
+    } else if (selectedMatchKey.startsWith('gf-')) {
+      const parts = selectedMatchKey.split('-');
+      matchIdx = parseInt(parts[1], 10);
+    } else {
+      const parts = selectedMatchKey.split('-');
+      matchIdx = parseInt(parts[1], 10);
+    }
 
+    const isGroup = selectedMatchKey.startsWith('g-');
     const activeMatches = [...(tournament.bracket?.activeMatches || [])];
     let bracketUpdated = false;
     let updatedBracket = tournament.bracket;
-    if (tournament.bracket && !activeMatches.includes(matchIdx)) {
+    if (tournament.bracket && !isGroup && !activeMatches.includes(matchIdx)) {
       activeMatches.push(matchIdx);
       updatedBracket = {
         ...tournament.bracket,
@@ -813,38 +1042,69 @@ export default function TournamentDetailPage() {
 
     if (!tournament || !selectedMatchKey) return;
 
-    const baseTeams = getFallbackTeams(tournament);
-    const bracket: BracketState = tournament.bracket?.rounds?.length
-      ? JSON.parse(JSON.stringify(tournament.bracket))
-      : buildInitialBracket(baseTeams);
+    const updatedTournament = JSON.parse(JSON.stringify(tournament));
+    let dbMatch = null;
+    let isGroup = false;
+    let isUpper = false;
+    let isLower = false;
+    let isGF = false;
+    let roundIndex = 0;
+    let matchIndex = 0;
 
-    const [roundIndexStr, matchIndexStr] = selectedMatchKey.split('-');
-    const roundIndex = parseInt(roundIndexStr, 10);
-    const matchIndex = parseInt(matchIndexStr, 10);
-    const round = bracket.rounds[roundIndex] || [];
-    const match = round[matchIndex];
-
-    if (!match) return;
-
-    match.scoreA = matchState.team1Score;
-    match.scoreB = matchState.team2Score;
-    match.isFinished = true;
-
-    // Resolve team details
-    if (match.teamA?.id && !match.teamA.name) {
-      const resolved = tournament.teams?.find((t: any) => t.id === match.teamA!.id);
-      if (resolved) match.teamA = { id: resolved.id, name: resolved.name };
+    if (selectedMatchKey.startsWith('g-')) {
+      const parts = selectedMatchKey.split('-');
+      roundIndex = parseInt(parts[1], 10); // groupIndex
+      matchIndex = parseInt(parts[2], 10);
+      dbMatch = updatedTournament.groups?.[roundIndex]?.matches?.[matchIndex];
+      isGroup = true;
+    } else if (selectedMatchKey.startsWith('u-')) {
+      const parts = selectedMatchKey.split('-');
+      roundIndex = parseInt(parts[1], 10);
+      matchIndex = parseInt(parts[2], 10);
+      dbMatch = updatedTournament.bracket?.upperRounds?.[roundIndex]?.[matchIndex];
+      isUpper = true;
+    } else if (selectedMatchKey.startsWith('l-')) {
+      const parts = selectedMatchKey.split('-');
+      roundIndex = parseInt(parts[1], 10);
+      matchIndex = parseInt(parts[2], 10);
+      dbMatch = updatedTournament.bracket?.lowerRounds?.[roundIndex]?.[matchIndex];
+      isLower = true;
+    } else if (selectedMatchKey.startsWith('gf-')) {
+      const parts = selectedMatchKey.split('-');
+      matchIndex = parseInt(parts[1], 10);
+      dbMatch = updatedTournament.bracket?.grandFinal?.[matchIndex];
+      isGF = true;
+    } else {
+      const parts = selectedMatchKey.split('-');
+      roundIndex = parseInt(parts[0], 10);
+      matchIndex = parseInt(parts[1], 10);
+      dbMatch = updatedTournament.bracket?.rounds?.[roundIndex]?.[matchIndex];
     }
-    if (match.teamB?.id && !match.teamB.name) {
-      const resolved = tournament.teams?.find((t: any) => t.id === match.teamB!.id);
-      if (resolved) match.teamB = { id: resolved.id, name: resolved.name };
+
+    if (!dbMatch) return;
+
+    dbMatch.scoreA = matchState.team1Score;
+    dbMatch.scoreB = matchState.team2Score;
+    dbMatch.isFinished = true;
+
+    if (dbMatch.teamA?.id && !dbMatch.teamA.name) {
+      const resolved = updatedTournament.teams?.find((t: any) => t.id === dbMatch.teamA!.id);
+      if (resolved) dbMatch.teamA = { id: resolved.id, name: resolved.name };
+    }
+    if (dbMatch.teamB?.id && !dbMatch.teamB.name) {
+      const resolved = updatedTournament.teams?.find((t: any) => t.id === dbMatch.teamB!.id);
+      if (resolved) dbMatch.teamB = { id: resolved.id, name: resolved.name };
     }
 
-    // Determine winner
-    const rawWinner = pickWinner(match.teamA, match.teamB, matchState.team1Score, matchState.team2Score);
-    match.winner = rawWinner?.id
-      ? (tournament.teams?.find((t: any) => t.id === rawWinner.id) || rawWinner)
+    const rawWinner = pickWinner(dbMatch.teamA, dbMatch.teamB, matchState.team1Score, matchState.team2Score);
+    dbMatch.winner = rawWinner?.id
+      ? (updatedTournament.teams?.find((t: any) => t.id === rawWinner.id) || rawWinner)
       : rawWinner;
+
+    const rawLoser = dbMatch.winner?.id === dbMatch.teamA?.id ? dbMatch.teamB : dbMatch.teamA;
+    const loser = rawLoser?.id
+      ? (updatedTournament.teams?.find((t: any) => t.id === rawLoser.id) || rawLoser)
+      : rawLoser;
 
     const nextMatchState: MatchState = {
       ...matchState,
@@ -853,99 +1113,121 @@ export default function TournamentDetailPage() {
     };
 
     const updatedMatchStates = {
-      ...(tournament.matchStates || {}),
+      ...(updatedTournament.matchStates || {}),
       [selectedMatchKey]: nextMatchState,
     };
+    updatedTournament.matchStates = updatedMatchStates;
+    updatedTournament.matchState = nextMatchState;
 
-    // Remove from active matches
-    const activeMatches = (bracket.activeMatches || []).filter((idx: number) => idx !== matchIndex);
-    bracket.activeMatches = activeMatches;
+    let bracketFinished = false;
 
-    // Check if all matches in the current round are finished
-    const allMatchesInRoundFinished = round.every((m: any, idx: number) => {
-      return m.isFinished || idx === matchIndex;
-    });
-
-    if (allMatchesInRoundFinished) {
-      const winners = round.map((m: any, idx: number) => {
-        if (idx === matchIndex) {
-          return pickWinner(m.teamA, m.teamB, matchState.team1Score, matchState.team2Score);
-        }
-        return m.winner;
-      }).filter(Boolean) as TeamRef[];
-
-      const resolvedWinners = winners.map(w =>
-        w.id ? (tournament.teams?.find((t: any) => t.id === w.id) || w) : w
+    if (isGroup) {
+      // For Group Stage: check if all matches finished
+      // Standings will be recalculated on demand
+      const allGroupMatchesFinished = updatedTournament.groups.every((g: any) =>
+        g.matches.every((m: any) => m.isFinished || (g.name === updatedTournament.groups[roundIndex].name && m.id === dbMatch.id))
       );
+    } else if (isUpper || isLower || isGF) {
+      advanceDoubleElimination(updatedTournament.bracket, roundIndex, matchIndex, dbMatch.winner, loser, isUpper);
+      
+      const activeMatches = (updatedTournament.bracket.activeMatches || []).filter((idx: number) => idx !== matchIndex);
+      updatedTournament.bracket.activeMatches = activeMatches;
 
-      if (resolvedWinners.length > 1) {
-        const nextRound = buildNextRound(resolvedWinners);
-        if (bracket.rounds[roundIndex + 1]) {
-          bracket.rounds[roundIndex + 1] = nextRound;
-        } else {
-          bracket.rounds.push(nextRound);
+      if (isGF) {
+        if (matchIndex === 0) {
+          if (dbMatch.winner?.id === dbMatch.teamA?.id) {
+            updatedTournament.bracket.isFinished = true;
+            bracketFinished = true;
+          } else {
+            // Lower winner won: trigger reset
+            updatedTournament.bracket.grandFinal.push({
+              teamA: dbMatch.teamA,
+              teamB: dbMatch.teamB,
+              scoreA: null,
+              scoreB: null,
+              isFinished: false,
+            });
+            updatedTournament.bracket.currentMatch = 1;
+          }
+        } else if (matchIndex === 1) {
+          updatedTournament.bracket.isFinished = true;
+          bracketFinished = true;
         }
-        bracket.currentRound = roundIndex + 1;
-        bracket.currentMatch = 0;
-        bracket.activeMatches = []; // Reset active matches for new round
       } else {
-        bracket.isFinished = true;
+        // Check if both upper final and lower final are done to trigger grand final
+        const bracket = updatedTournament.bracket;
+        const upperFinalDone = bracket.upperRounds[bracket.upperRounds.length - 1][0].isFinished;
+        const lowerFinalDone = bracket.lowerRounds[bracket.lowerRounds.length - 1][0].isFinished;
+        if (upperFinalDone && lowerFinalDone) {
+          // Both done, check if grandFinal initialized
+          const gf = bracket.grandFinal[0];
+          if (gf.teamA?.name === '?' || gf.teamB?.name === '?') {
+            gf.teamA = bracket.upperRounds[bracket.upperRounds.length - 1][0].winner;
+            gf.teamB = bracket.lowerRounds[bracket.lowerRounds.length - 1][0].winner;
+          }
+        }
+      }
+    } else {
+      // Single Elimination (legacy)
+      const bracket = updatedTournament.bracket;
+      const round = bracket.rounds[roundIndex] || [];
+      const activeMatches = (bracket.activeMatches || []).filter((idx: number) => idx !== matchIndex);
+      bracket.activeMatches = activeMatches;
+
+      const allMatchesInRoundFinished = round.every((m: any, idx: number) => {
+        return m.isFinished || idx === matchIndex;
+      });
+
+      if (allMatchesInRoundFinished) {
+        const winners = round.map((m: any, idx: number) => {
+          if (idx === matchIndex) {
+            return pickWinner(m.teamA, m.teamB, matchState.team1Score, matchState.team2Score);
+          }
+          return m.winner;
+        }).filter(Boolean) as TeamRef[];
+
+        const resolvedWinners = winners.map(w =>
+          w.id ? (updatedTournament.teams?.find((t: any) => t.id === w.id) || w) : w
+        );
+
+        if (resolvedWinners.length > 1) {
+          const nextRound = buildNextRound(resolvedWinners);
+          if (bracket.rounds[roundIndex + 1]) {
+            bracket.rounds[roundIndex + 1] = nextRound;
+          } else {
+            bracket.rounds.push(nextRound);
+          }
+          bracket.currentRound = roundIndex + 1;
+          bracket.currentMatch = 0;
+          bracket.activeMatches = [];
+        } else {
+          bracket.isFinished = true;
+          bracketFinished = true;
+        }
       }
     }
 
-    const updatedTournament = {
-      ...tournament,
-      bracket,
-      matchStates: updatedMatchStates,
-      matchState: nextMatchState,
-      anyMatchRunning: Object.values(updatedMatchStates).some((ms: any) => ms.isRunning && !ms.isFinished),
-    };
+    updatedTournament.anyMatchRunning = Object.values(updatedMatchStates).some((ms: any) => ms.isRunning && !ms.isFinished);
 
-    if (bracket.isFinished) {
-      const numRounds = Math.ceil(Math.log2((tournament.orderedTeams || tournament.teams || []).length));
+    if (bracketFinished) {
+      const numRounds = isGF ? 1 : Math.ceil(Math.log2((updatedTournament.orderedTeams || updatedTournament.teams || []).length));
       setFinishedMatchInfo({
-        teamA: match.teamA?.name || 'Đội 1',
-        teamB: match.teamB?.name || 'Đội 2',
+        teamA: dbMatch.teamA?.name || 'Đội 1',
+        teamB: dbMatch.teamB?.name || 'Đội 2',
         scoreA: matchState.team1Score,
         scoreB: matchState.team2Score,
-        roundLabel: getRoundLabel(roundIndex, numRounds),
+        roundLabel: isGF ? 'Chung kết tổng' : getRoundLabel(roundIndex, numRounds),
       });
 
-      setPendingFinishData({ bracket, nextMatchState, updatedTournament });
+      setPendingFinishData({ bracket: updatedTournament.bracket, nextMatchState, updatedTournament });
       setFeedbackRating(0);
       setFeedbackHover(0);
       setFeedbackContent('');
       setShowFeedbackModal(true);
     } else {
-      // Find another active or pending match
-      let nextSelectedKey: string | null = null;
-      if (bracket.activeMatches && bracket.activeMatches.length > 0) {
-        nextSelectedKey = `${bracket.currentRound}-${bracket.activeMatches[0]}`;
-      } else {
-        const pendingIdx = bracket.rounds[bracket.currentRound]?.findIndex((m: any) => !m.isFinished);
-        if (pendingIdx !== -1) {
-          nextSelectedKey = `${bracket.currentRound}-${pendingIdx}`;
-        }
-      }
-
-      setSelectedMatchKey(nextSelectedKey);
-      if (nextSelectedKey && updatedMatchStates[nextSelectedKey]) {
-        setMatchState(updatedMatchStates[nextSelectedKey]);
-      } else {
-        setMatchState({
-          team1Score: 0,
-          team2Score: 0,
-          time: 0,
-          isRunning: false,
-          hiep: 1,
-          isFinished: false,
-          buGio: 0,
-        });
-      }
-
+      setSelectedMatchKey(null);
       setTournament(updatedTournament);
       localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
-
       const savedList = localStorage.getItem(tournamentsKey);
       if (savedList) {
         try {
@@ -1080,9 +1362,13 @@ export default function TournamentDetailPage() {
       anyMatchRunning: Object.values(updatedMatchStates).some((ms: any) => ms.isRunning && !ms.isFinished),
     };
 
+    setIsSwitching(true);
     setSelectedMatchKey(matchKey);
     setTournament(updatedTournament);
     setMatchState(initialMatchState);
+    setTimeout(() => {
+      setIsSwitching(false);
+    }, 350);
 
     localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
     const savedList = localStorage.getItem(tournamentsKey);
@@ -1106,15 +1392,48 @@ export default function TournamentDetailPage() {
     }
   };
 
-  const handleMatchCardClick = (roundIdx: number, matchIdx: number) => {
+  const handleMatchCardClick = (mKey: string) => {
     if (!isOwner) {
-      router.push(`/tournaments/${tournamentId}/live`);
+      setIsRedirecting(true);
+      setTimeout(() => {
+        router.push(`/tournaments/${tournamentId}/live`);
+      }, 650);
       return;
     }
 
-    if (!tournament || !tournament.bracket) return;
+    if (!tournament) return;
 
-    const mKey = `${roundIdx}-${matchIdx}`;
+    let dbMatch = null;
+    let roundIdx = 0;
+    let matchIdx = 0;
+
+    if (mKey.startsWith('g-')) {
+      const parts = mKey.split('-');
+      roundIdx = parseInt(parts[1], 10);
+      matchIdx = parseInt(parts[2], 10);
+      dbMatch = tournament.groups?.[roundIdx]?.matches?.[matchIdx];
+    } else if (mKey.startsWith('u-')) {
+      const parts = mKey.split('-');
+      roundIdx = parseInt(parts[1], 10);
+      matchIdx = parseInt(parts[2], 10);
+      dbMatch = tournament.bracket?.upperRounds?.[roundIdx]?.[matchIdx];
+    } else if (mKey.startsWith('l-')) {
+      const parts = mKey.split('-');
+      roundIdx = parseInt(parts[1], 10);
+      matchIdx = parseInt(parts[2], 10);
+      dbMatch = tournament.bracket?.lowerRounds?.[roundIdx]?.[matchIdx];
+    } else if (mKey.startsWith('gf-')) {
+      const parts = mKey.split('-');
+      matchIdx = parseInt(parts[1], 10);
+      dbMatch = tournament.bracket?.grandFinal?.[matchIdx];
+    } else {
+      const parts = mKey.split('-');
+      roundIdx = parseInt(parts[0], 10) || 0;
+      matchIdx = parseInt(parts[1], 10) || 0;
+      dbMatch = tournament.bracket?.rounds?.[roundIdx]?.[matchIdx];
+    }
+
+    if (!dbMatch) return;
 
     if (selectedMatchKey === mKey) {
       setTimeout(() => {
@@ -1125,10 +1444,6 @@ export default function TournamentDetailPage() {
       }, 100);
       return;
     }
-
-    const dbRound = tournament.bracket.rounds?.[roundIdx] || [];
-    const dbMatch = dbRound[matchIdx];
-    if (!dbMatch) return;
 
     if (!dbMatch.teamA || !dbMatch.teamB || dbMatch.teamA.name === '?' || dbMatch.teamB.name === '?') {
       alert('Không thể chọn trận đấu chưa xác định đủ đội hình.');
@@ -1150,20 +1465,24 @@ export default function TournamentDetailPage() {
       };
     }
 
-    const updatedBracket = {
+    const updatedBracket = tournament.bracket ? {
       ...tournament.bracket,
       currentRound: roundIdx,
       currentMatch: matchIdx,
-    };
+    } : null;
 
     const updatedTournament = {
       ...tournament,
-      bracket: updatedBracket,
+      ...(updatedBracket ? { bracket: updatedBracket } : {}),
     };
 
+    setIsSwitching(true);
     setSelectedMatchKey(mKey);
     setTournament(updatedTournament);
     setMatchState(newMatchState);
+    setTimeout(() => {
+      setIsSwitching(false);
+    }, 350);
 
     localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
     const savedList = localStorage.getItem(tournamentsKey);
@@ -1193,7 +1512,8 @@ export default function TournamentDetailPage() {
   };
 
   const getPendingMatches = () => {
-    if (!tournament || !tournament.bracket || tournament.bracket.isFinished) return [];
+    if (!tournament || tournament.format === 'round_robin' || tournament.format === 'double_elimination') return [];
+    if (!tournament.bracket || tournament.bracket.isFinished) return [];
     
     const round = tournament.bracket.rounds?.[tournament.bracket.currentRound] || [];
     return round.map((m: any, idx: number) => {
@@ -1229,33 +1549,75 @@ export default function TournamentDetailPage() {
     );
   }
 
-  const selectedMatchIndex = selectedMatchKey ? parseInt(selectedMatchKey.split('-')[1], 10) : 0;
+  const selectedMatchIndex = selectedMatchKey 
+    ? (selectedMatchKey.startsWith('g-') || selectedMatchKey.startsWith('u-') || selectedMatchKey.startsWith('l-')
+       ? parseInt(selectedMatchKey.split('-')[2], 10)
+       : parseInt(selectedMatchKey.split('-')[1], 10))
+    : 0;
   const isLiveMatchActive = matchState && !matchState.isFinished;
   
   const getSelectedBracketMatch = () => {
-    if (!tournament || !tournament.bracket) return null;
-    const round = tournament.bracket.rounds[tournament.bracket.currentRound];
+    if (!tournament) return null;
+    if (selectedMatchKey?.startsWith('g-')) {
+      const parts = selectedMatchKey.split('-');
+      const gIdx = parseInt(parts[1], 10);
+      const mIdx = parseInt(parts[2], 10);
+      return tournament.groups?.[gIdx]?.matches?.[mIdx] || null;
+    }
+    if (selectedMatchKey?.startsWith('u-')) {
+      const parts = selectedMatchKey.split('-');
+      const rIdx = parseInt(parts[1], 10);
+      const mIdx = parseInt(parts[2], 10);
+      return tournament.bracket?.upperRounds?.[rIdx]?.[mIdx] || null;
+    }
+    if (selectedMatchKey?.startsWith('l-')) {
+      const parts = selectedMatchKey.split('-');
+      const rIdx = parseInt(parts[1], 10);
+      const mIdx = parseInt(parts[2], 10);
+      return tournament.bracket?.lowerRounds?.[rIdx]?.[mIdx] || null;
+    }
+    if (selectedMatchKey?.startsWith('gf-')) {
+      const parts = selectedMatchKey.split('-');
+      const mIdx = parseInt(parts[1], 10);
+      return tournament.bracket?.grandFinal?.[mIdx] || null;
+    }
+
+    if (!tournament.bracket) return null;
+    const parts = (selectedMatchKey || '').split('-');
+    const rIdx = parseInt(parts[0], 10) || 0;
+    const mIdx = parseInt(parts[1], 10) || 0;
+    const round = tournament.bracket.rounds?.[rIdx];
     if (!round) return null;
-    return round[selectedMatchIndex] || null;
+    return round[mIdx] || null;
   };
   
   const currentBracketMatch = getSelectedBracketMatch();
   const matchIndex = selectedMatchIndex;
-  const fallbackTeams = getFallbackTeams(tournament);
-  const fallbackTeamA = fallbackTeams[matchIndex * 2];
-  const fallbackTeamB = fallbackTeams[matchIndex * 2 + 1];
-  const team1 = tournament ? (resolveTeamRef(tournament, currentBracketMatch?.teamA) || fallbackTeamA) : null;
-  const team2 = tournament ? (resolveTeamRef(tournament, currentBracketMatch?.teamB) || fallbackTeamB) : null;
+  const team1 = tournament && currentBracketMatch ? (resolveTeamRef(tournament, currentBracketMatch?.teamA) || tournament.teams?.[0]) : null;
+  const team2 = tournament && currentBracketMatch ? (resolveTeamRef(tournament, currentBracketMatch?.teamB) || tournament.teams?.[1]) : null;
   
-  const showActiveMatch = tournament && tournament.bracket && currentBracketMatch && 
-                         team1 && team2 && team1.name !== '?' && team2.name !== '?';
+  const showActiveMatch = !!(tournament && currentBracketMatch && 
+                         team1 && team2 && team1.name !== '?' && team2.name !== '?');
 
   const winnableTeam = (tournament?.sport === 'tennis' || tournament?.sport === 'volleyball')
     ? checkSetWinCondition(matchState.team1SetPoints ?? 0, matchState.team2SetPoints ?? 0)
     : null;
 
   const getTournamentWinnerName = () => {
-    if (!tournament || !tournament.bracket || !tournament.bracket.isFinished) return null;
+    if (!tournament) return null;
+    if (tournament.format === 'double_elimination') {
+      const bracket = tournament.bracket;
+      if (!bracket || !bracket.isFinished) return null;
+      if (bracket.grandFinal?.[1]?.isFinished) {
+        return bracket.grandFinal[1].winner?.name || null;
+      }
+      if (bracket.grandFinal?.[0]?.isFinished) {
+        return bracket.grandFinal[0].winner?.name || null;
+      }
+      return null;
+    }
+
+    if (!tournament.bracket || !tournament.bracket.isFinished) return null;
     const rounds = tournament.bracket.rounds;
     if (!rounds || rounds.length === 0) return null;
     const finalRound = rounds[rounds.length - 1];
@@ -1266,6 +1628,56 @@ export default function TournamentDetailPage() {
   };
   const tournamentWinnerName = getTournamentWinnerName();
   const activeMatchesCount = tournament?.bracket?.activeMatches?.length || 0;
+
+  const areAllGroupMatchesFinished = () => {
+    if (!tournament || !tournament.groups) return false;
+    return tournament.groups.every((g: any) =>
+      g.matches.every((m: any) => m.isFinished)
+    );
+  };
+
+  const handleProceedToKnockout = async () => {
+    if (!areAllGroupMatchesFinished()) {
+      alert('Tất cả các trận đấu vòng bảng phải kết thúc trước khi tiến vào vòng Knockout.');
+      return;
+    }
+
+    if (!window.confirm('Bạn có chắc chắn muốn kết thúc Vòng bảng và tiến hành sinh Vòng Knockout? Hành động này sẽ cố định bảng xếp hạng.')) {
+      return;
+    }
+
+    const advancingTeams = seedKnockoutFromGroups(tournament.groups, tournament.advancingCount || 2, tournament.matchStates);
+    const newBracket = buildInitialBracket(advancingTeams);
+
+    const updatedTournament = {
+      ...tournament,
+      bracket: newBracket,
+      stage: 'knockout'
+    };
+
+    setTournament(updatedTournament);
+    localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
+    const savedList = localStorage.getItem(tournamentsKey);
+    if (savedList) {
+      try {
+        const list = JSON.parse(savedList);
+        const index = list.findIndex((t: any) => t.id === tournament.id);
+        if (index > -1) {
+          list[index] = updatedTournament;
+          localStorage.setItem(tournamentsKey, JSON.stringify(list));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    try {
+      await syncTournamentToBackend(updatedTournament);
+      alert('Đã tạo vòng Knock-out thành công!');
+    } catch (err) {
+      console.error('Error proceeding to knockout:', err);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-[#080b10] text-white font-sans">
@@ -1367,7 +1779,188 @@ export default function TournamentDetailPage() {
 
         {/* Bracket Diagram Container */}
         <div className="w-full">
-          {buildBracketData(tournament, matchState, selectedMatchKey).length === 0 ? (
+          {tournament.format === 'round_robin' && tournament.stage === 'group' ? (
+            <div className="space-y-12">
+              {tournament.groups?.map((group: any, gIdx: number) => {
+                const standings = calculateGroupStandings(group.teams, group.matches, tournament.matchStates);
+                return (
+                  <div key={gIdx} className="bg-[#0f1419] border border-white/[0.06] rounded-2xl p-6 space-y-6">
+                    <h3 className="text-lg font-black tracking-tight text-[#22c55e] border-b border-white/[0.06] pb-3">
+                      {group.name}
+                    </h3>
+                    
+                    {/* Standings Table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-white/[0.06] text-white/50">
+                            <th className="py-2 px-3">#</th>
+                            <th className="py-2 px-3">Đội bóng</th>
+                            <th className="py-2 px-3 text-center">MP</th>
+                            <th className="py-2 px-3 text-center">W</th>
+                            <th className="py-2 px-3 text-center">D</th>
+                            <th className="py-2 px-3 text-center">L</th>
+                            <th className="py-2 px-3 text-center">GD</th>
+                            <th className="py-2 px-3 text-center font-bold text-white">Pts</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {standings.map((row, idx) => (
+                            <tr key={row.teamId} className="border-b border-white/[0.04] hover:bg-white/[0.02]">
+                              <td className="py-2 px-3 font-semibold text-white/40">{idx + 1}</td>
+                              <td className="py-2 px-3 font-bold text-white">{row.teamName}</td>
+                              <td className="py-2 px-3 text-center">{row.mp}</td>
+                              <td className="py-2 px-3 text-center text-green-500">{row.w}</td>
+                              <td className="py-2 px-3 text-center text-blue-500">{row.d}</td>
+                              <td className="py-2 px-3 text-center text-red-500">{row.l}</td>
+                              <td className={`py-2 px-3 text-center ${row.gd > 0 ? 'text-green-500' : row.gd < 0 ? 'text-red-500' : ''}`}>
+                                {row.gd > 0 ? `+${row.gd}` : row.gd}
+                              </td>
+                              <td className="py-2 px-3 text-center font-black text-[#22c55e]">{row.pts}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Group Matches */}
+                    <div>
+                      <h4 className="text-xs font-black tracking-widest text-white/40 uppercase mb-3">Lịch thi đấu & Kết quả</h4>
+                      <div className="flex flex-wrap gap-4 justify-start">
+                        {group.matches.map((m: any, mIdx: number) => {
+                          const mKey = `g-${gIdx}-${mIdx}`;
+                          const ms = tournament.matchStates?.[mKey];
+                          const isRunning = ms?.isRunning && !ms?.isFinished;
+                          const isFinished = m.isFinished || ms?.isFinished;
+                          const sa = isRunning && ms ? ms.team1Score : (isFinished && ms ? ms.team1Score : m.scoreA);
+                          const sb = isRunning && ms ? ms.team2Score : (isFinished && ms ? ms.team2Score : m.scoreB);
+                          const done = isFinished;
+                          
+                          return (
+                            <div key={mIdx} className="relative flex items-center justify-center py-2">
+                              <BracketMatchCard
+                                a={m.teamA?.name}
+                                b={m.teamB?.name}
+                                sa={sa}
+                                sb={sb}
+                                done={done}
+                                isLive={isRunning}
+                                winner={m.winner?.name}
+                                onClick={() => handleMatchCardClick(mKey)}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              
+              {/* Transition to Knockout Button */}
+              {isOwner && (
+                <div className="flex justify-center pt-6">
+                  <button
+                    onClick={handleProceedToKnockout}
+                    className={`px-8 py-3 rounded-xl font-black text-sm transition-all duration-200 active:scale-95 flex items-center gap-2 ${
+                      areAllGroupMatchesFinished()
+                        ? 'bg-[#22c55e] text-black hover:bg-[#16a34a] shadow-[0_0_20px_rgba(34,197,94,0.25)]'
+                        : 'bg-white/5 border border-white/10 text-white/30 cursor-not-allowed'
+                    }`}
+                    disabled={!areAllGroupMatchesFinished()}
+                  >
+                    🏁 Tiến vào Vòng Knockout
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : tournament.format === 'double_elimination' ? (
+            <div className="space-y-8">
+              {/* Tab Selector */}
+              <div className="flex justify-center border-b border-white/[0.06] pb-3 mb-6 gap-2 md:gap-4 overflow-x-auto">
+                {(['upper', 'lower', 'grand'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveDeTab(tab)}
+                    className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider uppercase transition-all duration-200 whitespace-nowrap ${
+                      activeDeTab === tab
+                        ? 'bg-[#22c55e]/10 border border-[#22c55e]/30 text-[#22c55e] shadow-[0_0_15px_rgba(34,197,94,0.1)]'
+                        : 'text-white/50 border border-transparent hover:text-white/80'
+                    }`}
+                  >
+                    {tab === 'upper' ? 'Nhánh Thắng (Upper)' : tab === 'lower' ? 'Nhánh Thua (Lower)' : 'Chung Kết Tổng (Grand)'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Render selected rounds */}
+              {(() => {
+                let rounds: any[][] = [];
+                let labelPrefix = '';
+                let keyPrefix = '';
+
+                if (activeDeTab === 'upper') {
+                  rounds = tournament.bracket?.upperRounds || [];
+                  labelPrefix = 'Nhánh Thắng R';
+                  keyPrefix = 'u-';
+                } else if (activeDeTab === 'lower') {
+                  rounds = tournament.bracket?.lowerRounds || [];
+                  labelPrefix = 'Nhánh Thua R';
+                  keyPrefix = 'l-';
+                } else {
+                  rounds = [tournament.bracket?.grandFinal || []];
+                  labelPrefix = 'Chung kết';
+                  keyPrefix = 'gf-';
+                }
+
+                if (rounds.length === 0 || rounds[0].length === 0) {
+                  return (
+                    <div className="text-center py-20 bg-[#0f1419] rounded-2xl border border-white/[0.06]">
+                      <p className="text-white/60 text-lg">Không có dữ liệu nhánh thi đấu</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="flex items-stretch justify-center gap-8 overflow-x-auto pb-8 pt-4 min-h-[400px]">
+                    {rounds.map((roundMatches, roundIdx) => (
+                      <div key={roundIdx} className="flex flex-col shrink-0 items-center w-[160px]">
+                        <h3 className="text-xs font-black tracking-widest text-[#22c55e]/70 uppercase text-center mb-8">
+                          {activeDeTab === 'grand' ? 'Chung Kết Tổng' : `${labelPrefix}${roundIdx + 1}`}
+                        </h3>
+                        <div className="flex flex-col justify-around flex-1 h-full gap-4">
+                          {roundMatches.map((m: any, matchIdx: number) => {
+                            const mKey = activeDeTab === 'grand' ? `gf-${matchIdx}` : `${keyPrefix}${roundIdx}-${matchIdx}`;
+                            const ms = tournament.matchStates?.[mKey];
+                            const isRunning = ms?.isRunning && !ms?.isFinished;
+                            const isFinished = m.isFinished || ms?.isFinished;
+                            const sa = isRunning && ms ? ms.team1Score : (isFinished && ms ? ms.team1Score : m.scoreA);
+                            const sb = isRunning && ms ? ms.team2Score : (isFinished && ms ? ms.team2Score : m.scoreB);
+                            const done = isFinished;
+
+                            return (
+                              <div key={matchIdx} className="relative flex items-center justify-center py-2">
+                                <BracketMatchCard
+                                  a={m.teamA?.name}
+                                  b={m.teamB?.name}
+                                  sa={sa}
+                                  sb={sb}
+                                  done={done}
+                                  isLive={isRunning}
+                                  winner={m.winner?.name}
+                                  onClick={() => handleMatchCardClick(mKey)}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          ) : buildBracketData(tournament, matchState, selectedMatchKey).length === 0 ? (
             <div className="text-center py-20 bg-[#0f1419] rounded-2xl border border-white/[0.06]">
               <p className="text-white/60 text-lg">Không có dữ liệu sơ đồ cho giải đấu này</p>
             </div>
@@ -1379,14 +1972,17 @@ export default function TournamentDetailPage() {
                     {getRoundLabel(roundIdx, arr.length)}
                   </h3>
                   <div className="flex flex-col justify-around flex-1 h-full gap-4">
-                    {roundMatches.map((m: any, matchIdx: number) => (
-                      <div key={matchIdx} className="relative flex items-center justify-center py-2">
-                        <BracketMatchCard 
-                          {...m} 
-                          onClick={() => handleMatchCardClick(roundIdx, matchIdx)}
-                        />
-                      </div>
-                    ))}
+                    {roundMatches.map((m: any, matchIdx: number) => {
+                      const mKey = `${roundIdx}-${matchIdx}`;
+                      return (
+                        <div key={matchIdx} className="relative flex items-center justify-center py-2">
+                          <BracketMatchCard 
+                            {...m} 
+                            onClick={() => handleMatchCardClick(mKey)}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
@@ -1396,8 +1992,20 @@ export default function TournamentDetailPage() {
 
         {/* Bảng điều khiển trận đấu (Active Match Controls) */}
         {showActiveMatch && isOwner && (
-          <div id="match-controller" className="mt-12 bg-[#0f1419] border border-white/[0.06] rounded-2xl p-8 max-w-2xl mx-auto shadow-2xl relative">
+          <div 
+            key={selectedMatchKey || 'no-match'}
+            id="match-controller" 
+            className="mt-12 bg-[#0f1419] border border-white/[0.06] rounded-2xl p-8 max-w-2xl mx-auto shadow-2xl relative animate-fade-in-up"
+          >
             {(() => {
+              if (tournament.format === 'round_robin' && tournament.stage === 'group') {
+                return null;
+              }
+              if (tournament.format === 'double_elimination') {
+                return null;
+              }
+              if (!tournament.bracket || !tournament.bracket.rounds) return null;
+
               const currentRound = tournament.bracket.currentRound;
               const roundMatches = tournament.bracket.rounds[currentRound] || [];
               const playableMatches = roundMatches.map((m: any, idx: number) => {
@@ -1427,7 +2035,7 @@ export default function TournamentDetailPage() {
                       <button
                         key={item.idx}
                         type="button"
-                        onClick={() => handleMatchCardClick(currentRound, item.idx)}
+                        onClick={() => handleMatchCardClick(mKey)}
                         className={`px-4 py-2.5 rounded-xl border text-xs font-black tracking-tight transition-all duration-200 flex items-center gap-2 ${
                           isSelected
                             ? "bg-[#22c55e]/10 border-[#22c55e]/30 text-[#22c55e] shadow-[0_0_15px_rgba(34,197,94,0.1)]"
@@ -1964,6 +2572,16 @@ export default function TournamentDetailPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Redirecting Loader Screen */}
+      {isRedirecting && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#080b10]/95 backdrop-blur-md transition-all duration-500 ease-out opacity-100">
+          <div className="flex flex-col items-center gap-4 text-center">
+            <div className="w-12 h-12 border-4 border-[#22c55e] border-t-transparent rounded-full animate-spin" />
+            <h3 className="text-xl font-black tracking-wide text-white animate-pulse">Kết nối Live Match...</h3>
+            <p className="text-xs text-white/40">Chuyển hướng bạn đến trang xem trực tiếp</p>
           </div>
         </div>
       )}

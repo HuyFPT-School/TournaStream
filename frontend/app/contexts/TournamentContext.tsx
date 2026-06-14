@@ -28,6 +28,11 @@ export interface TournamentData {
   matchDuration: number; // in minutes
   allowExtraTime: boolean;
 
+  // Format selection
+  format?: 'single_elimination' | 'round_robin' | 'double_elimination';
+  groupsCount?: number;
+  advancingCount?: number;
+
   // Teams and members
   teams: Team[];
 
@@ -39,7 +44,15 @@ export interface TournamentData {
 interface TournamentContextType {
   data: TournamentData;
   setPackage: (packageId: string, name: string, price: number) => void;
-  setTournamentInfo: (name: string, sport: string, matchDuration: number, allowExtraTime: boolean) => void;
+  setTournamentInfo: (
+    name: string,
+    sport: string,
+    matchDuration: number,
+    allowExtraTime: boolean,
+    format?: 'single_elimination' | 'round_robin' | 'double_elimination',
+    groupsCount?: number,
+    advancingCount?: number
+  ) => void;
   addTeam: (team: Team) => void;
   removeTeam: (teamId: string) => void;
   updateTeam: (teamId: string, team: Team) => void;
@@ -60,6 +73,9 @@ const initialData: TournamentData = {
   sport: '',
   matchDuration: 45,
   allowExtraTime: false,
+  format: 'single_elimination',
+  groupsCount: 1,
+  advancingCount: 2,
   teams: [],
   bracketSeeded: false,
   shuffled: false,
@@ -107,13 +123,24 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  const setTournamentInfo = (name: string, sport: string, matchDuration: number, allowExtraTime: boolean) => {
+  const setTournamentInfo = (
+    name: string,
+    sport: string,
+    matchDuration: number,
+    allowExtraTime: boolean,
+    format?: 'single_elimination' | 'round_robin' | 'double_elimination',
+    groupsCount?: number,
+    advancingCount?: number
+  ) => {
     setData(prev => ({
       ...prev,
       name,
       sport,
       matchDuration,
       allowExtraTime,
+      format: format || 'single_elimination',
+      groupsCount: groupsCount || 1,
+      advancingCount: advancingCount || 2,
     }));
   };
 
