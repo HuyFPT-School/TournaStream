@@ -90,6 +90,49 @@ async function getAdminStats(req, res) {
   }
 }
 
+async function getUserDetails(req, res) {
+  try {
+    const userId = req.params.id;
+
+    // 1. Fetch user info
+    const user = await User.findById(userId).select("fullName email role isVerified lastActiveAt createdAt").lean();
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // 2. Fetch tournaments created by user
+    const tournaments = await Tournament.find({ userId })
+      .select("name sport teams matchDuration packageId packageName packagePrice createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // 3. Fetch transactions by user
+    const transactions = await Transaction.find({ userId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // 4. Fetch feedbacks for user's tournaments
+    const feedbacks = await Tournament.find({
+      userId,
+      feedbacks: { $exists: true, $not: { $size: 0 } }
+    })
+      .select("name sport feedbacks updatedAt")
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      user,
+      tournaments,
+      transactions,
+      feedbacks
+    });
+  } catch (error) {
+    console.error("Error fetching user details for admin:", error);
+    return res.status(500).json({ message: "Server error fetching user details" });
+  }
+}
+
 module.exports = {
-  getAdminStats
+  getAdminStats,
+  getUserDetails
 };
