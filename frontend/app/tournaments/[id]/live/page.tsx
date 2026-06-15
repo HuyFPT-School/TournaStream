@@ -501,9 +501,13 @@ export default function TournamentLiveViewPage() {
     });
   };
 
+  const activeStreamDetails = getSelectedMatchDetails();
+  const activeStreamType = activeStreamDetails?.streamType || null;
+  const activeStreamUrl = activeStreamDetails?.streamUrl || '';
+  const activeIsLive = activeStreamDetails?.isLive || false;
+
   useEffect(() => {
-    const selectedDetails = getSelectedMatchDetails();
-    if (selectedMatchKey && selectedDetails?.streamType === 'webcam' && selectedDetails?.isLive) {
+    if (selectedMatchKey && activeStreamType === 'webcam' && activeIsLive) {
       startWebcamViewer(selectedMatchKey);
     } else {
       if (viewerPcRef.current) {
@@ -520,7 +524,7 @@ export default function TournamentLiveViewPage() {
         viewerPcRef.current = null;
       }
     };
-  }, [selectedMatchKey, tournament]);
+  }, [selectedMatchKey, activeStreamType, activeStreamUrl, activeIsLive]);
 
   useEffect(() => {
     if (viewerStream && viewerVideoRef.current) {
@@ -706,7 +710,7 @@ export default function TournamentLiveViewPage() {
     return `${getRoundLabel(rIdx, numRounds)} • Trận ${mIdx + 1}`;
   };
 
-  const getSelectedMatchDetails = () => {
+  function getSelectedMatchDetails() {
     if (!selectedMatchKey || !tournament) return null;
     
     let dbMatch = null;

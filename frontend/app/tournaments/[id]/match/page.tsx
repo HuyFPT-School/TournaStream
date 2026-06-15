@@ -391,6 +391,45 @@ export default function LiveMatchPage() {
     }
   };
 
+  const startScreenShareBroadcast = async () => {
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      
+      let combinedStream = screenStream;
+      try {
+        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const tracks = [...screenStream.getVideoTracks(), ...audioStream.getAudioTracks()];
+        combinedStream = new MediaStream(tracks);
+      } catch (audioErr) {
+        console.warn('Không thể truy cập microphone, phát màn hình không tiếng:', audioErr);
+      }
+      
+      localStreamRef.current = combinedStream;
+      
+      if (broadcasterVideoRef.current) {
+        broadcasterVideoRef.current.srcObject = combinedStream;
+      }
+      
+      setIsBroadcasting(true);
+      
+      setMatchState(prev => ({
+        ...prev,
+        streamType: 'webcam',
+        streamUrl: 'webcam'
+      }));
+
+      // Khi bấm nút "Stop sharing" trên trình duyệt
+      screenStream.getVideoTracks()[0].onended = () => {
+        stopWebcamBroadcast();
+      };
+    } catch (err: any) {
+      console.error('Lỗi chia sẻ màn hình:', err);
+      if (err.name !== 'NotAllowedError') {
+        alert('Không thể chia sẻ màn hình. Vui lòng thử lại.');
+      }
+    }
+  };
+
   const stopWebcamBroadcast = () => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
@@ -1634,16 +1673,24 @@ export default function LiveMatchPage() {
 
                 <div className="flex gap-2">
                   {!isBroadcasting ? (
-                    <button
-                      onClick={startWebcamBroadcast}
-                      className="w-full py-2 px-4 rounded-lg bg-[#22c55e] text-[#080b10] font-black text-xs hover:bg-[#16a34a] transition-all"
-                    >
-                      Bắt đầu truyền hình Webcam
-                    </button>
+                    <>
+                      <button
+                        onClick={startWebcamBroadcast}
+                        className="flex-1 py-2.5 px-4 rounded-lg bg-[#22c55e] text-[#080b10] font-black text-xs hover:bg-[#16a34a] transition-all flex items-center justify-center gap-1.5"
+                      >
+                        🎥 Phát Webcam
+                      </button>
+                      <button
+                        onClick={startScreenShareBroadcast}
+                        className="flex-1 py-2.5 px-4 rounded-lg bg-[#3b82f6] text-white font-black text-xs hover:bg-[#2563eb] transition-all flex items-center justify-center gap-1.5"
+                      >
+                        🖥️ Chia sẻ màn hình
+                      </button>
+                    </>
                   ) : (
                     <button
                       onClick={stopWebcamBroadcast}
-                      className="w-full py-2 px-4 rounded-lg bg-red-500 text-white font-black text-xs hover:bg-red-600 transition-all"
+                      className="w-full py-2.5 px-4 rounded-lg bg-red-500 text-white font-black text-xs hover:bg-red-600 transition-all"
                     >
                       Tạm dừng truyền hình
                     </button>
