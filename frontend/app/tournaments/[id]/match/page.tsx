@@ -651,7 +651,7 @@ export default function LiveMatchPage() {
             if (mState) {
               setMatchState({
                 ...mState,
-                isRunning: false, // Pause on load for safety
+                isRunning: !!mState.isRunning,
                 isFinished: !!mState.isFinished
               });
             }
@@ -688,7 +688,7 @@ export default function LiveMatchPage() {
         if (mState) {
           setMatchState({
             ...mState,
-            isRunning: false, // Pause on load for safety
+            isRunning: !!mState.isRunning,
             isFinished: !!mState.isFinished
           });
         }
