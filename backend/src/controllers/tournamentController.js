@@ -1,5 +1,5 @@
 const { Tournament } = require("../models/Tournament");
-const { triggerTournamentUpdate } = require("../services/pusherService");
+const { triggerTournamentUpdate, triggerMatchSignaling } = require("../services/pusherService");
 
 async function upsertTournament(req, res) {
   try {
@@ -83,9 +83,23 @@ async function getLiveTournaments(req, res) {
   }
 }
 
+async function postSignaling(req, res) {
+  try {
+    const { id } = req.params;
+    const signalingData = req.body;
+
+    await triggerMatchSignaling(id, signalingData);
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Error broadcasting signaling data:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+}
+
 module.exports = {
   upsertTournament,
   getTournament,
   getUserTournaments,
   getLiveTournaments,
+  postSignaling,
 };

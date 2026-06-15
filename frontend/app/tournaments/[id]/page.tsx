@@ -17,6 +17,8 @@ interface MatchState {
   buGio?: number;
   team1SetPoints?: number;
   team2SetPoints?: number;
+  streamType?: 'youtube' | 'twitch' | 'webcam' | null;
+  streamUrl?: string;
 }
 
 type TeamRef = { id?: string; name?: string };
@@ -2340,6 +2342,58 @@ export default function TournamentDetailPage() {
                 />
                 <span>phút</span>
               </div>
+
+              {/* Quick Livestream URL */}
+              {!matchState.isFinished && (
+                <div className="mb-6 p-4 rounded-xl bg-[#080b10]/60 border border-white/[0.04] max-w-md mx-auto space-y-3 animate-fade-in-up">
+                  <div className="flex items-center justify-between text-xs font-semibold text-white/60">
+                    <span>Cấu hình Livestream trận đấu</span>
+                    {matchState.streamType === 'webcam' && (
+                      <span className="text-[10px] text-red-400 font-black animate-pulse flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                        Webcam Live
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Dán link stream (YouTube/Twitch) tại đây..."
+                      value={matchState.streamUrl || ''}
+                      onChange={(e) => {
+                        const url = e.target.value.trim();
+                        let type: 'youtube' | 'twitch' | null = null;
+                        if (url.includes('youtube.com') || url.includes('youtu.be')) {
+                          type = 'youtube';
+                        } else if (url.includes('twitch.tv')) {
+                          type = 'twitch';
+                        }
+                        setMatchState(prev => ({
+                          ...prev,
+                          streamType: type,
+                          streamUrl: url
+                        }));
+                      }}
+                      disabled={matchState.streamType === 'webcam'}
+                      className="w-full px-3 py-1.5 rounded bg-[#080b10] border border-white/[0.08] text-white text-xs placeholder:text-white/20 focus:outline-none focus:border-[#22c55e] disabled:opacity-50"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Link
+                      href={`/tournaments/${tournamentId}/match?match=${selectedMatchKey}`}
+                      className="w-full py-1.5 rounded bg-[#22c55e]/15 border border-[#22c55e]/30 text-[#22c55e] hover:bg-[#22c55e]/25 text-[10px] font-black uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-1"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="animate-pulse">
+                        <path d="M23 7l-7 5 7 5V7z" />
+                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                      </svg>
+                      Mở bảng Trọng tài & Webcam Live
+                    </Link>
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-center gap-3">
                 {matchState.isFinished ? (
