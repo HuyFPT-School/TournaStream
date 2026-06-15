@@ -38,6 +38,18 @@ async function triggerTournamentUpdate(tournamentId, tournamentData) {
   }
 }
 
+async function triggerMatchSignaling(tournamentId, signalingData) {
+  const pusher = getPusher();
+  if (!pusher) return;
+
+  try {
+    await pusher.trigger(String(tournamentId), "match_signaling", signalingData);
+  } catch (error) {
+    console.error(`Error triggering Pusher signaling for tournament ${tournamentId}:`, error);
+  }
+}
+
 module.exports = {
   triggerTournamentUpdate,
+  triggerMatchSignaling,
 };

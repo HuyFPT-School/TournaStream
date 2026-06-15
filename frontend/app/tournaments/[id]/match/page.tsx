@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import { syncTournamentToBackend, fetchTournamentFromBackend } from '@/app/lib/tournaments';
-import { getSession } from '@/app/lib/authStorage';
+import { getSession, getApiBaseUrl } from '@/app/lib/authStorage';
+import { getPusherClient } from '@/app/lib/pusher';
 
 interface MatchState {
   team1Score: number;
@@ -16,6 +17,8 @@ interface MatchState {
   team1SetPoints?: number;
   team2SetPoints?: number;
   buGio?: number;
+  streamType?: 'youtube' | 'twitch' | 'webcam' | null;
+  streamUrl?: string;
 }
 
 type TeamRef = { id?: string; name?: string };
@@ -313,6 +316,217 @@ export default function LiveMatchPage() {
   const [pendingFinishData, setPendingFinishData] = useState<{ bracket: BracketState; nextMatchState: MatchState; updatedTournament: any } | null>(null);
   const [finishedMatchInfo, setFinishedMatchInfo] = useState<{ teamA: string; teamB: string; scoreA: number; scoreB: number; roundLabel: string } | null>(null);
 
+  const [streamType, setStreamType] = useState<'youtube' | 'twitch' | 'webcam' | null>(null);
+  const [streamUrlInput, setStreamUrlInput] = useState('');
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const peerConnectionsRef = useRef<Record<string, RTCPeerConnection>>({});
+  const iceQueuesRef = useRef<Record<string, RTCIceCandidateInit[]>>({});
+  const broadcasterVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    if (matchState) {
+      setStreamType(matchState.streamType || null);
+      setStreamUrlInput(matchState.streamUrl || '');
+    }
+  }, [matchState.streamType, matchState.streamUrl]);
+
+  const sendSignalingMessage = async (payload: any) => {
+    try {
+      const baseUrl = getApiBaseUrl();
+      await fetch(`${baseUrl}/tournaments/${tournamentId}/signaling`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch (err) {
+      console.error('Lỗi gửi WebRTC signaling:', err);
+    }
+  };
+
+  const handleStreamTypeChange = (type: 'youtube' | 'twitch' | 'webcam' | null) => {
+    setStreamType(type);
+    if (type === 'webcam') {
+      setStreamUrlInput('webcam');
+      setMatchState(prev => ({
+        ...prev,
+        streamType: 'webcam',
+        streamUrl: 'webcam'
+      }));
+    } else {
+      setStreamUrlInput(matchState.streamUrl === 'webcam' ? '' : (matchState.streamUrl || ''));
+    }
+  };
+
+  const saveStreamUrl = () => {
+    setMatchState(prev => ({
+      ...prev,
+      streamType,
+      streamUrl: streamUrlInput.trim()
+    }));
+    alert('Đã lưu cấu hình livestream thành công!');
+  };
+
+  const startWebcamBroadcast = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      localStreamRef.current = stream;
+      
+      if (broadcasterVideoRef.current) {
+        broadcasterVideoRef.current.srcObject = stream;
+      }
+      
+      setIsBroadcasting(true);
+      
+      setMatchState(prev => ({
+        ...prev,
+        streamType: 'webcam',
+        streamUrl: 'webcam'
+      }));
+    } catch (err) {
+      console.error('Lỗi truy cập camera/micro:', err);
+      alert('Không thể truy cập camera và micro của bạn. Vui lòng cấp quyền và thử lại.');
+    }
+  };
+
+  const stopWebcamBroadcast = () => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+    }
+    
+    if (broadcasterVideoRef.current) {
+      broadcasterVideoRef.current.srcObject = null;
+    }
+    
+    Object.keys(peerConnectionsRef.current).forEach(peerId => {
+      peerConnectionsRef.current[peerId].close();
+    });
+    peerConnectionsRef.current = {};
+    
+    setIsBroadcasting(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      Object.keys(peerConnectionsRef.current).forEach(peerId => {
+        peerConnectionsRef.current[peerId].close();
+      });
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isBroadcasting && localStreamRef.current && broadcasterVideoRef.current) {
+      broadcasterVideoRef.current.srcObject = localStreamRef.current;
+    }
+  }, [isBroadcasting]);
+
+  useEffect(() => {
+    if (!isLoaded || !tournamentId || !matchKey) return;
+    
+    const pusher = getPusherClient();
+    if (!pusher) return;
+    
+    const channel = pusher.subscribe(tournamentId);
+    
+    const handleSignaling = async (data: any) => {
+      if (data.matchKey !== matchKey) return;
+      
+      const { type, peerId, sender, sdp, candidate } = data;
+      if (sender === 'referee') return;
+      
+      if (type === 'join') {
+        if (!isBroadcasting || !localStreamRef.current) return;
+        
+        delete iceQueuesRef.current[peerId];
+        
+        if (peerConnectionsRef.current[peerId]) {
+          peerConnectionsRef.current[peerId].close();
+        }
+        
+        const pc = new RTCPeerConnection({
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+          ]
+        });
+        
+        peerConnectionsRef.current[peerId] = pc;
+        
+        localStreamRef.current.getTracks().forEach(track => {
+          pc.addTrack(track, localStreamRef.current!);
+        });
+        
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            sendSignalingMessage({
+              type: 'ice-candidate',
+              peerId,
+              candidate: event.candidate,
+              matchKey,
+              sender: 'referee'
+            });
+          }
+        };
+        
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        
+        sendSignalingMessage({
+          type: 'offer',
+          peerId,
+          sdp: offer,
+          matchKey,
+          sender: 'referee'
+        });
+      } else if (type === 'answer') {
+        const pc = peerConnectionsRef.current[peerId];
+        if (pc) {
+          await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+          const queue = iceQueuesRef.current[peerId];
+          if (queue) {
+            for (const cand of queue) {
+              try {
+                await pc.addIceCandidate(new RTCIceCandidate(cand));
+              } catch (e) {
+                console.error("Lỗi addIceCandidate từ queue:", e);
+              }
+            }
+            delete iceQueuesRef.current[peerId];
+          }
+        }
+      } else if (type === 'ice-candidate') {
+        const pc = peerConnectionsRef.current[peerId];
+        if (pc && candidate) {
+          try {
+            if (pc.remoteDescription) {
+              await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            } else {
+              if (!iceQueuesRef.current[peerId]) {
+                iceQueuesRef.current[peerId] = [];
+              }
+              iceQueuesRef.current[peerId].push(candidate);
+            }
+          } catch (e) {
+            console.error("Lỗi addIceCandidate referee:", e);
+          }
+        }
+      }
+    };
+    
+    channel.bind('match_signaling', handleSignaling);
+    
+    return () => {
+      channel.unbind('match_signaling', handleSignaling);
+      pusher.unsubscribe(tournamentId);
+    };
+  }, [isLoaded, tournamentId, matchKey, isBroadcasting]);
+
   const session = getSession();
   const tournamentsKey = session ? `tournaments_${session.id}` : 'tournaments';
   const currentTournamentKey = session ? `currentTournament_${session.id}` : 'currentTournament';
@@ -501,7 +715,9 @@ export default function LiveMatchPage() {
         currentStored.isFinished === matchState.isFinished &&
         (currentStored.buGio ?? 0) === (matchState.buGio ?? 0) &&
         (currentStored.team1SetPoints ?? 0) === (matchState.team1SetPoints ?? 0) &&
-        (currentStored.team2SetPoints ?? 0) === (matchState.team2SetPoints ?? 0);
+        (currentStored.team2SetPoints ?? 0) === (matchState.team2SetPoints ?? 0) &&
+        currentStored.streamType === matchState.streamType &&
+        currentStored.streamUrl === matchState.streamUrl;
 
       if (isEquivalent) {
         return;
@@ -558,7 +774,9 @@ export default function LiveMatchPage() {
       currentStored.isFinished === matchState.isFinished &&
       (currentStored.buGio ?? 0) === (matchState.buGio ?? 0) &&
       (currentStored.team1SetPoints ?? 0) === (matchState.team1SetPoints ?? 0) &&
-      (currentStored.team2SetPoints ?? 0) === (matchState.team2SetPoints ?? 0);
+      (currentStored.team2SetPoints ?? 0) === (matchState.team2SetPoints ?? 0) &&
+      currentStored.streamType === matchState.streamType &&
+      currentStored.streamUrl === matchState.streamUrl;
 
     if (isEquivalent) {
       return;
@@ -585,6 +803,8 @@ export default function LiveMatchPage() {
     matchState.isFinished,
     matchState.team1SetPoints,
     matchState.team2SetPoints,
+    matchState.streamType,
+    matchState.streamUrl,
     Math.floor(matchState.time / 15),
     tournament,
     isLoaded,
@@ -1076,9 +1296,8 @@ export default function LiveMatchPage() {
       {/* Main Content */}
       <section className="relative z-10 max-w-4xl mx-auto px-6 py-8">
         {/* Match Header */}
-        <div className="text-center mb-12">
+        <div className="text-center mb-8">
           <div className="text-sm font-semibold text-[#22c55e] mb-2">{roundLabel}</div>
-          <div className="text-lg font-bold mb-4">Hiệp {matchState.hiep}</div>
         </div>
 
         {/* Score Board */}
@@ -1092,35 +1311,86 @@ export default function LiveMatchPage() {
               )}
             </div>
             {tournament?.sport === 'basketball' ? (
-              <div className="flex flex-col gap-2 max-w-[180px] mx-auto">
+              <div className="flex flex-col gap-2 max-w-[180px] mx-auto bg-white/[0.02] border border-white/[0.05] p-2 rounded-xl">
+                <div className="grid grid-cols-3 gap-1">
+                  <button
+                    onClick={() => handleScoreChange('team1', 1)}
+                    className="py-2 px-1 rounded-lg bg-[#22c55e]/15 hover:bg-[#22c55e]/25 border border-[#22c55e]/40 text-[10px] font-bold transition-all text-green-400"
+                    title="+1 Ném phạt"
+                  >
+                    +1
+                  </button>
+                  <button
+                    onClick={() => handleScoreChange('team1', 2)}
+                    className="py-2 px-1 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-[10px] font-black transition-all text-green-400"
+                    title="+2 Ghi điểm"
+                  >
+                    +2
+                  </button>
+                  <button
+                    onClick={() => handleScoreChange('team1', 3)}
+                    className="py-2 px-1 rounded-lg bg-[#3b82f6]/20 hover:bg-[#3b82f6]/30 border border-[#3b82f6]/50 text-[10px] font-black transition-all text-blue-400"
+                    title="+3 Điểm"
+                  >
+                    +3
+                  </button>
+                </div>
                 <button
-                  onClick={() => handleScoreChange('team1', 1)}
-                  className="w-full py-2 px-3 rounded-lg bg-[#22c55e]/15 hover:bg-[#22c55e]/25 border border-[#22c55e]/40 text-xs font-bold transition-all"
+                  onClick={() => handleScoreChange('team1', -1)}
+                  className="w-full py-1.5 px-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-semibold transition-all"
                 >
-                  +1 Ném phạt
-                </button>
-                <button
-                  onClick={() => handleScoreChange('team1', 2)}
-                  className="w-full py-2 px-3 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-xs font-black transition-all"
-                >
-                  +2 Ghi điểm
-                </button>
-                <button
-                  onClick={() => handleScoreChange('team1', 3)}
-                  className="w-full py-2 px-3 rounded-lg bg-[#3b82f6]/20 hover:bg-[#3b82f6]/30 border border-[#3b82f6]/50 text-xs font-black transition-all"
-                >
-                  +3 Điểm
+                  − Trừ 1
                 </button>
               </div>
+            ) : tournament?.sport === 'tennis' || tournament?.sport === 'volleyball' ? (
+              <div className="flex flex-col gap-2 max-w-[180px] mx-auto bg-white/[0.02] border border-white/[0.05] p-2 rounded-xl">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleScoreChange('team1', -1)}
+                    className="px-2.5 py-1.5 rounded bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-400 text-xs font-bold transition-all"
+                    title="Trừ điểm Set"
+                  >
+                    −
+                  </button>
+                  <button
+                    onClick={() => handleScoreChange('team1', 1)}
+                    className="flex-1 py-1.5 px-2 rounded bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-[10px] font-black transition-all truncate text-green-400"
+                  >
+                    + Điểm Set
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5 pt-1.5 border-t border-white/[0.04]">
+                  <button
+                    onClick={() => setMatchState(prev => ({ ...prev, team1Score: Math.max(0, prev.team1Score - 1) }))}
+                    className="px-2.5 py-1 rounded bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-[9px] font-bold"
+                    title="Trừ Set thắng"
+                  >
+                    − Set
+                  </button>
+                  <button
+                    onClick={() => setMatchState(prev => ({ ...prev, team1Score: prev.team1Score + 1 }))}
+                    className="flex-1 py-1 px-2 rounded bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/40 text-blue-400 text-[9px] font-bold"
+                  >
+                    + Set thắng
+                  </button>
+                </div>
+              </div>
             ) : (
-              <button
-                onClick={() => handleScoreChange('team1', 1)}
-                className="w-full px-4 py-3 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 transition-all duration-200 border border-[#22c55e]/50 mb-3"
-              >
-                {tournament?.sport === 'tennis' || tournament?.sport === 'volleyball'
-                  ? `+ Điểm Set ${matchState.hiep}`
-                  : '+ Ghi bàn'}
-              </button>
+              <div className="flex items-center justify-center gap-2 max-w-[180px] mx-auto">
+                <button
+                  onClick={() => handleScoreChange('team1', -1)}
+                  className="px-3.5 py-2.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-400 text-sm font-bold transition-all"
+                  title="Trừ 1 điểm"
+                >
+                  −
+                </button>
+                <button
+                  onClick={() => handleScoreChange('team1', 1)}
+                  className="flex-1 py-2.5 px-3 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-xs font-bold transition-all text-green-400"
+                >
+                  + Ghi bàn
+                </button>
+              </div>
             )}
           </div>
 
@@ -1193,35 +1463,86 @@ export default function LiveMatchPage() {
               )}
             </div>
             {tournament?.sport === 'basketball' ? (
-              <div className="flex flex-col gap-2 max-w-[180px] mx-auto">
+              <div className="flex flex-col gap-2 max-w-[180px] mx-auto bg-white/[0.02] border border-white/[0.05] p-2 rounded-xl">
+                <div className="grid grid-cols-3 gap-1">
+                  <button
+                    onClick={() => handleScoreChange('team2', 1)}
+                    className="py-2 px-1 rounded-lg bg-[#22c55e]/15 hover:bg-[#22c55e]/25 border border-[#22c55e]/40 text-[10px] font-bold transition-all text-green-400"
+                    title="+1 Ném phạt"
+                  >
+                    +1
+                  </button>
+                  <button
+                    onClick={() => handleScoreChange('team2', 2)}
+                    className="py-2 px-1 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-[10px] font-black transition-all text-green-400"
+                    title="+2 Ghi điểm"
+                  >
+                    +2
+                  </button>
+                  <button
+                    onClick={() => handleScoreChange('team2', 3)}
+                    className="py-2 px-1 rounded-lg bg-[#3b82f6]/20 hover:bg-[#3b82f6]/30 border border-[#3b82f6]/50 text-[10px] font-black transition-all text-blue-400"
+                    title="+3 Điểm"
+                  >
+                    +3
+                  </button>
+                </div>
                 <button
-                  onClick={() => handleScoreChange('team2', 1)}
-                  className="w-full py-2 px-3 rounded-lg bg-[#22c55e]/15 hover:bg-[#22c55e]/25 border border-[#22c55e]/40 text-xs font-bold transition-all"
+                  onClick={() => handleScoreChange('team2', -1)}
+                  className="w-full py-1.5 px-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-semibold transition-all"
                 >
-                  +1 Ném phạt
-                </button>
-                <button
-                  onClick={() => handleScoreChange('team2', 2)}
-                  className="w-full py-2 px-3 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-xs font-black transition-all"
-                >
-                  +2 Ghi điểm
-                </button>
-                <button
-                  onClick={() => handleScoreChange('team2', 3)}
-                  className="w-full py-2 px-3 rounded-lg bg-[#3b82f6]/20 hover:bg-[#3b82f6]/30 border border-[#3b82f6]/50 text-xs font-black transition-all"
-                >
-                  +3 Điểm
+                  − Trừ 1
                 </button>
               </div>
+            ) : tournament?.sport === 'tennis' || tournament?.sport === 'volleyball' ? (
+              <div className="flex flex-col gap-2 max-w-[180px] mx-auto bg-white/[0.02] border border-white/[0.05] p-2 rounded-xl">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleScoreChange('team2', -1)}
+                    className="px-2.5 py-1.5 rounded bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-400 text-xs font-bold transition-all"
+                    title="Trừ điểm Set"
+                  >
+                    −
+                  </button>
+                  <button
+                    onClick={() => handleScoreChange('team2', 1)}
+                    className="flex-1 py-1.5 px-2 rounded bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-[10px] font-black transition-all truncate text-green-400"
+                  >
+                    + Điểm Set
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5 pt-1.5 border-t border-white/[0.04]">
+                  <button
+                    onClick={() => setMatchState(prev => ({ ...prev, team2Score: Math.max(0, prev.team2Score - 1) }))}
+                    className="px-2.5 py-1 rounded bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-[9px] font-bold"
+                    title="Trừ Set thắng"
+                  >
+                    − Set
+                  </button>
+                  <button
+                    onClick={() => setMatchState(prev => ({ ...prev, team2Score: prev.team2Score + 1 }))}
+                    className="flex-1 py-1 px-2 rounded bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/40 text-blue-400 text-[9px] font-bold"
+                  >
+                    + Set thắng
+                  </button>
+                </div>
+              </div>
             ) : (
-              <button
-                onClick={() => handleScoreChange('team2', 1)}
-                className="w-full px-4 py-3 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 transition-all duration-200 border border-[#22c55e]/50 mb-3"
-              >
-                {tournament?.sport === 'tennis' || tournament?.sport === 'volleyball'
-                  ? `+ Điểm Set ${matchState.hiep}`
-                  : '+ Ghi bàn'}
-              </button>
+              <div className="flex items-center justify-center gap-2 max-w-[180px] mx-auto">
+                <button
+                  onClick={() => handleScoreChange('team2', -1)}
+                  className="px-3.5 py-2.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-400 text-sm font-bold transition-all"
+                  title="Trừ 1 điểm"
+                >
+                  −
+                </button>
+                <button
+                  onClick={() => handleScoreChange('team2', 1)}
+                  className="flex-1 py-2.5 px-3 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-xs font-bold transition-all text-green-400"
+                >
+                  + Ghi bàn
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -1244,129 +1565,119 @@ export default function LiveMatchPage() {
           </div>
         )}
 
-        {/* Score Adjustment Controls */}
-        <div className="grid grid-cols-3 gap-6 mb-12">
-          {/* Team 1 Adjustments */}
-          <div className="p-4 rounded-lg bg-[#0f1419] border border-white/[0.06]">
-            <p className="text-sm font-semibold mb-3 text-center">Điều chỉnh {team1?.name}</p>
-            {tournament?.sport === 'tennis' || tournament?.sport === 'volleyball' ? (
-              <div className="flex flex-col gap-2">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleScoreChange('team1', -1)}
-                    className="flex-1 px-2 py-1.5 rounded bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 font-semibold text-xs text-red-400"
-                  >
-                    − Điểm
-                  </button>
-                  <button
-                    onClick={() => handleScoreChange('team1', 1)}
-                    className="flex-1 px-2 py-1.5 rounded bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 font-semibold text-xs text-green-400"
-                  >
-                    + Điểm
-                  </button>
-                </div>
-                <div className="flex gap-2 mt-1 pt-2 border-t border-white/[0.04]">
-                  <button
-                    onClick={() => setMatchState(prev => ({ ...prev, team1Score: Math.max(0, prev.team1Score - 1) }))}
-                    className="flex-1 px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 font-semibold text-[10px]"
-                  >
-                    − Set
-                  </button>
-                  <button
-                    onClick={() => setMatchState(prev => ({ ...prev, team1Score: prev.team1Score + 1 }))}
-                    className="flex-1 px-2 py-1 rounded bg-[#22c55e]/10 hover:bg-[#22c55e]/20 border border-[#22c55e]/30 font-semibold text-[10px]"
-                  >
-                    + Set
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleScoreChange('team1', -1)}
-                  className="flex-1 px-3 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 transition-all duration-200 border border-red-500/50 font-semibold text-sm"
-                >
-                  − Trừ
-                </button>
-                <button
-                  onClick={() => handleScoreChange('team1', 1)}
-                  className="flex-1 px-3 py-2 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 transition-all duration-200 border border-[#22c55e]/50 font-semibold text-sm"
-                >
-                  + Cộng
-                </button>
-              </div>
-            )}
-          </div>
 
-          {/* Middle Section */}
-          <div className="p-4 rounded-lg bg-[#0f1419] border border-white/[0.06]">
-            <p className="text-sm font-semibold mb-3 text-center">
-              {tournament?.sport === 'tennis' || tournament?.sport === 'volleyball' ? 'Set' : 'Hiệp'}
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setMatchState(prev => ({ ...prev, hiep: Math.max(1, prev.hiep - 1) }))}
-                className="flex-1 px-3 py-2 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] transition-all duration-200 border border-white/[0.06] font-semibold text-sm"
-              >
-                Trước
-              </button>
-              <button
-                onClick={() => setMatchState(prev => ({ ...prev, hiep: prev.hiep + 1 }))}
-                className="flex-1 px-3 py-2 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] transition-all duration-200 border border-white/[0.06] font-semibold text-sm"
-              >
-                Sau
-              </button>
+        {/* Livestream Configuration */}
+        <div className="p-5 rounded-lg bg-[#0f1419] border border-white/[0.06] mb-12 animate-fade-in-up">
+          <h3 className="text-sm font-black text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+            Cấu hình phát trực tiếp (Livestream)
+          </h3>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-white/50 mb-2">
+                Nguồn phát (Nền tảng hoặc thiết bị)
+              </label>
+              <div className="grid grid-cols-3 gap-3">
+                <button
+                  onClick={() => handleStreamTypeChange('youtube')}
+                  className={`py-2.5 px-3 rounded-lg border font-bold text-xs transition-all ${
+                    streamType === 'youtube'
+                      ? 'border-red-500 bg-red-500/10 text-red-400'
+                      : 'border-white/[0.06] bg-white/[0.02] text-white/60 hover:text-white'
+                  }`}
+                >
+                  YouTube URL
+                </button>
+                <button
+                  onClick={() => handleStreamTypeChange('twitch')}
+                  className={`py-2.5 px-3 rounded-lg border font-bold text-xs transition-all ${
+                    streamType === 'twitch'
+                      ? 'border-[#a855f7] bg-[#a855f7]/10 text-[#a855f7]'
+                      : 'border-white/[0.06] bg-white/[0.02] text-white/60 hover:text-white'
+                  }`}
+                >
+                  Twitch URL
+                </button>
+                <button
+                  onClick={() => handleStreamTypeChange('webcam')}
+                  className={`py-2.5 px-3 rounded-lg border font-bold text-xs transition-all ${
+                    streamType === 'webcam'
+                      ? 'border-[#22c55e] bg-[#22c55e]/10 text-green-400 font-extrabold'
+                      : 'border-white/[0.06] bg-white/[0.02] text-white/60 hover:text-white'
+                  }`}
+                >
+                  🎥 Webcam trực tiếp
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* Team 2 Adjustments */}
-          <div className="p-4 rounded-lg bg-[#0f1419] border border-white/[0.06]">
-            <p className="text-sm font-semibold mb-3 text-center">Điều chỉnh {team2?.name}</p>
-            {tournament?.sport === 'tennis' || tournament?.sport === 'volleyball' ? (
-              <div className="flex flex-col gap-2">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleScoreChange('team2', -1)}
-                    className="flex-1 px-2 py-1.5 rounded bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 font-semibold text-xs text-red-400"
-                  >
-                    − Điểm
-                  </button>
-                  <button
-                    onClick={() => handleScoreChange('team2', 1)}
-                    className="flex-1 px-2 py-1.5 rounded bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 font-semibold text-xs text-green-400"
-                  >
-                    + Điểm
-                  </button>
+            {streamType === 'webcam' ? (
+              <div className="p-4 rounded-lg bg-[#080b10] border border-white/[0.04]">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs text-white/60 font-semibold">Tình trạng máy quay (Webcam stream)</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                    isBroadcasting ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-white/10 text-white/50'
+                  }`}>
+                    {isBroadcasting ? 'ĐANG PHÁT (BROADCASTING)' : 'SẴN SÀNG'}
+                  </span>
                 </div>
-                <div className="flex gap-2 mt-1 pt-2 border-t border-white/[0.04]">
-                  <button
-                    onClick={() => setMatchState(prev => ({ ...prev, team2Score: Math.max(0, prev.team2Score - 1) }))}
-                    className="flex-1 px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 font-semibold text-[10px]"
-                  >
-                    − Set
-                  </button>
-                  <button
-                    onClick={() => setMatchState(prev => ({ ...prev, team2Score: prev.team2Score + 1 }))}
-                    className="flex-1 px-2 py-1 rounded bg-[#22c55e]/10 hover:bg-[#22c55e]/20 border border-[#22c55e]/30 font-semibold text-[10px]"
-                  >
-                    + Set
-                  </button>
+
+                {isBroadcasting && (
+                  <video
+                    ref={broadcasterVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full aspect-video object-cover rounded-lg border border-white/10 mb-3 bg-black"
+                  />
+                )}
+
+                <div className="flex gap-2">
+                  {!isBroadcasting ? (
+                    <button
+                      onClick={startWebcamBroadcast}
+                      className="w-full py-2 px-4 rounded-lg bg-[#22c55e] text-[#080b10] font-black text-xs hover:bg-[#16a34a] transition-all"
+                    >
+                      Bắt đầu truyền hình Webcam
+                    </button>
+                  ) : (
+                    <button
+                      onClick={stopWebcamBroadcast}
+                      className="w-full py-2 px-4 rounded-lg bg-red-500 text-white font-black text-xs hover:bg-red-600 transition-all"
+                    >
+                      Tạm dừng truyền hình
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleScoreChange('team2', -1)}
-                  className="flex-1 px-3 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 transition-all duration-200 border border-red-500/50 font-semibold text-sm"
-                >
-                  − Trừ
-                </button>
-                <button
-                  onClick={() => handleScoreChange('team2', 1)}
-                  className="flex-1 px-3 py-2 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 transition-all duration-200 border border-[#22c55e]/50 font-semibold text-sm"
-                >
-                  + Cộng
-                </button>
+              <div>
+                <label className="block text-xs font-semibold text-white/50 mb-2">
+                  Đường dẫn (Stream URL)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={streamUrlInput}
+                    onChange={(e) => setStreamUrlInput(e.target.value)}
+                    placeholder={
+                      streamType === 'youtube'
+                        ? 'VD: https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                        : streamType === 'twitch'
+                        ? 'VD: https://www.twitch.tv/ninja'
+                        : 'Vui lòng chọn loại nguồn phát phía trên...'
+                    }
+                    disabled={!streamType}
+                    className="flex-1 px-4 py-2 rounded-lg bg-[#080b10] border border-white/[0.06] text-white placeholder-white/30 text-xs focus:outline-none focus:border-[#22c55e] disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <button
+                    onClick={saveStreamUrl}
+                    disabled={!streamType}
+                    className="px-4 py-2 rounded-lg bg-[#22c55e] text-[#080b10] font-black text-xs hover:bg-[#16a34a] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Lưu cấu hình
+                  </button>
+                </div>
               </div>
             )}
           </div>

@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { fetchTournamentFromBackend } from '@/app/lib/tournaments';
 import { getPusherClient } from '@/app/lib/pusher';
+import { getApiBaseUrl } from '@/app/lib/authStorage';
 
 interface MatchState {
   team1Score: number;
@@ -381,6 +382,31 @@ function reconcileMatchStates(prevMatchStates: any, nextMatchStates: any) {
   return reconciled;
 }
 
+const getYoutubeEmbedUrl = (url: string) => {
+  if (!url) return '';
+  let videoId = '';
+  const watchMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\s\?]+)/);
+  if (watchMatch && watchMatch[1]) {
+    videoId = watchMatch[1];
+  } else {
+    videoId = url;
+  }
+  return `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+};
+
+const getTwitchEmbedUrl = (url: string) => {
+  if (!url) return '';
+  let channel = '';
+  const match = url.match(/(?:twitch\.tv\/)([^&\s\?\/]+)/);
+  if (match && match[1]) {
+    channel = match[1];
+  } else {
+    channel = url;
+  }
+  const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+  return `https://player.twitch.tv/?channel=${channel}&parent=${host}&autoplay=true`;
+};
+
 export default function TournamentLiveViewPage() {
   const params = useParams();
   const tournamentId = params.id as string;
@@ -391,6 +417,116 @@ export default function TournamentLiveViewPage() {
   const [selectedMatchKey, setSelectedMatchKey] = useState<string | null>(null);
   const [activeDeTab, setActiveDeTab] = useState<'upper' | 'lower' | 'grand'>('upper');
 
+  const [viewerStream, setViewerStream] = useState<MediaStream | null>(null);
+  const [isViewerConnecting, setIsViewerConnecting] = useState(false);
+  const [viewerConnectionError, setViewerConnectionError] = useState<string | null>(null);
+  const viewerPcRef = useRef<RTCPeerConnection | null>(null);
+  const viewerVideoRef = useRef<HTMLVideoElement | null>(null);
+  const spectatorPeerIdRef = useRef<string>('');
+  const viewerIceQueueRef = useRef<RTCIceCandidateInit[]>([]);
+  const selectedMatchKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    selectedMatchKeyRef.current = selectedMatchKey;
+  }, [selectedMatchKey]);
+
+  const sendSignalingMessage = async (mKey: string, payload: any) => {
+    try {
+      const baseUrl = getApiBaseUrl();
+      await fetch(`${baseUrl}/tournaments/${tournamentId}/signaling`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch (err) {
+      console.error('Lỗi gửi WebRTC signaling:', err);
+    }
+  };
+
+  const startWebcamViewer = async (mKey: string) => {
+    setViewerConnectionError(null);
+    setIsViewerConnecting(true);
+    setViewerStream(null);
+    viewerIceQueueRef.current = [];
+    
+    const peerId = Math.random().toString(36).substring(7);
+    spectatorPeerIdRef.current = peerId;
+    
+    if (viewerPcRef.current) {
+      viewerPcRef.current.close();
+    }
+    
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ]
+    });
+    viewerPcRef.current = pc;
+    
+    pc.ontrack = (event) => {
+      console.log('Nhận track video/audio từ trọng tài:', event.streams[0]);
+      if (event.streams && event.streams[0]) {
+        setViewerStream(event.streams[0]);
+        setIsViewerConnecting(false);
+      }
+    };
+    
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+        setViewerConnectionError('Kết nối với trọng tài bị gián đoạn.');
+        setIsViewerConnecting(false);
+      }
+    };
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate && spectatorPeerIdRef.current) {
+        sendSignalingMessage(mKey, {
+          type: 'ice-candidate',
+          peerId: spectatorPeerIdRef.current,
+          candidate: event.candidate,
+          matchKey: mKey,
+          sender: 'spectator'
+        });
+      }
+    };
+    
+    await sendSignalingMessage(mKey, {
+      type: 'join',
+      peerId,
+      matchKey: mKey,
+      sender: 'spectator'
+    });
+  };
+
+  useEffect(() => {
+    const selectedDetails = getSelectedMatchDetails();
+    if (selectedMatchKey && selectedDetails?.streamType === 'webcam' && selectedDetails?.isLive) {
+      startWebcamViewer(selectedMatchKey);
+    } else {
+      if (viewerPcRef.current) {
+        viewerPcRef.current.close();
+        viewerPcRef.current = null;
+      }
+      setViewerStream(null);
+      setIsViewerConnecting(false);
+    }
+    
+    return () => {
+      if (viewerPcRef.current) {
+        viewerPcRef.current.close();
+        viewerPcRef.current = null;
+      }
+    };
+  }, [selectedMatchKey, tournament]);
+
+  useEffect(() => {
+    if (viewerStream && viewerVideoRef.current) {
+      viewerVideoRef.current.srcObject = viewerStream;
+    }
+  }, [viewerStream]);
 
   useEffect(() => {
     const loadTournament = async () => {
@@ -427,11 +563,63 @@ export default function TournamentLiveViewPage() {
           return migrated;
         });
       });
+
+      channel.bind("match_signaling", async (data: any) => {
+        if (data.matchKey !== selectedMatchKeyRef.current) return;
+        if (data.peerId !== spectatorPeerIdRef.current) return;
+        if (data.sender === 'spectator') return;
+        
+        const { type, sdp, candidate } = data;
+        const pc = viewerPcRef.current;
+        if (!pc) return;
+        
+        if (type === 'offer') {
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            
+            await sendSignalingMessage(selectedMatchKeyRef.current!, {
+              type: 'answer',
+              peerId: spectatorPeerIdRef.current,
+              sdp: answer,
+              matchKey: selectedMatchKeyRef.current!,
+              sender: 'spectator'
+            });
+            
+            // Process queued candidates
+            const queue = viewerIceQueueRef.current;
+            for (const cand of queue) {
+              try {
+                await pc.addIceCandidate(new RTCIceCandidate(cand));
+              } catch (e) {
+                console.error("Lỗi addIceCandidate spectator queue:", e);
+              }
+            }
+            viewerIceQueueRef.current = [];
+          } catch (err) {
+            console.error("Lỗi setRemoteDescription/createAnswer spectator:", err);
+          }
+        } else if (type === 'ice-candidate') {
+          if (candidate) {
+            try {
+              if (pc.remoteDescription) {
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+              } else {
+                viewerIceQueueRef.current.push(candidate);
+              }
+            } catch (e) {
+              console.error("Lỗi addIceCandidate spectator:", e);
+            }
+          }
+        }
+      });
     }
 
     return () => {
       if (pusher && channel) {
         channel.unbind("tournament_updated");
+        channel.unbind("match_signaling");
         pusher.unsubscribe(tournamentId);
       }
     };
@@ -601,6 +789,8 @@ export default function TournamentLiveViewPage() {
       team1SetPoints = liveState ? (liveState.team1SetPoints ?? null) : (dbMatch.team1SetPoints ?? null);
       team2SetPoints = liveState ? (liveState.team2SetPoints ?? null) : (dbMatch.team2SetPoints ?? null);
     }
+    const streamType = liveState ? liveState.streamType : (dbMatch.streamType || null);
+    const streamUrl = liveState ? liveState.streamUrl : (dbMatch.streamUrl || '');
 
     return {
       team1: teamA,
@@ -614,6 +804,8 @@ export default function TournamentLiveViewPage() {
       isLive,
       isFinished,
       dbMatch,
+      streamType,
+      streamUrl,
     };
   };
 
@@ -1049,6 +1241,70 @@ export default function TournamentLiveViewPage() {
                 </div>
               </div>
             </div>
+            {/* Livestream Player */}
+            {selectedDetails.streamType && (
+              <div className="mb-8 p-1 rounded-2xl bg-[#080b10] border border-white/[0.05] overflow-hidden shadow-2xl relative">
+                <div className="relative pb-[56.25%] h-0 rounded-xl overflow-hidden bg-black animate-scale-in">
+                  {selectedDetails.streamType === 'youtube' && (
+                    <iframe
+                      src={getYoutubeEmbedUrl(selectedDetails.streamUrl)}
+                      className="absolute top-0 left-0 w-full h-full border-0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  )}
+                  {selectedDetails.streamType === 'twitch' && (
+                    <iframe
+                      src={getTwitchEmbedUrl(selectedDetails.streamUrl)}
+                      className="absolute top-0 left-0 w-full h-full border-0"
+                      allowFullScreen
+                    />
+                  )}
+                  {selectedDetails.streamType === 'webcam' && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black">
+                      {isViewerConnecting ? (
+                        <div className="flex flex-col items-center gap-3 text-center p-6">
+                          <svg className="animate-spin h-8 w-8 text-[#22c55e]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <p className="text-xs text-white/60 font-semibold">Đang kết nối tới máy quay trọng tài...</p>
+                        </div>
+                      ) : viewerConnectionError ? (
+                        <div className="text-center p-6 space-y-2">
+                          <span className="text-3xl">📡❌</span>
+                          <p className="text-xs text-red-400 font-semibold">{viewerConnectionError}</p>
+                          <p className="text-[10px] text-white/40">Trọng tài chưa bật phát trực tiếp hoặc kết nối thất bại.</p>
+                        </div>
+                      ) : viewerStream ? (
+                        <video
+                          ref={viewerVideoRef}
+                          autoPlay
+                          playsInline
+                          controls
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="text-center p-6 space-y-2">
+                          <span className="text-3xl animate-pulse">📡</span>
+                          <p className="text-xs text-white/50 font-semibold">Đang chờ luồng phát webcam...</p>
+                          <p className="text-[10px] text-white/30">Kết nối thành công. Chờ trọng tài gửi dữ liệu stream.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="px-4 py-2 bg-black/40 backdrop-blur-md flex items-center justify-between text-[10px] font-bold text-white/60 uppercase tracking-widest border-t border-white/[0.03]">
+                  <span className="flex items-center gap-1.5 text-red-500">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                    Live stream
+                  </span>
+                  <span>
+                    Nguồn: {selectedDetails.streamType === 'webcam' ? 'Trọng tài trực tiếp' : selectedDetails.streamType}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Team Lineups */}
             <div className="grid grid-cols-2 gap-8 border-t border-white/[0.06] pt-6">
