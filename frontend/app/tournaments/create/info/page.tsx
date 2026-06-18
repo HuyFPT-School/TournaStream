@@ -6,11 +6,9 @@ import { useTournament } from '@/app/contexts/TournamentContext';
 import { useState } from 'react';
 
 const sports = [
-  { id: 'soccer', name: 'Bóng đá', icon: '⚽' },
-  { id: 'basketball', name: 'Bóng rổ', icon: '🏀' },
-  { id: 'volleyball', name: 'Bóng chuyền', icon: '🏐' },
-  { id: 'tennis', name: 'Cầu lông', icon: '🏸' },
-  { id: 'esports', name: 'Esport', icon: '🎮' },
+  { id: 'moba', name: 'Game MOBA (Liên Quân, LOL, Tốc Chiến...)', icon: '⚔️' },
+  { id: 'fps', name: 'Game Bắn súng (Valorant, CS, PUBG...)', icon: '🔫' },
+  { id: 'fighting_sports', name: 'Game Đối kháng / FIFA', icon: '🎮' },
 ];
 
 const formats = [
@@ -24,7 +22,7 @@ export default function TournamentInfoPage() {
   const { data, setTournamentInfo } = useTournament();
   const [name, setName] = useState(data.name || '');
   const [sport, setSport] = useState(data.sport || '');
-  const [matchDuration, setMatchDuration] = useState(data.matchDuration || 45);
+  const [matchDuration, setMatchDuration] = useState(data.matchDuration || 1);
   const [allowExtraTime, setAllowExtraTime] = useState(data.allowExtraTime || false);
   const [format, setFormat] = useState<'single_elimination' | 'round_robin' | 'double_elimination'>(data.format || 'single_elimination');
   const [groupsCount, setGroupsCount] = useState<number>(data.groupsCount || 1);
@@ -38,10 +36,7 @@ export default function TournamentInfoPage() {
       newErrors.name = 'Vui lòng nhập tên giải đấu';
     }
     if (!sport) {
-      newErrors.sport = 'Vui lòng chọn loại môn thể thao';
-    }
-    if (matchDuration <= 0) {
-      newErrors.matchDuration = 'Thời gian hiệp phải > 0';
+      newErrors.sport = 'Vui lòng chọn thể loại game';
     }
 
     setErrors(newErrors);
@@ -110,7 +105,7 @@ export default function TournamentInfoPage() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-black mb-1">Tên giải đấu</h1>
-          <p className="text-white/60">Điền thông tin cơ bản cho giải đấu của bạn</p>
+          <p className="text-white/60">Điền thông tin cơ bản cho giải đấu Esports của bạn</p>
         </div>
 
         {/* Form */}
@@ -125,7 +120,7 @@ export default function TournamentInfoPage() {
                 setName(e.target.value);
                 if (errors.name) setErrors({ ...errors, name: '' });
               }}
-              placeholder="VD: Giải bóng đá mùa hè 2026"
+              placeholder="VD: Giải đấu Liên Quân Mobile Pro Cup 2026"
               className={`w-full px-4 py-3 rounded-lg bg-[#0f1419] border transition-all duration-200 text-white placeholder-white/30 focus:outline-none ${
                 errors.name ? 'border-red-500' : 'border-white/[0.06] focus:border-[#22c55e]'
               }`}
@@ -135,8 +130,8 @@ export default function TournamentInfoPage() {
 
           {/* Sport Selection */}
           <div>
-            <label className="block text-sm font-semibold mb-3">Loại môn thể thao</label>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <label className="block text-sm font-semibold mb-3">Thể loại Game Esports</label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {sports.map((s) => (
                 <button
                   key={s.id}
@@ -230,37 +225,6 @@ export default function TournamentInfoPage() {
             </div>
           )}
 
-          {/* Match Duration */}
-          <div>
-            <label className="block text-sm font-semibold mb-2">Thời gian mỗi hiệp (phút)</label>
-            <input
-              type="number"
-              value={matchDuration}
-              onChange={(e) => {
-                setMatchDuration(Number(e.target.value));
-                if (errors.matchDuration) setErrors({ ...errors, matchDuration: '' });
-              }}
-              min="1"
-              className={`w-full px-4 py-3 rounded-lg bg-[#0f1419] border transition-all duration-200 text-white focus:outline-none ${
-                errors.matchDuration ? 'border-red-500' : 'border-white/[0.06] focus:border-[#22c55e]'
-              }`}
-            />
-            {errors.matchDuration && <p className="text-red-500 text-sm mt-1">{errors.matchDuration}</p>}
-          </div>
-
-          {/* Extra Time */}
-          <div className="flex items-center gap-4 p-4 rounded-lg bg-[#0f1419] border border-white/[0.06]">
-            <input
-              type="checkbox"
-              id="extraTime"
-              checked={allowExtraTime}
-              onChange={(e) => setAllowExtraTime(e.target.checked)}
-              className="w-5 h-5 rounded accent-[#22c55e] cursor-pointer"
-            />
-            <label htmlFor="extraTime" className="flex-1 text-sm font-medium cursor-pointer">
-              Cho phép hiệp phụ khi hòa?
-            </label>
-          </div>
         </div>
 
         {/* CTA Buttons */}
