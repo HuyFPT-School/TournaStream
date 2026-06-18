@@ -850,41 +850,10 @@ export default function LiveMatchPage() {
     matchKey
   ]);
 
-  // Synchronize timer ticks for referee match state
+  // Timer is disabled for Esports
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (matchState.isRunning && !matchState.isFinished) {
-      interval = setInterval(() => {
-        setMatchState(prev => {
-          if (prev.isRunning && !prev.isFinished) {
-            return { ...prev, time: prev.time + 1 };
-          }
-          return prev;
-        });
-
-        if (matchKey) {
-          setTournament((prev: any) => {
-            if (!prev || !prev.matchStates || !prev.matchStates[matchKey]) return prev;
-            
-            const nextStates = {
-              ...prev.matchStates,
-              [matchKey]: {
-                ...prev.matchStates[matchKey],
-                time: prev.matchStates[matchKey].time + 1
-              }
-            };
-            
-            return {
-              ...prev,
-              matchStates: nextStates,
-              anyMatchRunning: Object.values(nextStates).some((ms: any) => ms.isRunning && !ms.isFinished)
-            };
-          });
-        }
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [matchState.isRunning, matchState.isFinished, matchKey]);
+    // No timer interval for Esports
+  }, []);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -911,7 +880,7 @@ export default function LiveMatchPage() {
       bracketUpdated = true;
     }
 
-    setMatchState(prev => ({ ...prev, isRunning: true }));
+    setMatchState(prev => ({ ...prev, isRunning: !prev.isRunning }));
 
     if (bracketUpdated) {
       const updatedTournament = {
@@ -923,7 +892,7 @@ export default function LiveMatchPage() {
   };
 
   const handleScoreChange = (team: 'team1' | 'team2', delta: number) => {
-    const isSetBased = tournament?.sport === 'tennis' || tournament?.sport === 'volleyball';
+    const isSetBased = tournament?.sport === 'tennis' || tournament?.sport === 'volleyball' || tournament?.sport === 'moba' || tournament?.sport === 'fps';
     if (isSetBased) {
       setMatchState(prev => {
         const field = team === 'team1' ? 'team1SetPoints' : 'team2SetPoints';
@@ -963,6 +932,32 @@ export default function LiveMatchPage() {
         team1SetPoints: 0,
         team2SetPoints: 0,
         hiep: prev.hiep + 1
+      };
+    });
+  };
+
+  const handleWinGame = (winner: 'team1' | 'team2') => {
+    setMatchState(prev => {
+      const isTeam1 = winner === 'team1';
+      return {
+        ...prev,
+        team1Score: prev.team1Score + (isTeam1 ? 1 : 0),
+        team2Score: prev.team2Score + (isTeam1 ? 0 : 1),
+        team1SetPoints: 0,
+        team2SetPoints: 0,
+        hiep: prev.hiep + 1
+      };
+    });
+  };
+
+  const handleRevertWinGame = (winner: 'team1' | 'team2') => {
+    setMatchState(prev => {
+      const isTeam1 = winner === 'team1';
+      return {
+        ...prev,
+        team1Score: Math.max(0, prev.team1Score - (isTeam1 ? 1 : 0)),
+        team2Score: Math.max(0, prev.team2Score - (isTeam1 ? 0 : 1)),
+        hiep: Math.max(1, prev.hiep - 1)
       };
     });
   };
@@ -1349,45 +1344,13 @@ export default function LiveMatchPage() {
                 <p className="text-sm text-white/60">{team1.members.length} thành viên</p>
               )}
             </div>
-            {tournament?.sport === 'basketball' ? (
-              <div className="flex flex-col gap-2 max-w-[180px] mx-auto bg-white/[0.02] border border-white/[0.05] p-2 rounded-xl">
-                <div className="grid grid-cols-3 gap-1">
-                  <button
-                    onClick={() => handleScoreChange('team1', 1)}
-                    className="py-2 px-1 rounded-lg bg-[#22c55e]/15 hover:bg-[#22c55e]/25 border border-[#22c55e]/40 text-[10px] font-bold transition-all text-green-400"
-                    title="+1 Ném phạt"
-                  >
-                    +1
-                  </button>
-                  <button
-                    onClick={() => handleScoreChange('team1', 2)}
-                    className="py-2 px-1 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-[10px] font-black transition-all text-green-400"
-                    title="+2 Ghi điểm"
-                  >
-                    +2
-                  </button>
-                  <button
-                    onClick={() => handleScoreChange('team1', 3)}
-                    className="py-2 px-1 rounded-lg bg-[#3b82f6]/20 hover:bg-[#3b82f6]/30 border border-[#3b82f6]/50 text-[10px] font-black transition-all text-blue-400"
-                    title="+3 Điểm"
-                  >
-                    +3
-                  </button>
-                </div>
-                <button
-                  onClick={() => handleScoreChange('team1', -1)}
-                  className="w-full py-1.5 px-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-semibold transition-all"
-                >
-                  − Trừ 1
-                </button>
-              </div>
-            ) : tournament?.sport === 'tennis' || tournament?.sport === 'volleyball' ? (
+            {tournament?.sport === 'moba' ? (
               <div className="flex flex-col gap-2 max-w-[180px] mx-auto bg-white/[0.02] border border-white/[0.05] p-2 rounded-xl">
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => handleScoreChange('team1', -1)}
                     className="px-2.5 py-1.5 rounded bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-400 text-xs font-bold transition-all"
-                    title="Trừ điểm Set"
+                    title="Trừ Kills"
                   >
                     −
                   </button>
@@ -1395,22 +1358,55 @@ export default function LiveMatchPage() {
                     onClick={() => handleScoreChange('team1', 1)}
                     className="flex-1 py-1.5 px-2 rounded bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-[10px] font-black transition-all truncate text-green-400"
                   >
-                    + Điểm Set
+                    + Hạ gục (Kills)
                   </button>
                 </div>
                 <div className="flex items-center gap-1.5 pt-1.5 border-t border-white/[0.04]">
                   <button
-                    onClick={() => setMatchState(prev => ({ ...prev, team1Score: Math.max(0, prev.team1Score - 1) }))}
+                    onClick={() => handleRevertWinGame('team1')}
                     className="px-2.5 py-1 rounded bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-[9px] font-bold"
-                    title="Trừ Set thắng"
+                    title="Trừ Ván"
                   >
-                    − Set
+                    − Ván
                   </button>
                   <button
-                    onClick={() => setMatchState(prev => ({ ...prev, team1Score: prev.team1Score + 1 }))}
+                    onClick={() => handleWinGame('team1')}
                     className="flex-1 py-1 px-2 rounded bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/40 text-blue-400 text-[9px] font-bold"
                   >
-                    + Set thắng
+                    + Thắng Ván
+                  </button>
+                </div>
+              </div>
+            ) : tournament?.sport === 'fps' ? (
+              <div className="flex flex-col gap-2 max-w-[180px] mx-auto bg-white/[0.02] border border-white/[0.05] p-2 rounded-xl">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleScoreChange('team1', -1)}
+                    className="px-2.5 py-1.5 rounded bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-400 text-xs font-bold transition-all"
+                    title="Trừ Round"
+                  >
+                    −
+                  </button>
+                  <button
+                    onClick={() => handleScoreChange('team1', 1)}
+                    className="flex-1 py-1.5 px-2 rounded bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-[10px] font-black transition-all truncate text-green-400"
+                  >
+                    + Vòng (Rounds)
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5 pt-1.5 border-t border-white/[0.04]">
+                  <button
+                    onClick={() => handleRevertWinGame('team1')}
+                    className="px-2.5 py-1 rounded bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-[9px] font-bold"
+                    title="Trừ Map"
+                  >
+                    − Map
+                  </button>
+                  <button
+                    onClick={() => handleWinGame('team1')}
+                    className="flex-1 py-1 px-2 rounded bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/40 text-blue-400 text-[9px] font-bold"
+                  >
+                    + Thắng Map
                   </button>
                 </div>
               </div>
@@ -1427,7 +1423,7 @@ export default function LiveMatchPage() {
                   onClick={() => handleScoreChange('team1', 1)}
                   className="flex-1 py-2.5 px-3 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-xs font-bold transition-all text-green-400"
                 >
-                  + Ghi bàn
+                  + Điểm / Bàn thắng
                 </button>
               </div>
             )}
@@ -1435,21 +1431,31 @@ export default function LiveMatchPage() {
 
           {/* Score & Time */}
           <div className="flex flex-col items-center justify-center">
-            {/* Time */}
-            <div className="text-5xl font-black mb-6 font-mono tracking-wide">
-              {formatTime(matchState.time)}
-            </div>
-
             {/* Score */}
-            {tournament?.sport === 'tennis' || tournament?.sport === 'volleyball' ? (
+            {tournament?.sport === 'moba' ? (
               <div className="flex flex-col items-center gap-1 mb-6">
-                <div className="text-[10px] font-black tracking-widest text-white/40 uppercase">Tỉ số Set</div>
+                <div className="text-[10px] font-black tracking-widest text-white/40 uppercase">Ván thắng (BO)</div>
                 <div className="flex items-center gap-4">
                   <div className="text-5xl font-black text-[#22c55e]">{matchState.team1Score}</div>
                   <div className="text-3xl font-black text-white/20">−</div>
                   <div className="text-5xl font-black text-[#22c55e]">{matchState.team2Score}</div>
                 </div>
-                <div className="text-[9px] font-black tracking-wider text-white/30 uppercase mt-3">Điểm Set {matchState.hiep}</div>
+                <div className="text-[9px] font-black tracking-wider text-white/30 uppercase mt-3">Hạ gục Ván {matchState.hiep}</div>
+                <div className="flex items-center gap-3 px-3 py-1 rounded bg-[#080b10] border border-white/[0.04] text-xl font-bold font-mono">
+                  <div className="text-white/80">{matchState.team1SetPoints ?? 0}</div>
+                  <div className="text-white/30">:</div>
+                  <div className="text-white/80">{matchState.team2SetPoints ?? 0}</div>
+                </div>
+              </div>
+            ) : tournament?.sport === 'fps' ? (
+              <div className="flex flex-col items-center gap-1 mb-6">
+                <div className="text-[10px] font-black tracking-widest text-white/40 uppercase">Map thắng (BO)</div>
+                <div className="flex items-center gap-4">
+                  <div className="text-5xl font-black text-[#22c55e]">{matchState.team1Score}</div>
+                  <div className="text-3xl font-black text-white/20">−</div>
+                  <div className="text-5xl font-black text-[#22c55e]">{matchState.team2Score}</div>
+                </div>
+                <div className="text-[9px] font-black tracking-wider text-white/30 uppercase mt-3">Số vòng Map {matchState.hiep}</div>
                 <div className="flex items-center gap-3 px-3 py-1 rounded bg-[#080b10] border border-white/[0.04] text-xl font-bold font-mono">
                   <div className="text-white/80">{matchState.team1SetPoints ?? 0}</div>
                   <div className="text-white/30">:</div>
@@ -1457,10 +1463,13 @@ export default function LiveMatchPage() {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-4 mb-6">
-                <div className="text-5xl font-black">{matchState.team1Score}</div>
-                <div className="text-3xl font-black text-white/50">−</div>
-                <div className="text-5xl font-black">{matchState.team2Score}</div>
+              <div className="flex flex-col items-center gap-1 mb-6">
+                <div className="text-[10px] font-black tracking-widest text-white/40 uppercase">Hiệp {matchState.hiep}</div>
+                <div className="flex items-center gap-4">
+                  <div className="text-5xl font-black">{matchState.team1Score}</div>
+                  <div className="text-3xl font-black text-white/50">−</div>
+                  <div className="text-5xl font-black">{matchState.team2Score}</div>
+                </div>
               </div>
             )}
 
@@ -1469,14 +1478,28 @@ export default function LiveMatchPage() {
               <div className="px-6 py-3 rounded-lg font-semibold bg-gray-500/20 border border-gray-500/30 text-gray-400 mb-4 cursor-not-allowed">
                 🏁 Trận đấu đã kết thúc
               </div>
-            ) : !matchState.isRunning ? (
-              <button
-                onClick={handleStartStop}
-                className="px-6 py-3 rounded-lg font-semibold transition-all duration-200 mb-4 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50"
-              >
-                ▶ Bắt đầu
-              </button>
-            ) : null}
+            ) : (
+              <div className="flex flex-col gap-2 w-full max-w-[200px] mb-4">
+                <button
+                  onClick={handleStartStop}
+                  className={`w-full px-6 py-3 rounded-lg font-semibold transition-all duration-200 border ${
+                    matchState.isRunning
+                      ? 'bg-yellow-500/20 hover:bg-yellow-500/30 border-yellow-500/50 text-yellow-400'
+                      : 'bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border-[#22c55e]/50 text-green-400'
+                  }`}
+                >
+                  {matchState.isRunning ? '⏸ Tạm dừng trận đấu' : '▶ Bắt đầu trận đấu'}
+                </button>
+                {tournament?.sport === 'fighting_sports' && (
+                  <button
+                    onClick={() => setMatchState(prev => ({ ...prev, hiep: prev.hiep + 1 }))}
+                    className="w-full px-4 py-2 rounded-lg font-bold text-xs bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-400 transition-all duration-200"
+                  >
+                    ➔ Qua Hiệp {matchState.hiep + 1}
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Status */}
             <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
@@ -1489,7 +1512,7 @@ export default function LiveMatchPage() {
               <div className={`w-2 h-2 rounded-full ${
                 matchState.isFinished ? 'bg-red-400' : matchState.isRunning ? 'bg-green-400' : 'bg-blue-400'
               }`} />
-              {matchState.isFinished ? 'Đã kết thúc' : matchState.isRunning ? 'Đang thi đấu' : 'Sẵn sàng'}
+              {matchState.isFinished ? 'Đã kết thúc' : matchState.isRunning ? 'Đang phát sóng' : 'Sẵn sàng'}
             </div>
           </div>
 
@@ -1501,45 +1524,13 @@ export default function LiveMatchPage() {
                 <p className="text-sm text-white/60">{team2.members.length} thành viên</p>
               )}
             </div>
-            {tournament?.sport === 'basketball' ? (
-              <div className="flex flex-col gap-2 max-w-[180px] mx-auto bg-white/[0.02] border border-white/[0.05] p-2 rounded-xl">
-                <div className="grid grid-cols-3 gap-1">
-                  <button
-                    onClick={() => handleScoreChange('team2', 1)}
-                    className="py-2 px-1 rounded-lg bg-[#22c55e]/15 hover:bg-[#22c55e]/25 border border-[#22c55e]/40 text-[10px] font-bold transition-all text-green-400"
-                    title="+1 Ném phạt"
-                  >
-                    +1
-                  </button>
-                  <button
-                    onClick={() => handleScoreChange('team2', 2)}
-                    className="py-2 px-1 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-[10px] font-black transition-all text-green-400"
-                    title="+2 Ghi điểm"
-                  >
-                    +2
-                  </button>
-                  <button
-                    onClick={() => handleScoreChange('team2', 3)}
-                    className="py-2 px-1 rounded-lg bg-[#3b82f6]/20 hover:bg-[#3b82f6]/30 border border-[#3b82f6]/50 text-[10px] font-black transition-all text-blue-400"
-                    title="+3 Điểm"
-                  >
-                    +3
-                  </button>
-                </div>
-                <button
-                  onClick={() => handleScoreChange('team2', -1)}
-                  className="w-full py-1.5 px-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-semibold transition-all"
-                >
-                  − Trừ 1
-                </button>
-              </div>
-            ) : tournament?.sport === 'tennis' || tournament?.sport === 'volleyball' ? (
+            {tournament?.sport === 'moba' ? (
               <div className="flex flex-col gap-2 max-w-[180px] mx-auto bg-white/[0.02] border border-white/[0.05] p-2 rounded-xl">
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => handleScoreChange('team2', -1)}
                     className="px-2.5 py-1.5 rounded bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-400 text-xs font-bold transition-all"
-                    title="Trừ điểm Set"
+                    title="Trừ Kills"
                   >
                     −
                   </button>
@@ -1547,22 +1538,55 @@ export default function LiveMatchPage() {
                     onClick={() => handleScoreChange('team2', 1)}
                     className="flex-1 py-1.5 px-2 rounded bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-[10px] font-black transition-all truncate text-green-400"
                   >
-                    + Điểm Set
+                    + Hạ gục (Kills)
                   </button>
                 </div>
                 <div className="flex items-center gap-1.5 pt-1.5 border-t border-white/[0.04]">
                   <button
-                    onClick={() => setMatchState(prev => ({ ...prev, team2Score: Math.max(0, prev.team2Score - 1) }))}
+                    onClick={() => handleRevertWinGame('team2')}
                     className="px-2.5 py-1 rounded bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-[9px] font-bold"
-                    title="Trừ Set thắng"
+                    title="Trừ Ván"
                   >
-                    − Set
+                    − Ván
                   </button>
                   <button
-                    onClick={() => setMatchState(prev => ({ ...prev, team2Score: prev.team2Score + 1 }))}
+                    onClick={() => handleWinGame('team2')}
                     className="flex-1 py-1 px-2 rounded bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/40 text-blue-400 text-[9px] font-bold"
                   >
-                    + Set thắng
+                    + Thắng Ván
+                  </button>
+                </div>
+              </div>
+            ) : tournament?.sport === 'fps' ? (
+              <div className="flex flex-col gap-2 max-w-[180px] mx-auto bg-white/[0.02] border border-white/[0.05] p-2 rounded-xl">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleScoreChange('team2', -1)}
+                    className="px-2.5 py-1.5 rounded bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-400 text-xs font-bold transition-all"
+                    title="Trừ Round"
+                  >
+                    −
+                  </button>
+                  <button
+                    onClick={() => handleScoreChange('team2', 1)}
+                    className="flex-1 py-1.5 px-2 rounded bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-[10px] font-black transition-all truncate text-green-400"
+                  >
+                    + Vòng (Rounds)
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5 pt-1.5 border-t border-white/[0.04]">
+                  <button
+                    onClick={() => handleRevertWinGame('team2')}
+                    className="px-2.5 py-1 rounded bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-[9px] font-bold"
+                    title="Trừ Map"
+                  >
+                    − Map
+                  </button>
+                  <button
+                    onClick={() => handleWinGame('team2')}
+                    className="flex-1 py-1 px-2 rounded bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/40 text-blue-400 text-[9px] font-bold"
+                  >
+                    + Thắng Map
                   </button>
                 </div>
               </div>
@@ -1579,7 +1603,7 @@ export default function LiveMatchPage() {
                   onClick={() => handleScoreChange('team2', 1)}
                   className="flex-1 py-2.5 px-3 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-xs font-bold transition-all text-green-400"
                 >
-                  + Ghi bàn
+                  + Điểm / Bàn thắng
                 </button>
               </div>
             )}

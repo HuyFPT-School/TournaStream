@@ -6,49 +6,29 @@ import { useTournament, Member } from '@/app/contexts/TournamentContext';
 import { useState, useRef } from 'react';
 
 const positionsBySport: Record<string, string[]> = {
-  soccer: [
-    'Tiền đạo',
-    'Tiền vệ',
-    'Hậu vệ',
-    'Thủ môn',
-    'Đội trưởng',
-    'Huấn luyện viên',
-    'Dự bị',
-  ],
-  basketball: [
-    'Hậu vệ dẫn bóng (PG)',
-    'Hậu vệ ghi điểm (SG)',
-    'Tiền phong phụ (SF)',
-    'Tiền phong chính (PF)',
-    'Trung phong (C)',
-    'Đội trưởng',
-    'Huấn luyện viên',
-    'Dự bị',
-  ],
-  volleyball: [
-    'Chuyền hai (Setter)',
-    'Chủ công (Outside Hitter)',
-    'Phụ công (Middle Blocker)',
-    'Đối chuyền (Opposite)',
-    'Libero',
-    'Đội trưởng',
-    'Huấn luyện viên',
-    'Dự bị',
-  ],
-  tennis: [
-    'Tay vợt đơn',
-    'Tay vợt đôi',
-    'Huấn luyện viên',
-    'Dự bị',
-  ],
-  esports: [
-    'Đường đơn (Solo Lane)',
+  moba: [
+    'Đường trên (Top Lane)',
     'Đường giữa (Mid Lane)',
-    'Đường rồng / Xạ thủ (ADC)',
-    'Hỗ trợ (Support)',
     'Đi rừng (Jungler)',
+    'Xạ thủ (AD Carry)',
+    'Hỗ trợ (Support)',
     'Đội trưởng / IGL',
     'Huấn luyện viên / Coach',
+    'Dự bị',
+  ],
+  fps: [
+    'Entry Fragger (Người mở giao tranh)',
+    'AWPer / Sniper (Tay bắn tỉa)',
+    'Support (Hỗ trợ)',
+    'Lurker (Ẩn nấp/Móc sau)',
+    'In-Game Leader (IGL / Chỉ huy)',
+    'Huấn luyện viên / Coach',
+    'Dự bị',
+  ],
+  fighting_sports: [
+    'Tuyển thủ chính (Main Player)',
+    'Đội trưởng (Captain)',
+    'Huấn luyện viên (Coach)',
     'Dự bị',
   ],
 };

@@ -630,39 +630,8 @@ export default function TournamentLiveViewPage() {
   }, [tournamentId]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    const hasRunning = tournament?.matchStates && Object.values(tournament.matchStates).some((ms: any) => ms.isRunning && !ms.isFinished);
-    
-    if (hasRunning) {
-      interval = setInterval(() => {
-        setTournament((prev: any) => {
-          if (!prev || !prev.matchStates) return prev;
-          
-          const nextStates = { ...prev.matchStates };
-          let changed = false;
-          
-          Object.keys(nextStates).forEach(key => {
-            const ms = nextStates[key];
-            if (ms.isRunning && !ms.isFinished) {
-              nextStates[key] = {
-                ...ms,
-                time: ms.time + 1
-              };
-              changed = true;
-            }
-          });
-          
-          if (!changed) return prev;
-          return {
-            ...prev,
-            matchStates: nextStates
-          };
-        });
-      }, 1000);
-    }
-    
-    return () => clearInterval(interval);
-  }, [tournament?.matchStates]);
+    // Timer is disabled for Esports
+  }, []);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -1192,16 +1161,13 @@ export default function TournamentLiveViewPage() {
             {/* Scoreboard Layout */}
             <div className="text-center mb-8">
               {/* Timer/Period */}
-              <div className="text-sm font-semibold text-white/60 mb-2">
+              <div className="text-sm font-semibold text-white/60 mb-4">
                 {selectedDetails.isLive 
-                  ? `Hiệp ${selectedDetails.hiep}` 
+                  ? (tournament?.sport === 'moba' ? `Đang thi đấu Game ${selectedDetails.hiep}` : tournament?.sport === 'fps' ? `Đang thi đấu Map ${selectedDetails.hiep}` : `Hiệp ${selectedDetails.hiep}`)
                   : selectedDetails.isFinished 
                   ? 'Chung cuộc' 
                   : 'Chờ bắt đầu'
                 }
-              </div>
-              <div className="text-4xl font-black mb-6 font-mono tracking-wider text-white">
-                {selectedDetails.isLive ? formatTime(selectedDetails.time) : '--:--'}
               </div>
 
               {/* Big Score Board */}
@@ -1210,16 +1176,15 @@ export default function TournamentLiveViewPage() {
                   <h4 className="text-lg font-bold text-white truncate">{selectedDetails.team1?.name || 'Chờ xác định'}</h4>
                 </div>
                 
-                {tournament?.sport === 'tennis' || tournament?.sport === 'volleyball' ? (
+                {tournament?.sport === 'moba' ? (
                   <div className="flex flex-col items-center justify-center gap-1.5">
                     <div className="flex justify-center items-center gap-3 text-3xl font-black text-[#22c55e]">
                       <span>{selectedDetails.scoreA !== null ? selectedDetails.scoreA : '0'}</span>
                       <span className="text-white/20">:</span>
                       <span>{selectedDetails.scoreB !== null ? selectedDetails.scoreB : '0'}</span>
                     </div>
-                    <div className="text-[9px] font-black text-white/30 uppercase tracking-wider">Tỉ số Set</div>
+                    <div className="text-[9px] font-black text-white/30 uppercase tracking-wider">Ván thắng (BO)</div>
                     
-                    {/* Points detail if live or available */}
                     {(selectedDetails.team1SetPoints !== null || selectedDetails.team2SetPoints !== null) && (
                       <div className="flex items-center gap-2 px-2 py-0.5 rounded bg-white/[0.03] border border-white/[0.05] text-xs font-bold font-mono mt-1 text-white/70">
                         <span>{selectedDetails.team1SetPoints ?? 0}</span>
@@ -1227,6 +1192,25 @@ export default function TournamentLiveViewPage() {
                         <span>{selectedDetails.team2SetPoints ?? 0}</span>
                       </div>
                     )}
+                    <div className="text-[8px] text-white/40">Hạ gục (Kills)</div>
+                  </div>
+                ) : tournament?.sport === 'fps' ? (
+                  <div className="flex flex-col items-center justify-center gap-1.5">
+                    <div className="flex justify-center items-center gap-3 text-3xl font-black text-[#22c55e]">
+                      <span>{selectedDetails.scoreA !== null ? selectedDetails.scoreA : '0'}</span>
+                      <span className="text-white/20">:</span>
+                      <span>{selectedDetails.scoreB !== null ? selectedDetails.scoreB : '0'}</span>
+                    </div>
+                    <div className="text-[9px] font-black text-white/30 uppercase tracking-wider">Map thắng (BO)</div>
+                    
+                    {(selectedDetails.team1SetPoints !== null || selectedDetails.team2SetPoints !== null) && (
+                      <div className="flex items-center gap-2 px-2 py-0.5 rounded bg-white/[0.03] border border-white/[0.05] text-xs font-bold font-mono mt-1 text-white/70">
+                        <span>{selectedDetails.team1SetPoints ?? 0}</span>
+                        <span className="text-white/20">:</span>
+                        <span>{selectedDetails.team2SetPoints ?? 0}</span>
+                      </div>
+                    )}
+                    <div className="text-[8px] text-white/40">Số vòng (Rounds)</div>
                   </div>
                 ) : (
                   <div className="flex justify-center items-center gap-3 text-3xl font-black">
