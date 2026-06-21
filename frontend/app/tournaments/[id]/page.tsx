@@ -1068,6 +1068,11 @@ export default function TournamentDetailPage() {
 
     if (!dbMatch) return;
 
+    if (!isGroup && matchState.team1Score === matchState.team2Score) {
+      alert("Trận đấu loại trực tiếp không thể kết thúc với tỉ số hòa! Vui lòng cập nhật tỉ số để xác định đội thắng cuộc.");
+      return;
+    }
+
     dbMatch.scoreA = matchState.team1Score;
     dbMatch.scoreB = matchState.team2Score;
     dbMatch.isFinished = true;
