@@ -158,10 +158,9 @@ function calculateGroupStandings(groupTeams: TeamRef[], groupMatches: any[], mat
       standings[idA].gd = standings[idA].gf - standings[idA].ga;
       if (scoreA > scoreB) {
         standings[idA].w += 1;
-        standings[idA].pts += 3;
+        standings[idA].pts += 1;
       } else if (scoreA === scoreB) {
         standings[idA].d += 1;
-        standings[idA].pts += 1;
       } else {
         standings[idA].l += 1;
       }
@@ -174,10 +173,9 @@ function calculateGroupStandings(groupTeams: TeamRef[], groupMatches: any[], mat
       standings[idB].gd = standings[idB].gf - standings[idB].ga;
       if (scoreB > scoreA) {
         standings[idB].w += 1;
-        standings[idB].pts += 3;
+        standings[idB].pts += 1;
       } else if (scoreA === scoreB) {
         standings[idB].d += 1;
-        standings[idB].pts += 1;
       } else {
         standings[idB].l += 1;
       }
@@ -1068,6 +1066,11 @@ export default function TournamentDetailPage() {
 
     if (!dbMatch) return;
 
+    if (matchState.team1Score === matchState.team2Score) {
+      alert("Trận đấu không thể kết thúc với tỉ số hòa! Vui lòng cập nhật tỉ số để xác định đội thắng cuộc.");
+      return;
+    }
+
     dbMatch.scoreA = matchState.team1Score;
     dbMatch.scoreB = matchState.team2Score;
     dbMatch.isFinished = true;
@@ -1780,10 +1783,9 @@ export default function TournamentDetailPage() {
                         <thead>
                           <tr className="border-b border-white/[0.06] text-white/50">
                             <th className="py-2 px-3">#</th>
-                            <th className="py-2 px-3">Đội bóng</th>
+                            <th className="py-2 px-3">Đội tuyển</th>
                             <th className="py-2 px-3 text-center">MP</th>
                             <th className="py-2 px-3 text-center">W</th>
-                            <th className="py-2 px-3 text-center">D</th>
                             <th className="py-2 px-3 text-center">L</th>
                             <th className="py-2 px-3 text-center">GD</th>
                             <th className="py-2 px-3 text-center font-bold text-white">Pts</th>
@@ -1796,7 +1798,6 @@ export default function TournamentDetailPage() {
                               <td className="py-2 px-3 font-bold text-white">{row.teamName}</td>
                               <td className="py-2 px-3 text-center">{row.mp}</td>
                               <td className="py-2 px-3 text-center text-green-500">{row.w}</td>
-                              <td className="py-2 px-3 text-center text-blue-500">{row.d}</td>
                               <td className="py-2 px-3 text-center text-red-500">{row.l}</td>
                               <td className={`py-2 px-3 text-center ${row.gd > 0 ? 'text-green-500' : row.gd < 0 ? 'text-red-500' : ''}`}>
                                 {row.gd > 0 ? `+${row.gd}` : row.gd}
