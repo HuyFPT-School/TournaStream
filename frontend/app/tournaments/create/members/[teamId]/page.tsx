@@ -31,6 +31,15 @@ const positionsBySport: Record<string, string[]> = {
     'Huấn luyện viên (Coach)',
     'Dự bị',
   ],
+  battle_royale: [
+    'Scout (Trinh sát)',
+    'Fragger (Sát thương chủ lực)',
+    'Support (Hỗ trợ)',
+    'In-Game Leader (Trưởng nhóm / Chỉ huy)',
+    'Sniper (Xạ thủ)',
+    'Huấn luyện viên / Coach',
+    'Dự bị',
+  ],
 };
 
 const defaultPositions = [

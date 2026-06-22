@@ -331,6 +331,57 @@ function calculateGroupStandings(groupTeams: any[], groupMatches: any[], matchSt
   });
 }
 
+function getPlacementPoints(rank: number | null): number {
+  if (rank === null) return 0;
+  if (rank === 1) return 10;
+  if (rank === 2) return 6;
+  if (rank === 3) return 5;
+  if (rank === 4) return 4;
+  if (rank === 5) return 3;
+  if (rank === 6) return 2;
+  if (rank === 7 || rank === 8) return 1;
+  return 0;
+}
+
+function calculateBattleRoyaleStandings(teams: any[], matches: any[]) {
+  const standings = teams.map((team: any) => {
+    const teamId = team.id || team.name;
+    let mp = 0;
+    let placementPts = 0;
+    let killPts = 0;
+
+    matches?.forEach((match: any) => {
+      if (match.isFinished) {
+        const teamResult = match.results?.find((r: any) => (r.teamId === teamId || r.teamName === team.name));
+        if (teamResult && teamResult.rank !== null) {
+          mp += 1;
+          placementPts += getPlacementPoints(teamResult.rank);
+          killPts += teamResult.kills || 0;
+        }
+      }
+    });
+
+    return {
+      teamId,
+      teamName: team.name,
+      mp,
+      placementPts,
+      killPts,
+      totalPts: placementPts + killPts,
+    };
+  });
+
+  return standings.sort((a: any, b: any) => {
+    if (b.totalPts !== a.totalPts) {
+      return b.totalPts - a.totalPts;
+    }
+    if (b.placementPts !== a.placementPts) {
+      return b.placementPts - a.placementPts;
+    }
+    return a.teamName.localeCompare(b.teamName);
+  });
+}
+
 function migrateTournamentData(t: any): any {
   if (!t) return t;
   if (!t.matchStates) {
@@ -881,7 +932,96 @@ export default function TournamentLiveViewPage() {
 
         {/* Bracket Tree View */}
         <div className="w-full">
-          {tournament.format === 'round_robin' && tournament.stage === 'group' ? (
+          {tournament.sport === 'battle_royale' || tournament.stage === 'battle_royale' ? (
+            <div className="space-y-12 animate-fade-in">
+              {/* Bảng xếp hạng tổng hợp PUBG */}
+              <div className="bg-[#0f1419] border border-white/[0.06] rounded-2xl p-6 space-y-6">
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
+                  <h3 className="text-lg font-black tracking-tight text-[#22c55e]">
+                    Bảng Xếp Hạng Tổng Hợp
+                  </h3>
+                  <span className="px-2.5 py-1 rounded-full bg-[#22c55e]/10 border border-[#22c55e]/20 text-[#22c55e] text-[10px] font-black uppercase tracking-wider">
+                    PUBG Mode
+                  </span>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-white/[0.06] text-white/50">
+                        <th className="py-2.5 px-3">#</th>
+                        <th className="py-2.5 px-3">Đội tuyển</th>
+                        <th className="py-2.5 px-3 text-center">Số trận (MP)</th>
+                        <th className="py-2.5 px-3 text-center">Điểm Hạng</th>
+                        <th className="py-2.5 px-3 text-center">Điểm Hạ Gục</th>
+                        <th className="py-2.5 px-3 text-center font-bold text-white">Tổng điểm</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {calculateBattleRoyaleStandings(tournament.teams || [], tournament.matches || []).map((row: any, idx: number) => (
+                        <tr key={row.teamId} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+                          <td className="py-3 px-3 font-semibold text-white/40">{idx + 1}</td>
+                          <td className="py-3 px-3 font-bold text-white">{row.teamName}</td>
+                          <td className="py-3 px-3 text-center text-white/70">{row.mp}</td>
+                          <td className="py-3 px-3 text-center text-blue-400 font-semibold">{row.placementPts}</td>
+                          <td className="py-3 px-3 text-center text-red-400 font-semibold">{row.killPts}</td>
+                          <td className="py-3 px-3 text-center font-black text-[#22c55e] text-sm">{row.totalPts}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Danh sách các trận đấu */}
+              <div className="bg-[#0f1419] border border-white/[0.06] rounded-2xl p-6 space-y-6">
+                <h3 className="text-lg font-black tracking-tight text-white/80 border-b border-white/[0.06] pb-3">
+                  Danh Sách Trận Đấu & Kết Quả Chi Tiết
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {(tournament.matches || []).map((match: any) => (
+                    <div 
+                      key={match.id} 
+                      className={`p-4 rounded-xl border transition-all duration-200 ${
+                        match.isFinished 
+                          ? 'bg-white/[0.01] border-white/[0.04]' 
+                          : 'bg-[#0f1419] border-white/[0.08]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-3 border-b border-white/[0.04] pb-2">
+                        <span className="font-extrabold text-sm text-[#22c55e]">{match.name}</span>
+                        {match.isFinished ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/10 text-white/60">
+                            Đã kết thúc
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#22c55e]/10 text-[#22c55e] animate-pulse">
+                            Đang chờ
+                          </span>
+                        )}
+                      </div>
+                      
+                      {match.isFinished ? (
+                        <div className="space-y-1.5 text-xs text-white/70 max-h-40 overflow-y-auto pr-1">
+                          {match.results
+                            ?.filter((r: any) => r.rank !== null)
+                            ?.sort((a: any, b: any) => (a.rank || 99) - (b.rank || 99))
+                            ?.map((r: any) => (
+                              <div key={r.teamId} className="flex justify-between hover:bg-white/[0.02] py-0.5 rounded px-1">
+                                <span className="font-medium truncate max-w-[140px]">#{r.rank} {r.teamName}</span>
+                                <span className="font-bold text-white">{r.pts} pts <span className="text-[10px] text-white/40 font-normal">({r.kills}k)</span></span>
+                              </div>
+                            ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-white/40 text-center py-4">Trận đấu chưa diễn ra</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : tournament.format === 'round_robin' && tournament.stage === 'group' ? (
             <div className="space-y-12">
               {tournament.groups?.map((group: any, gIdx: number) => {
                 const standings = calculateGroupStandings(group.teams, group.matches, tournament.matchStates);
@@ -1159,7 +1299,7 @@ export default function TournamentLiveViewPage() {
               {/* Timer/Period */}
               <div className="text-sm font-semibold text-white/60 mb-4">
                 {selectedDetails.isLive 
-                  ? (tournament?.sport === 'moba' ? `Đang thi đấu Game ${selectedDetails.hiep}` : tournament?.sport === 'fps' ? `Đang thi đấu Map ${selectedDetails.hiep}` : `Hiệp ${selectedDetails.hiep}`)
+                  ? 'Đang thi đấu'
                   : selectedDetails.isFinished 
                   ? 'Chung cuộc' 
                   : 'Chờ bắt đầu'
@@ -1172,53 +1312,15 @@ export default function TournamentLiveViewPage() {
                   <h4 className="text-lg font-bold text-white truncate">{selectedDetails.team1?.name || 'Chờ xác định'}</h4>
                 </div>
                 
-                {tournament?.sport === 'moba' ? (
-                  <div className="flex flex-col items-center justify-center gap-1.5">
-                    <div className="flex justify-center items-center gap-3 text-3xl font-black text-[#22c55e]">
-                      <span>{selectedDetails.scoreA !== null ? selectedDetails.scoreA : '0'}</span>
-                      <span className="text-white/20">:</span>
-                      <span>{selectedDetails.scoreB !== null ? selectedDetails.scoreB : '0'}</span>
-                    </div>
-                    <div className="text-[9px] font-black text-white/30 uppercase tracking-wider">Ván thắng (BO)</div>
-                    
-                    {(selectedDetails.team1SetPoints !== null || selectedDetails.team2SetPoints !== null) && (
-                      <div className="flex items-center gap-2 px-2 py-0.5 rounded bg-white/[0.03] border border-white/[0.05] text-xs font-bold font-mono mt-1 text-white/70">
-                        <span>{selectedDetails.team1SetPoints ?? 0}</span>
-                        <span className="text-white/20">:</span>
-                        <span>{selectedDetails.team2SetPoints ?? 0}</span>
-                      </div>
-                    )}
-                    <div className="text-[8px] text-white/40">Hạ gục (Kills)</div>
-                  </div>
-                ) : tournament?.sport === 'fps' ? (
-                  <div className="flex flex-col items-center justify-center gap-1.5">
-                    <div className="flex justify-center items-center gap-3 text-3xl font-black text-[#22c55e]">
-                      <span>{selectedDetails.scoreA !== null ? selectedDetails.scoreA : '0'}</span>
-                      <span className="text-white/20">:</span>
-                      <span>{selectedDetails.scoreB !== null ? selectedDetails.scoreB : '0'}</span>
-                    </div>
-                    <div className="text-[9px] font-black text-white/30 uppercase tracking-wider">Map thắng (BO)</div>
-                    
-                    {(selectedDetails.team1SetPoints !== null || selectedDetails.team2SetPoints !== null) && (
-                      <div className="flex items-center gap-2 px-2 py-0.5 rounded bg-white/[0.03] border border-white/[0.05] text-xs font-bold font-mono mt-1 text-white/70">
-                        <span>{selectedDetails.team1SetPoints ?? 0}</span>
-                        <span className="text-white/20">:</span>
-                        <span>{selectedDetails.team2SetPoints ?? 0}</span>
-                      </div>
-                    )}
-                    <div className="text-[8px] text-white/40">Số vòng (Rounds)</div>
-                  </div>
-                ) : (
-                  <div className="flex justify-center items-center gap-3 text-3xl font-black">
-                    <span className={selectedDetails.scoreA !== null ? 'text-white' : 'text-white/20'}>
-                      {selectedDetails.scoreA !== null ? selectedDetails.scoreA : '-'}
-                    </span>
-                    <span className="text-white/20">:</span>
-                    <span className={selectedDetails.scoreB !== null ? 'text-white' : 'text-white/20'}>
-                      {selectedDetails.scoreB !== null ? selectedDetails.scoreB : '-'}
-                    </span>
-                  </div>
-                )}
+                <div className="flex justify-center items-center gap-3 text-3xl font-black text-[#22c55e]">
+                  <span className={selectedDetails.scoreA !== null ? 'text-[#22c55e]' : 'text-white/20'}>
+                    {selectedDetails.scoreA !== null ? selectedDetails.scoreA : '0'}
+                  </span>
+                  <span className="text-white/20">:</span>
+                  <span className={selectedDetails.scoreB !== null ? 'text-[#22c55e]' : 'text-white/20'}>
+                    {selectedDetails.scoreB !== null ? selectedDetails.scoreB : '0'}
+                  </span>
+                </div>
 
                 <div>
                   <h4 className="text-lg font-bold text-white truncate">{selectedDetails.team2?.name || 'Chờ xác định'}</h4>

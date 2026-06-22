@@ -9,6 +9,7 @@ const sports = [
   { id: 'moba', name: 'Game MOBA (Liên Quân, LOL, Tốc Chiến...)', icon: '⚔️' },
   { id: 'fps', name: 'Game Bắn súng đối kháng (Valorant, CS, Đột Kích...)', icon: '🔫' },
   { id: 'fighting_sports', name: 'Game Đối kháng / FIFA', icon: '🎮' },
+  { id: 'battle_royale', name: 'Game Sinh tồn (PUBG, Free Fire...)', icon: '🪂' },
 ];
 
 const formats = [
@@ -24,9 +25,10 @@ export default function TournamentInfoPage() {
   const [sport, setSport] = useState(data.sport || '');
   const [matchDuration, setMatchDuration] = useState(data.matchDuration || 1);
   const [allowExtraTime, setAllowExtraTime] = useState(data.allowExtraTime || false);
-  const [format, setFormat] = useState<'single_elimination' | 'round_robin' | 'double_elimination'>(data.format || 'single_elimination');
+  const [format, setFormat] = useState<'single_elimination' | 'round_robin' | 'double_elimination' | 'battle_royale'>(data.format || 'single_elimination');
   const [groupsCount, setGroupsCount] = useState<number>(data.groupsCount || 1);
   const [advancingCount, setAdvancingCount] = useState<number>(data.advancingCount || 2);
+  const [matchesCount, setMatchesCount] = useState<number>(data.matchesCount || 5);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleContinue = () => {
@@ -42,7 +44,8 @@ export default function TournamentInfoPage() {
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length === 0) {
-      setTournamentInfo(name, sport, matchDuration, allowExtraTime, format, groupsCount, advancingCount);
+      const finalFormat = sport === 'battle_royale' ? 'battle_royale' : format;
+      setTournamentInfo(name, sport, matchDuration, allowExtraTime, finalFormat as any, groupsCount, advancingCount, matchesCount);
       router.push('/tournaments/create/teams');
     }
   };
@@ -154,31 +157,33 @@ export default function TournamentInfoPage() {
           </div>
 
           {/* Thể thức Selection */}
-          <div>
-            <label className="block text-sm font-semibold mb-3">Thể thức thi đấu</label>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {formats.map((f) => (
-                <button
-                  key={f.id}
-                  onClick={() => setFormat(f.id as any)}
-                  className={`p-4 rounded-lg border transition-all duration-200 text-left flex flex-col justify-between h-full ${
-                    format === f.id
-                      ? 'border-[#22c55e] bg-[#1a1f2e]'
-                      : 'border-white/[0.06] bg-[#0f1419] hover:border-white/[0.12]'
-                  }`}
-                >
-                  <div>
-                    <div className="text-2xl mb-2">{f.icon}</div>
-                    <div className="text-sm font-semibold mb-1">{f.name}</div>
-                    <div className="text-[11px] text-white/50 leading-relaxed">{f.desc}</div>
-                  </div>
-                </button>
-              ))}
+          {sport !== 'battle_royale' && (
+            <div>
+              <label className="block text-sm font-semibold mb-3">Thể thức thi đấu</label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {formats.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setFormat(f.id as any)}
+                    className={`p-4 rounded-lg border transition-all duration-200 text-left flex flex-col justify-between h-full ${
+                      format === f.id
+                        ? 'border-[#22c55e] bg-[#1a1f2e]'
+                        : 'border-white/[0.06] bg-[#0f1419] hover:border-white/[0.12]'
+                    }`}
+                  >
+                    <div>
+                      <div className="text-2xl mb-2">{f.icon}</div>
+                      <div className="text-sm font-semibold mb-1">{f.name}</div>
+                      <div className="text-[11px] text-white/50 leading-relaxed">{f.desc}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Group Stage Config (Round Robin Sub-options) */}
-          {format === 'round_robin' && (
+          {sport !== 'battle_royale' && format === 'round_robin' && (
             <div className="p-5 rounded-lg bg-[#0f1419] border border-white/[0.06] space-y-4">
               <h4 className="text-sm font-bold text-[#22c55e]">Cấu hình Vòng bảng</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -222,6 +227,27 @@ export default function TournamentInfoPage() {
               <p className="text-[11px] text-white/40">
                 Tổng số đội vào vòng Knock-out: <span className="text-[#22c55e] font-bold">{groupsCount * advancingCount} đội</span>.
               </p>
+            </div>
+          )}
+
+          {/* Battle Royale Config */}
+          {sport === 'battle_royale' && (
+            <div className="p-5 rounded-lg bg-[#0f1419] border border-white/[0.06] space-y-4">
+              <h4 className="text-sm font-bold text-[#22c55e]">Cấu hình trận đấu Sinh tồn</h4>
+              <div>
+                <label className="block text-xs text-white/60 mb-2 font-medium">Số trận thi đấu (Matches)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="20"
+                  value={matchesCount}
+                  onChange={(e) => setMatchesCount(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full px-4 py-2.5 rounded-lg bg-[#080b10] border border-white/[0.06] text-white focus:outline-none focus:border-[#22c55e] text-sm"
+                />
+                <p className="text-[11px] text-white/40 mt-1.5">
+                  Tất cả các đội tuyển sẽ tham gia thi đấu cùng lúc trong {matchesCount} trận đấu này để tính điểm tích lũy.
+                </p>
+              </div>
             </div>
           )}
 
