@@ -331,6 +331,130 @@ function calculateGroupStandings(groupTeams: any[], groupMatches: any[], matchSt
   });
 }
 
+interface LeagueStandingRow {
+  teamId: string;
+  teamName: string;
+  matchesPlayed: number;
+  wins: number;
+  totalKills: number;
+  placementPoints: number;
+  killPoints: number;
+  totalPoints: number;
+  currentRank: number;
+  rankChange: number;
+}
+
+function calculateLeagueStandings(
+  teams: any[],
+  leagueMatches: any[],
+  pointRules: Record<string, number>
+): LeagueStandingRow[] {
+  const standingsMap: Record<string, Omit<LeagueStandingRow, 'currentRank' | 'rankChange'>> = {};
+  
+  (teams || []).forEach(team => {
+    if (team.id) {
+      standingsMap[team.id] = {
+        teamId: team.id,
+        teamName: team.name || '',
+        matchesPlayed: 0,
+        wins: 0,
+        totalKills: 0,
+        placementPoints: 0,
+        killPoints: 0,
+        totalPoints: 0
+      };
+    }
+  });
+
+  const finishedMatches = (leagueMatches || []).filter(m => 
+    m.isFinished || (m.results && m.results.some((r: any) => (r.placement !== null && r.placement !== undefined && r.placement !== '') || (r.kills || 0) > 0))
+  );
+  
+  finishedMatches.forEach(match => {
+    (match.results || []).forEach((res: any) => {
+      const team = standingsMap[res.teamId];
+      if (team) {
+        if (match.isFinished || (res.placement !== null && res.placement !== undefined && res.placement !== '')) {
+          team.matchesPlayed += 1;
+        }
+        team.totalKills += res.kills || 0;
+        team.placementPoints += res.placementPoints || 0;
+        team.killPoints += res.killPoints || 0;
+        team.totalPoints += res.totalPoints || 0;
+        if (res.placement === 1) {
+          team.wins += 1;
+        }
+      }
+    });
+  });
+
+  const sortStandings = (arr: Omit<LeagueStandingRow, 'currentRank' | 'rankChange'>[]) => {
+    return [...arr].sort((a, b) => {
+      if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
+      if (b.placementPoints !== a.placementPoints) return b.placementPoints - a.placementPoints;
+      if (b.totalKills !== a.totalKills) return b.totalKills - a.totalKills;
+      if (b.wins !== a.wins) return b.wins - a.wins;
+      return a.teamName.localeCompare(b.teamName);
+    });
+  };
+
+  const currentSorted = sortStandings(Object.values(standingsMap));
+  const currentLeaderboard = currentSorted.map((item, idx) => ({
+    ...item,
+    currentRank: idx + 1,
+    rankChange: 0
+  }));
+
+  if (finishedMatches.length > 1) {
+    const prevStandingsMap: Record<string, Omit<LeagueStandingRow, 'currentRank' | 'rankChange'>> = {};
+    (teams || []).forEach(t => {
+      if (t.id) {
+        prevStandingsMap[t.id] = {
+          teamId: t.id,
+          teamName: t.name || '',
+          matchesPlayed: 0,
+          wins: 0,
+          totalKills: 0,
+          placementPoints: 0,
+          killPoints: 0,
+          totalPoints: 0
+        };
+      }
+    });
+
+    finishedMatches.slice(0, -1).forEach(match => {
+      (match.results || []).forEach((res: any) => {
+        const team = prevStandingsMap[res.teamId];
+        if (team) {
+          team.matchesPlayed += 1;
+          team.totalKills += res.kills || 0;
+          team.placementPoints += res.placementPoints || 0;
+          team.killPoints += res.killPoints || 0;
+          team.totalPoints += res.totalPoints || 0;
+          if (res.placement === 1) {
+            team.wins += 1;
+          }
+        }
+      });
+    });
+
+    const prevSorted = sortStandings(Object.values(prevStandingsMap));
+    const prevRanks: Record<string, number> = {};
+    prevSorted.forEach((item, idx) => {
+      prevRanks[item.teamId] = idx + 1;
+    });
+
+    currentLeaderboard.forEach(row => {
+      const prevRank = prevRanks[row.teamId];
+      if (prevRank) {
+        row.rankChange = prevRank - row.currentRank;
+      }
+    });
+  }
+
+  return currentLeaderboard;
+}
+
 function migrateTournamentData(t: any): any {
   if (!t) return t;
   if (!t.matchStates) {
@@ -414,6 +538,25 @@ export default function TournamentLiveViewPage() {
   const [showQrModal, setShowQrModal] = useState(false);
   const [selectedMatchKey, setSelectedMatchKey] = useState<string | null>(null);
   const [activeDeTab, setActiveDeTab] = useState<'upper' | 'lower' | 'grand'>('upper');
+  const [activeLeagueTab, setActiveLeagueTab] = useState<'leaderboard' | 'matches' | 'stats'>('leaderboard');
+  const [selectedLeagueMatchId, setSelectedLeagueMatchId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tournament && tournament.format === 'league' && !selectedLeagueMatchId) {
+      const activeMatch = tournament.leagueMatches?.find((m: any) => !m.isFinished);
+      if (activeMatch) {
+        setSelectedLeagueMatchId(activeMatch.id);
+      } else if (tournament.leagueMatches?.length > 0) {
+        setSelectedLeagueMatchId(tournament.leagueMatches[0].id);
+      }
+    }
+  }, [tournament, selectedLeagueMatchId]);
+
+  useEffect(() => {
+    if (tournament && tournament.format === 'league' && selectedLeagueMatchId) {
+      setSelectedMatchKey(selectedLeagueMatchId);
+    }
+  }, [selectedLeagueMatchId, tournament]);
 
   const [viewerStream, setViewerStream] = useState<MediaStream | null>(null);
   const [isViewerConnecting, setIsViewerConnecting] = useState(false);
@@ -688,6 +831,31 @@ export default function TournamentLiveViewPage() {
     let roundIndex = 0;
     let matchIndex = 0;
 
+    if (selectedMatchKey.startsWith('league-') || selectedMatchKey.startsWith('m-')) {
+      dbMatch = tournament.leagueMatches?.find((m: any) => m.id === selectedMatchKey);
+      if (!dbMatch) return null;
+
+      const liveState = tournament.matchStates?.[selectedMatchKey];
+      const isLive = !dbMatch.isFinished && !!liveState?.isRunning;
+      const isFinished = dbMatch.isFinished || !!liveState?.isFinished;
+
+      return {
+        team1: null,
+        team2: null,
+        scoreA: null,
+        scoreB: null,
+        time: 0,
+        hiep: 1,
+        team1SetPoints: null,
+        team2SetPoints: null,
+        isLive,
+        isFinished,
+        dbMatch,
+        streamType: liveState ? (liveState.streamType || null) : (dbMatch.streamType || null),
+        streamUrl: liveState ? (liveState.streamUrl || '') : (dbMatch.streamUrl || ''),
+      };
+    }
+
     if (selectedMatchKey.startsWith('g-')) {
       const parts = selectedMatchKey.split('-');
       roundIndex = parseInt(parts[1], 10);
@@ -795,7 +963,17 @@ export default function TournamentLiveViewPage() {
   const selectedDetails = getSelectedMatchDetails();
 
   const getTournamentWinnerName = () => {
-    if (!tournament || !tournament.bracket || !tournament.bracket.isFinished) return null;
+    if (!tournament) return null;
+    if (tournament.format === 'league') {
+      const allFinished = (tournament.leagueMatches || []).length > 0 && tournament.leagueMatches.every((m: any) => m.isFinished);
+      if (!allFinished) return null;
+      const standings = calculateLeagueStandings(tournament.teams, tournament.leagueMatches, tournament.pointRules || {});
+      if (standings.length > 0) {
+        return standings[0].teamName;
+      }
+      return null;
+    }
+    if (!tournament.bracket || !tournament.bracket.isFinished) return null;
     const rounds = tournament.bracket.rounds;
     if (!rounds || rounds.length === 0) return null;
     const finalRound = rounds[rounds.length - 1];
@@ -881,7 +1059,300 @@ export default function TournamentLiveViewPage() {
 
         {/* Bracket Tree View */}
         <div className="w-full">
-          {tournament.format === 'round_robin' && tournament.stage === 'group' ? (
+          {tournament.format === 'league' ? (
+            <div className="space-y-12 animate-fade-in">
+              {/* Split layout: Leaderboard on Left, Matches on Right */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                
+                {/* LEFT COLUMN: Leaderboard (5/12 columns) */}
+                <div className="lg:col-span-5 bg-[#0f1419] border border-white/[0.06] rounded-2xl p-5 space-y-5 shadow-lg">
+                  <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
+                    <h3 className="text-sm font-black tracking-widest text-[#22c55e] uppercase">
+                      Bảng Xếp Hạng Real-time
+                    </h3>
+                    <span className="text-[9px] text-white/30 uppercase font-black tracking-wider">
+                      PUBG Scoring
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-[11px] border-collapse">
+                      <thead>
+                        <tr className="border-b border-white/[0.06] text-white/40">
+                          <th className="py-2.5 px-2 text-center w-10">Hạng</th>
+                          <th className="py-2.5 px-2">Đội tuyển</th>
+                          <th className="py-2.5 px-1 text-center">Trận</th>
+                          <th className="py-2.5 px-1 text-center">Top 1</th>
+                          <th className="py-2.5 px-1 text-center">Kills</th>
+                          <th className="py-2.5 px-2 text-center font-bold text-white">Tổng</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {calculateLeagueStandings(
+                          tournament.teams,
+                          tournament.leagueMatches,
+                          tournament.pointRules || {}
+                        ).map((row, idx) => {
+                          const isTop3 = idx < 3;
+                          const rankColor = idx === 0 ? 'text-yellow-400 bg-yellow-400/10' : idx === 1 ? 'text-gray-300 bg-gray-300/10' : idx === 2 ? 'text-amber-600 bg-amber-600/10' : 'text-white/40';
+                          const medal = idx === 0 ? '👑 1st' : idx === 1 ? '🥈 2nd' : idx === 2 ? '🥉 3rd' : `${idx + 1}`;
+
+                          return (
+                            <tr
+                              key={row.teamId}
+                              className={`border-b border-white/[0.03] hover:bg-white/[0.01] transition-colors ${
+                                isTop3 ? 'bg-white/[0.005]' : ''
+                              }`}
+                            >
+                              <td className="py-2.5 px-2 text-center">
+                                <span className={`inline-block px-1.5 py-0.5 rounded-full text-[9px] font-black ${rankColor}`}>
+                                  {medal}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-2 font-bold text-white flex items-center gap-1.5 min-w-[80px] max-w-[140px] truncate">
+                                <span className="truncate">{row.teamName}</span>
+                                {row.rankChange > 0 && (
+                                  <span className="text-green-500 text-[8px] flex items-center font-black">
+                                    ▲{row.rankChange}
+                                  </span>
+                                )}
+                                {row.rankChange < 0 && (
+                                  <span className="text-red-500 text-[8px] flex items-center font-black">
+                                    ▼{Math.abs(row.rankChange)}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-1 text-center font-medium text-white/50">{row.matchesPlayed}</td>
+                              <td className="py-2.5 px-1 text-center text-green-500 font-bold">{row.wins}</td>
+                              <td className="py-2.5 px-1 text-center font-medium text-white/50">{row.totalKills}</td>
+                              <td className="py-2.5 px-2 text-center font-black text-[#22c55e] text-xs bg-[#22c55e]/5">
+                                {row.totalPoints}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* RIGHT COLUMN: Stream Player & Match Results (7/12 columns) */}
+                <div className="lg:col-span-7 space-y-6">
+                  
+                  {/* Match Selection Row (compact inline selector) */}
+                  <div className="bg-[#0f1419] border border-white/[0.06] rounded-2xl p-4 space-y-3 shadow-lg">
+                    <span className="text-[10px] font-black tracking-widest text-white/40 uppercase block text-center">
+                      Chọn Trận Đấu Đang Chiếu
+                    </span>
+                    <div className="flex gap-2 overflow-x-auto pb-1 justify-center">
+                      {(tournament.leagueMatches || []).map((m: any) => {
+                        const isSelected = selectedLeagueMatchId === m.id;
+                        const liveState = tournament.matchStates?.[m.id];
+                        const hasStream = m.streamUrl || liveState?.streamUrl;
+                        const isFinished = m.isFinished || liveState?.isFinished;
+                        return (
+                          <button
+                            key={m.id}
+                            onClick={() => setSelectedLeagueMatchId(m.id)}
+                            className={`px-4 py-2 rounded-xl border text-xs font-bold transition-all duration-200 flex items-center gap-2 shrink-0 ${
+                              isSelected
+                                ? 'border-[#22c55e] bg-[#22c55e]/10 text-white shadow-[0_0_15px_rgba(34,197,94,0.1)]'
+                                : 'border-white/[0.06] bg-[#080b10] hover:border-white/[0.12] text-white/60 hover:text-white'
+                            }`}
+                          >
+                            <span>{m.name}</span>
+                            <span className={`w-1.5 h-1.5 rounded-full ${
+                              isFinished ? 'bg-white/30' : hasStream ? 'bg-[#22c55e] animate-pulse' : 'bg-yellow-500'
+                            }`} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {(() => {
+                    const selectedMatch = (tournament.leagueMatches || []).find((m: any) => m.id === selectedLeagueMatchId);
+                    if (!selectedMatch) {
+                      return (
+                        <div className="bg-[#0f1419] border border-white/[0.06] rounded-2xl p-8 text-center text-white/40 text-sm">
+                          Vui lòng chọn trận đấu phía trên để xem.
+                        </div>
+                      );
+                    }
+
+                    const liveState = tournament.matchStates?.[selectedMatch.id];
+                    const streamType = liveState ? liveState.streamType : (selectedMatch.streamType || null);
+                    const streamUrl = liveState ? liveState.streamUrl : (selectedMatch.streamUrl || '');
+                    const isFinished = selectedMatch.isFinished || !!liveState?.isFinished;
+
+                    return (
+                      <div className="space-y-6">
+                        {/* Livestream Player */}
+                        {streamUrl ? (
+                          <div className="p-1 rounded-2xl bg-[#0f1419] border border-white/[0.06] overflow-hidden shadow-2xl relative">
+                            <div className="relative pb-[56.25%] h-0 rounded-xl overflow-hidden bg-black">
+                              {streamType === 'youtube' && (
+                                <iframe
+                                  src={getYoutubeEmbedUrl(streamUrl)}
+                                  className="absolute top-0 left-0 w-full h-full border-0"
+                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                  allowFullScreen
+                                />
+                              )}
+                              {streamType === 'twitch' && (
+                                <iframe
+                                  src={getTwitchEmbedUrl(streamUrl)}
+                                  className="absolute top-0 left-0 w-full h-full border-0"
+                                  allowFullScreen
+                                />
+                              )}
+                              {streamType === 'webcam' && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black">
+                                  {isViewerConnecting ? (
+                                    <div className="flex flex-col items-center gap-3 text-center p-6">
+                                      <svg className="animate-spin h-8 w-8 text-[#22c55e]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                      </svg>
+                                      <p className="text-xs text-white/60 font-semibold">Đang kết nối tới máy quay trọng tài...</p>
+                                    </div>
+                                  ) : viewerConnectionError ? (
+                                    <div className="text-center p-6 space-y-2">
+                                      <span className="text-3xl">📡❌</span>
+                                      <p className="text-xs text-red-400 font-semibold">{viewerConnectionError}</p>
+                                      <p className="text-[10px] text-white/40">Trọng tài chưa bật phát trực tiếp hoặc kết nối thất bại.</p>
+                                    </div>
+                                  ) : viewerStream ? (
+                                    <video
+                                      ref={viewerVideoRef}
+                                      autoPlay
+                                      playsInline
+                                      controls
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="text-center p-6 space-y-2">
+                                      <span className="text-3xl animate-pulse">📡</span>
+                                      <p className="text-xs text-white/50 font-semibold">Đang chờ luồng phát webcam...</p>
+                                      <p className="text-[10px] text-white/30">Kết nối thành công. Chờ trọng tài gửi dữ liệu stream.</p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <div className="px-4 py-2.5 bg-black/40 backdrop-blur-md flex items-center justify-between text-[10px] font-bold text-white/60 uppercase tracking-widest border-t border-white/[0.03]">
+                              <span className={`flex items-center gap-1.5 ${!isFinished ? 'text-red-500 font-extrabold animate-pulse' : 'text-white/40'}`}>
+                                {!isFinished && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />}
+                                {!isFinished ? 'TRỰC TIẾP TRẬN ĐẤU' : 'PHÁT LẠI TRẬN ĐẤU'}
+                              </span>
+                              <span>Nguồn: {streamType === 'webcam' ? 'Trọng tài trực tiếp' : streamType}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="bg-[#0f1419] border border-white/[0.06] rounded-2xl p-8 text-center text-white/40 text-sm flex flex-col items-center gap-2">
+                            <span>📺 Trận đấu này chưa được cấu hình link livestream.</span>
+                            <span className="text-xs text-white/20">Trọng tài sẽ cập nhật link stream khi trận đấu chuẩn bị khởi tranh.</span>
+                          </div>
+                        )}
+
+                        {/* Match Results */}
+                        <div className="bg-[#0f1419] border border-white/[0.06] rounded-2xl p-6 space-y-4">
+                          <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
+                            <span className="font-extrabold text-sm text-[#22c55e]">{selectedMatch.name} - Kết quả chi tiết</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-black ${
+                              selectedMatch.isFinished ? 'bg-[#22c55e]/10 text-[#22c55e]' : 'bg-yellow-500/10 text-yellow-500'
+                            }`}>
+                              {selectedMatch.isFinished ? 'ĐÃ KẾT THÚC' : 'ĐANG DIỄN RA / CHỜ BẮT ĐẦU'}
+                            </span>
+                          </div>
+
+                          {(selectedMatch.isFinished || (selectedMatch.results && selectedMatch.results.length > 0 && selectedMatch.results[0].placement !== null)) ? (
+                            <div className="space-y-1.5">
+                              {[...(selectedMatch.results || [])].sort((a: any, b: any) => a.placement - b.placement).map((res: any) => (
+                                <div key={res.teamId} className="flex items-center justify-between text-xs py-2 border-b border-white/[0.02] last:border-0 text-white/80">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`w-5 text-center font-black ${res.placement === 1 ? 'text-yellow-400 font-extrabold text-sm' : 'text-white/40'}`}>
+                                      #{res.placement}
+                                    </span>
+                                    <span className="font-bold text-white">{res.teamName}</span>
+                                  </div>
+                                  <div className="flex gap-4 font-mono text-[10px]">
+                                    <span>{res.kills} Kills</span>
+                                    <span className="text-[#22c55e] font-bold">+{res.totalPoints} Pts</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center py-8 text-xs text-white/30">
+                              Trận đấu đang diễn ra. Kết quả sẽ được trọng tài cập nhật ngay khi trận đấu kết thúc.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Bottom: Team Stats Grid */}
+              <div className="border-t border-white/[0.06] pt-8 space-y-6">
+                <h3 className="text-sm font-black tracking-widest text-[#22c55e] uppercase text-center">
+                  Thống Kê Đội Tuyển Chi Tiết
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {tournament.teams.map((team: any) => {
+                    const matches = (tournament.leagueMatches || []).filter((m: any) => m.isFinished);
+                    const teamResults = matches.flatMap((m: any) => m.results?.filter((r: any) => r.teamId === team.id) || []);
+                    
+                    const totalMatches = teamResults.length;
+                    const totalKills = teamResults.reduce((acc: number, curr: any) => acc + (curr.kills || 0), 0);
+                    const avgKills = totalMatches > 0 ? (totalKills / totalMatches).toFixed(1) : '0.0';
+                    const avgPlacement = totalMatches > 0 ? (teamResults.reduce((acc: number, curr: any) => acc + (curr.placement || 0), 0) / totalMatches).toFixed(1) : '0.0';
+                    
+                    const firstPlaces = teamResults.filter((r: any) => r.placement === 1).length;
+                    const top3Places = teamResults.filter((r: any) => r.placement >= 1 && r.placement <= 3).length;
+
+                    return (
+                      <div key={team.id} className="bg-[#0f1419] border border-white/[0.06] rounded-2xl p-5 space-y-4 shadow-lg">
+                        <h4 className="font-black text-sm text-[#22c55e] border-b border-white/[0.06] pb-2 text-center">
+                          {team.name}
+                        </h4>
+                        
+                        <div className="grid grid-cols-2 gap-4 text-center">
+                          <div className="bg-[#080b10] p-2.5 rounded-lg border border-white/[0.02]">
+                            <span className="text-[10px] text-white/40 block">Trận đấu</span>
+                            <span className="text-sm font-black text-white">{totalMatches}</span>
+                          </div>
+                          <div className="bg-[#080b10] p-2.5 rounded-lg border border-white/[0.02]">
+                            <span className="text-[10px] text-white/40 block">Hạng TB</span>
+                            <span className="text-sm font-black text-[#22c55e]">#{avgPlacement}</span>
+                          </div>
+                          <div className="bg-[#080b10] p-2.5 rounded-lg border border-white/[0.02]">
+                            <span className="text-[10px] text-white/40 block">Tổng Kills</span>
+                            <span className="text-sm font-black text-white">{totalKills}</span>
+                          </div>
+                          <div className="bg-[#080b10] p-2.5 rounded-lg border border-white/[0.02]">
+                            <span className="text-[10px] text-white/40 block">Kills TB / Trận</span>
+                            <span className="text-sm font-black text-white">{avgKills}</span>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-white/[0.04] pt-3 flex justify-between text-xs text-white/60">
+                          <span>Số trận TOP 1 (Win):</span>
+                          <span className="font-bold text-green-400">{firstPlaces}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-white/60">
+                          <span>Số trận lọt TOP 3:</span>
+                          <span className="font-bold text-amber-500">{top3Places}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : tournament.format === 'round_robin' && tournament.stage === 'group' ? (
             <div className="space-y-12">
               {tournament.groups?.map((group: any, gIdx: number) => {
                 const standings = calculateGroupStandings(group.teams, group.matches, tournament.matchStates);
@@ -1114,7 +1585,7 @@ export default function TournamentLiveViewPage() {
       )}
 
       {/* Match Details Modal Overlay */}
-      {selectedMatchKey && selectedDetails && (
+      {selectedMatchKey && selectedDetails && !selectedMatchKey.startsWith('league-') && !selectedMatchKey.startsWith('m-') && (
         <div className="fixed inset-0 z-50 bg-[#080b10]/85 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-[#0f1419] border border-white/[0.08] p-6 rounded-2xl w-full max-w-2xl shadow-2xl relative max-h-[90vh] overflow-y-auto animate-scale-in">
             

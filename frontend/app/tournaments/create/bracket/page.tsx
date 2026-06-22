@@ -12,8 +12,12 @@ export default function BracketPage() {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   useEffect(() => {
+    if (data.format === 'league') {
+      router.replace('/tournaments/create/finalize');
+      return;
+    }
     setOrderedTeams(data.teams);
-  }, [data.teams]);
+  }, [data.teams, data.format, router]);
 
   const handleDragStart = (index: number) => {
     setDraggedIndex(index);

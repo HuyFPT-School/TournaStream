@@ -57,6 +57,9 @@ export default function TeamsPage() {
     if (format === 'round_robin') {
       return len >= groupsCount * 2;
     }
+    if (format === 'league') {
+      return len >= 2;
+    }
     return false;
   };
 
@@ -66,6 +69,8 @@ export default function TeamsPage() {
         alert(`Vui lòng thêm ít nhất ${(data.groupsCount || 1) * 2} đội cho thể thức Vòng bảng (${data.groupsCount} bảng).`);
       } else if (data.format === 'double_elimination') {
         alert('Thể thức nhánh thắng - thua yêu cầu ít nhất 4 đội và số đội phải là lũy thừa của 2.');
+      } else if (data.format === 'league') {
+        alert('Thể thức Đường đua điểm số (League) yêu cầu ít nhất 2 đội.');
       } else {
         alert('Thể thức loại trực tiếp yêu cầu ít nhất 2 đội và số đội phải là lũy thừa của 2.');
       }
@@ -223,7 +228,9 @@ export default function TeamsPage() {
                 ? `Thể thức vòng bảng với ${data.groupsCount} bảng yêu cầu tối thiểu ${(data.groupsCount || 1) * 2} đội (tối thiểu 2 đội mỗi bảng). Hiện tại có ${data.teams.length} đội.`
                 : data.format === 'double_elimination'
                   ? `Thể thức nhánh thắng - thua yêu cầu số lượng đội là lũy thừa của 2 và tối thiểu 4 đội (4, 8, 16 hoặc 32 đội). Hiện tại có ${data.teams.length} đội.`
-                  : `Thể thức loại trực tiếp yêu cầu số lượng đội phải là lũy thừa của 2 (2, 4, 8, 16 hoặc 32 đội). Hiện tại có ${data.teams.length} đội.`
+                  : data.format === 'league'
+                    ? `Thể thức League / Point Race yêu cầu tối thiểu 2 đội. Hiện tại có ${data.teams.length} đội.`
+                    : `Thể thức loại trực tiếp yêu cầu số lượng đội phải là lũy thừa của 2 (2, 4, 8, 16 hoặc 32 đội). Hiện tại có ${data.teams.length} đội.`
               }
             </div>
           </div>
