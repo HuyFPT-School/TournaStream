@@ -46,7 +46,11 @@ export default function MembersPage() {
       return;
     }
 
-    router.push('/tournaments/create/bracket');
+    if (data.format === 'league') {
+      router.push('/tournaments/create/finalize');
+    } else {
+      router.push('/tournaments/create/bracket');
+    }
   };
 
   return (

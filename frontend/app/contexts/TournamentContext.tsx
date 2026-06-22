@@ -29,10 +29,12 @@ export interface TournamentData {
   allowExtraTime: boolean;
 
   // Format selection
-  format?: 'single_elimination' | 'round_robin' | 'double_elimination' | 'battle_royale';
+  format?: 'single_elimination' | 'round_robin' | 'double_elimination' | 'battle_royale' | 'league';
   groupsCount?: number;
   advancingCount?: number;
   matchesCount?: number;
+  leagueMatchesCount?: number;
+  pointRules?: Record<string, number>;
 
   // Teams and members
   teams: Team[];
@@ -50,10 +52,12 @@ interface TournamentContextType {
     sport: string,
     matchDuration: number,
     allowExtraTime: boolean,
-    format?: 'single_elimination' | 'round_robin' | 'double_elimination' | 'battle_royale',
+    format?: 'single_elimination' | 'round_robin' | 'double_elimination' | 'battle_royale' | 'league',
     groupsCount?: number,
     advancingCount?: number,
-    matchesCount?: number
+    matchesCount?: number,
+    leagueMatchesCount?: number,
+    pointRules?: Record<string, number>
   ) => void;
   addTeam: (team: Team) => void;
   removeTeam: (teamId: string) => void;
@@ -78,6 +82,21 @@ const initialData: TournamentData = {
   format: 'single_elimination',
   groupsCount: 1,
   advancingCount: 2,
+  leagueMatchesCount: 5,
+  pointRules: {
+    "1": 10,
+    "2": 6,
+    "3": 5,
+    "4": 4,
+    "5": 3,
+    "6": 2,
+    "7": 2,
+    "8": 1,
+    "9": 1,
+    "10": 1,
+    "11": 1,
+    "12": 1
+  },
   teams: [],
   bracketSeeded: false,
   shuffled: false,
@@ -130,10 +149,12 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
     sport: string,
     matchDuration: number,
     allowExtraTime: boolean,
-    format?: 'single_elimination' | 'round_robin' | 'double_elimination' | 'battle_royale',
+    format?: 'single_elimination' | 'round_robin' | 'double_elimination' | 'battle_royale' | 'league',
     groupsCount?: number,
     advancingCount?: number,
-    matchesCount?: number
+    matchesCount?: number,
+    leagueMatchesCount?: number,
+    pointRules?: Record<string, number>
   ) => {
     setData(prev => ({
       ...prev,
@@ -145,6 +166,21 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
       groupsCount: groupsCount || 1,
       advancingCount: advancingCount || 2,
       matchesCount: matchesCount || 5,
+      leagueMatchesCount: leagueMatchesCount || 5,
+      pointRules: pointRules || {
+        "1": 10,
+        "2": 6,
+        "3": 5,
+        "4": 4,
+        "5": 3,
+        "6": 2,
+        "7": 2,
+        "8": 1,
+        "9": 1,
+        "10": 1,
+        "11": 1,
+        "12": 1
+      },
     }));
   };
 

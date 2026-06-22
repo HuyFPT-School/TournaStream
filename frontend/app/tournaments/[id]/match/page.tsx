@@ -198,6 +198,18 @@ const getRoundLabel = (r: number, totalRounds: number) => {
 function getParsedIndices(key: string | null) {
   if (!key) return { roundIndex: 0, matchIndex: 0 };
   const parts = key.split('-');
+  if (key.startsWith('league-')) {
+    return {
+      roundIndex: 0,
+      matchIndex: parseInt(parts[2], 10) || 0
+    };
+  }
+  if (key.startsWith('m-')) {
+    return {
+      roundIndex: 0,
+      matchIndex: parseInt(parts[1], 10) || 0
+    };
+  }
   if (key.startsWith('g-') || key.startsWith('u-') || key.startsWith('l-')) {
     return {
       roundIndex: parseInt(parts[1], 10) || 0,
@@ -222,6 +234,10 @@ function getMatchLabel(key: string | null, tournament: any) {
   if (key.startsWith('br-')) {
     const idx = parseInt(parts[1], 10) || 0;
     return `Game Sinh tồn • Trận ${idx + 1}`;
+  }
+  if (key.startsWith('league-') || key.startsWith('m-')) {
+    const match = tournament?.leagueMatches?.find((m: any) => m.id === key);
+    return match ? match.name : 'Trận đấu League';
   }
   if (key.startsWith('g-')) {
     const gIdx = parseInt(parts[1], 10) || 0;
@@ -728,7 +744,7 @@ export default function LiveMatchPage() {
   }, [tournamentId, currentTournamentKey]);
 
   useEffect(() => {
-    if (!tournament || tournament.format === 'round_robin' || tournament.format === 'double_elimination' || tournament.bracket?.rounds?.length) return;
+    if (!tournament || tournament.format === 'round_robin' || tournament.format === 'double_elimination' || tournament.format === 'league' || tournament.bracket?.rounds?.length) return;
 
     const teams = getFallbackTeams(tournament);
     const bracket = buildInitialBracket(teams);
@@ -793,10 +809,25 @@ export default function LiveMatchPage() {
         [matchKey]: matchState
       };
 
+      let updatedLeagueMatches = tournament.leagueMatches;
+      if (matchKey.startsWith('league-') || matchKey.startsWith('m-')) {
+        updatedLeagueMatches = (tournament.leagueMatches || []).map((m: any) => {
+          if (m.id === matchKey) {
+            return {
+              ...m,
+              streamType: matchState.streamType,
+              streamUrl: matchState.streamUrl
+            };
+          }
+          return m;
+        });
+      }
+
       const updatedTournament = {
         ...tournament,
         matchStates: updatedMatchStates,
         matchState: matchState,
+        leagueMatches: updatedLeagueMatches,
         anyMatchRunning: Object.values(updatedMatchStates).some((ms: any) => ms.isRunning && !ms.isFinished),
       };
       
@@ -852,10 +883,25 @@ export default function LiveMatchPage() {
       [matchKey]: matchState
     };
 
+    let updatedLeagueMatches = tournament.leagueMatches;
+    if (matchKey.startsWith('league-') || matchKey.startsWith('m-')) {
+      updatedLeagueMatches = (tournament.leagueMatches || []).map((m: any) => {
+        if (m.id === matchKey) {
+          return {
+            ...m,
+            streamType: matchState.streamType,
+            streamUrl: matchState.streamUrl
+          };
+        }
+        return m;
+      });
+    }
+
     const updatedTournament = {
       ...tournament,
       matchStates: updatedMatchStates,
       matchState: matchState,
+      leagueMatches: updatedLeagueMatches,
       anyMatchRunning: Object.values(updatedMatchStates).some((ms: any) => ms.isRunning && !ms.isFinished),
     };
 
@@ -1267,6 +1313,9 @@ export default function LiveMatchPage() {
   
   const getSelectedBracketMatch = () => {
     if (!tournament || !matchKey) return null;
+    if (matchKey.startsWith('league-') || matchKey.startsWith('m-')) {
+      return tournament.leagueMatches?.find((m: any) => m.id === matchKey) || null;
+    }
     if (matchKey.startsWith('g-')) {
       const parts = matchKey.split('-');
       const gIdx = parseInt(parts[1], 10);
@@ -1309,17 +1358,26 @@ export default function LiveMatchPage() {
 
   const winnableTeam = null;
 
-  const handleBrResultChange = (teamId: string, field: 'rank' | 'kills', value: any) => {
+  const handleBrScoreChange = (teamId: string, delta: number) => {
     setBrResults(prev => prev.map((r: any) => {
       if (r.teamId === teamId) {
-        const updated = { ...r };
-        if (field === 'rank') {
-          updated.rank = value === '' ? null : parseInt(value, 10);
-        } else if (field === 'kills') {
-          updated.kills = value === '' ? 0 : Math.max(0, parseInt(value, 10) || 0);
-        }
-        updated.pts = getPlacementPoints(updated.rank) + updated.kills;
-        return updated;
+        return {
+          ...r,
+          pts: Math.max(0, (r.pts || 0) + delta)
+        };
+      }
+      return r;
+    }));
+  };
+
+  const handleBrScoreInput = (teamId: string, val: string) => {
+    const numericVal = val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0);
+    setBrResults(prev => prev.map((r: any) => {
+      if (r.teamId === teamId) {
+        return {
+          ...r,
+          pts: numericVal
+        };
       }
       return r;
     }));
@@ -1329,11 +1387,9 @@ export default function LiveMatchPage() {
     if (!tournament || !matchKey) return;
 
     const calculatedResults = brResults.map((r: any) => {
-      const pPts = getPlacementPoints(r.rank);
-      const kPts = r.kills || 0;
       return {
         ...r,
-        pts: pPts + kPts
+        pts: r.pts || 0
       };
     });
 
@@ -1438,47 +1494,42 @@ export default function LiveMatchPage() {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-white/[0.06] text-white/50">
-                      <th className="py-3 px-3">Đội tuyển</th>
-                      <th className="py-3 px-3 text-center w-36">Thứ hạng (Rank)</th>
-                      <th className="py-3 px-3 text-center w-32">Số mạng hạ gục (Kills)</th>
-                      <th className="py-3 px-3 text-center">Điểm Hạng</th>
-                      <th className="py-3 px-3 text-center">Điểm Mạng</th>
-                      <th className="py-3 px-3 text-center font-bold text-white">Tổng điểm</th>
+                      <th className="py-3 px-4">Đội tuyển</th>
+                      <th className="py-3 px-4 text-center w-48 font-bold text-white">Tỉ số / Điểm số</th>
                     </tr>
                   </thead>
                   <tbody>
                     {brResults.map((result: any) => {
-                      const placementPts = getPlacementPoints(result.rank);
-                      const killPts = result.kills || 0;
                       return (
                         <tr key={result.teamId} className="border-b border-white/[0.04] hover:bg-white/[0.02]">
-                          <td className="py-3 px-3 font-bold text-white text-sm">{result.teamName}</td>
-                          <td className="py-3 px-3 text-center">
-                            <select
-                              value={result.rank === null ? '' : result.rank}
-                              onChange={(e) => handleBrResultChange(result.teamId, 'rank', e.target.value)}
-                              className="w-full max-w-[120px] px-2.5 py-1.5 rounded-lg bg-[#080b10] border border-white/[0.08] text-white text-xs focus:outline-none focus:border-[#22c55e] transition-colors"
-                            >
-                              <option value="">-- Chọn Hạng --</option>
-                              {Array.from({ length: tournament.teams?.length || 0 }, (_, idx) => (
-                                <option key={idx + 1} value={idx + 1}>
-                                  Hạng {idx + 1}
-                                </option>
-                              ))}
-                            </select>
+                          <td className="py-3 px-4 font-bold text-white text-sm">{result.teamName}</td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center justify-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => handleBrScoreChange(result.teamId, -1)}
+                                className="w-8 h-8 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-400 text-sm font-bold transition-all flex items-center justify-center"
+                                title="Trừ 1 điểm"
+                              >
+                                −
+                              </button>
+                              <input
+                                type="number"
+                                min="0"
+                                value={result.pts || 0}
+                                onChange={(e) => handleBrScoreInput(result.teamId, e.target.value)}
+                                className="w-20 px-3 py-1.5 rounded bg-[#080b10] border border-white/[0.08] text-white text-center text-sm font-black focus:outline-none focus:border-[#22c55e] transition-colors"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleBrScoreChange(result.teamId, 1)}
+                                className="w-8 h-8 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-green-400 text-sm font-bold transition-all flex items-center justify-center"
+                                title="Cộng 1 điểm"
+                              >
+                                +
+                              </button>
+                            </div>
                           </td>
-                          <td className="py-3 px-3 text-center">
-                            <input
-                              type="number"
-                              min="0"
-                              value={result.kills}
-                              onChange={(e) => handleBrResultChange(result.teamId, 'kills', e.target.value)}
-                              className="w-full max-w-[100px] px-2.5 py-1.5 rounded-lg bg-[#080b10] border border-white/[0.08] text-white text-center text-xs focus:outline-none focus:border-[#22c55e] transition-colors"
-                            />
-                          </td>
-                          <td className="py-3 px-3 text-center font-semibold text-blue-400">{placementPts}</td>
-                          <td className="py-3 px-3 text-center font-semibold text-red-400">{killPts}</td>
-                          <td className="py-3 px-3 text-center font-black text-[#22c55e] text-sm">{placementPts + killPts}</td>
                         </tr>
                       );
                     })}
@@ -1517,100 +1568,154 @@ export default function LiveMatchPage() {
         </div>
 
         {/* Score Board */}
-        <div className="grid grid-cols-3 gap-6 mb-12">
-          {/* Team 1 */}
-          <div className="text-center">
-            <div className="mb-4">
-              <h2 className="text-2xl font-black mb-2">{team1?.name || 'Team 1'}</h2>
-              {team1?.members && team1.members.length > 0 && (
-                <p className="text-sm text-white/60">{team1.members.length} thành viên</p>
-              )}
-            </div>
-            <div className="flex items-center justify-center gap-2 max-w-[180px] mx-auto">
-              <button
-                onClick={() => handleScoreChange('team1', -1)}
-                className="px-3.5 py-2.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-400 text-sm font-bold transition-all"
-                title="Trừ 1 điểm"
-              >
-                −
-              </button>
-              <button
-                onClick={() => handleScoreChange('team1', 1)}
-                className="flex-1 py-2.5 px-3 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-xs font-bold transition-all text-green-400"
-              >
-                + Điểm / Bàn thắng
-              </button>
-            </div>
-          </div>
-
-          {/* Score & Time */}
-          <div className="flex flex-col items-center justify-center">
-            {/* Score */}
-            <div className="flex flex-col items-center gap-1 mb-6">
-              <div className="text-[10px] font-black tracking-widest text-white/40 uppercase">Tỉ số</div>
-              <div className="flex items-center gap-4">
-                <div className="text-5xl font-black">{matchState.team1Score}</div>
-                <div className="text-3xl font-black text-white/50">−</div>
-                <div className="text-5xl font-black">{matchState.team2Score}</div>
-              </div>
-            </div>
-
-            {/* Start/Stop Button */}
-            {matchState.isFinished ? (
-              <div className="px-6 py-3 rounded-lg font-semibold bg-gray-500/20 border border-gray-500/30 text-gray-400 mb-4 cursor-not-allowed">
-                🏁 Trận đấu đã kết thúc
-              </div>
-            ) : !matchState.isRunning ? (
-              <div className="flex flex-col gap-2 w-full max-w-[200px] mb-4">
+        {tournament.format === 'league' ? (
+          <div className="space-y-8 mb-12">
+            {/* Simplified League match control */}
+            <div className="flex flex-col items-center justify-center p-8 bg-[#0f1419] border border-white/[0.06] rounded-2xl max-w-md mx-auto gap-5 shadow-xl">
+              <h3 className="text-base font-black text-[#22c55e] uppercase tracking-wider">{roundLabel}</h3>
+              
+              {/* Start/Stop Button */}
+              {matchState.isFinished ? (
+                <div className="px-6 py-3 rounded-lg font-bold text-xs bg-white/[0.02] border border-white/[0.08] text-white/40 uppercase tracking-widest cursor-not-allowed">
+                  🏁 Trận đấu đã kết thúc
+                </div>
+              ) : !matchState.isRunning ? (
                 <button
                   onClick={handleStartStop}
-                  className="w-full px-6 py-3 rounded-lg font-semibold transition-all duration-200 border bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border-[#22c55e]/50 text-green-400"
+                  className="px-8 py-3 rounded-lg font-bold text-xs uppercase tracking-widest transition-all duration-200 border bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border-[#22c55e]/50 text-green-400"
                 >
                   ▶ Bắt đầu trận đấu
                 </button>
+              ) : null}
+
+              {/* Status */}
+              <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider ${
+                matchState.isFinished
+                  ? 'bg-red-500/20 text-red-400 border border-red-500/50'
+                  : matchState.isRunning
+                  ? 'bg-[#22c55e]/20 text-green-400 border border-[#22c55e]/40 shadow-[0_0_15px_rgba(34,197,94,0.1)]'
+                  : 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${
+                  matchState.isFinished ? 'bg-red-400' : matchState.isRunning ? 'bg-[#22c55e] animate-pulse' : 'bg-blue-400'
+                }`} />
+                {matchState.isFinished ? 'Đã kết thúc' : matchState.isRunning ? 'Đang phát sóng (LIVE)' : 'Sẵn sàng'}
               </div>
-            ) : null}
+            </div>
 
-            {/* Status */}
-            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
-              matchState.isFinished
-                ? 'bg-red-500/20 text-red-400 border border-red-500/50'
-                : matchState.isRunning
-                ? 'bg-green-500/20 text-green-400 border border-green-500/50'
-                : 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
-            }`}>
-              <div className={`w-2 h-2 rounded-full ${
-                matchState.isFinished ? 'bg-red-400' : matchState.isRunning ? 'bg-green-400' : 'bg-blue-400'
-              }`} />
-              {matchState.isFinished ? 'Đã kết thúc' : matchState.isRunning ? 'Đang phát sóng' : 'Sẵn sàng'}
+            {/* League Team List Reference */}
+            <div className="p-6 bg-[#0f1419] border border-white/[0.06] rounded-2xl">
+              <h5 className="text-xs font-black tracking-widest text-white/40 uppercase mb-4 text-center">
+                Đội tuyển thi đấu ({tournament.teams?.length || 0})
+              </h5>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {(tournament.teams || []).map((team: any) => (
+                  <div key={team.id} className="p-3.5 rounded-xl bg-[#080b10] border border-white/[0.04] flex flex-col items-center justify-center text-center">
+                    <span className="font-extrabold text-xs text-white truncate max-w-full">{team.name}</span>
+                    <span className="text-[10px] text-white/30 mt-1 font-semibold">
+                      {team.members && team.members.length > 0 ? `${team.members.length} thành viên` : 'Chưa xếp đội hình'}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-
-          {/* Team 2 */}
-          <div className="text-center">
-            <div className="mb-4">
-              <h2 className="text-2xl font-black mb-2">{team2?.name || 'Team 2'}</h2>
-              {team2?.members && team2.members.length > 0 && (
-                <p className="text-sm text-white/60">{team2.members.length} thành viên</p>
-              )}
+        ) : (
+          <div className="grid grid-cols-3 gap-6 mb-12">
+            {/* Team 1 */}
+            <div className="text-center">
+              <div className="mb-4">
+                <h2 className="text-2xl font-black mb-2">{team1?.name || 'Team 1'}</h2>
+                {team1?.members && team1.members.length > 0 && (
+                  <p className="text-sm text-white/60">{team1.members.length} thành viên</p>
+                )}
+              </div>
+              <div className="flex items-center justify-center gap-2 max-w-[180px] mx-auto">
+                <button
+                  onClick={() => handleScoreChange('team1', -1)}
+                  className="px-3.5 py-2.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-400 text-sm font-bold transition-all"
+                  title="Trừ 1 điểm"
+                >
+                  −
+                </button>
+                <button
+                  onClick={() => handleScoreChange('team1', 1)}
+                  className="flex-1 py-2.5 px-3 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-xs font-bold transition-all text-green-400"
+                >
+                  + Điểm / Bàn thắng
+                </button>
+              </div>
             </div>
-            <div className="flex items-center justify-center gap-2 max-w-[180px] mx-auto">
-              <button
-                onClick={() => handleScoreChange('team2', -1)}
-                className="px-3.5 py-2.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-400 text-sm font-bold transition-all"
-                title="Trừ 1 điểm"
-              >
-                −
-              </button>
-              <button
-                onClick={() => handleScoreChange('team2', 1)}
-                className="flex-1 py-2.5 px-3 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-xs font-bold transition-all text-green-400"
-              >
-                + Điểm / Bàn thắng
-              </button>
+
+            {/* Score & Time */}
+            <div className="flex flex-col items-center justify-center">
+              {/* Score */}
+              <div className="flex flex-col items-center gap-1 mb-6">
+                <div className="text-[10px] font-black tracking-widest text-white/40 uppercase">Tỉ số</div>
+                <div className="flex items-center gap-4">
+                  <div className="text-5xl font-black">{matchState.team1Score}</div>
+                  <div className="text-3xl font-black text-white/50">−</div>
+                  <div className="text-5xl font-black">{matchState.team2Score}</div>
+                </div>
+              </div>
+
+              {/* Start/Stop Button */}
+              {matchState.isFinished ? (
+                <div className="px-6 py-3 rounded-lg font-semibold bg-gray-500/20 border border-gray-500/30 text-gray-400 mb-4 cursor-not-allowed">
+                  🏁 Trận đấu đã kết thúc
+                </div>
+              ) : !matchState.isRunning ? (
+                <div className="flex flex-col gap-2 w-full max-w-[200px] mb-4">
+                  <button
+                    onClick={handleStartStop}
+                    className="w-full px-6 py-3 rounded-lg font-semibold transition-all duration-200 border bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border-[#22c55e]/50 text-green-400"
+                  >
+                    ▶ Bắt đầu trận đấu
+                  </button>
+                </div>
+              ) : null}
+
+              {/* Status */}
+              <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
+                matchState.isFinished
+                  ? 'bg-red-500/20 text-red-400 border border-red-500/50'
+                  : matchState.isRunning
+                  ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+                  : 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${
+                  matchState.isFinished ? 'bg-red-400' : matchState.isRunning ? 'bg-green-400' : 'bg-blue-400'
+                }`} />
+                {matchState.isFinished ? 'Đã kết thúc' : matchState.isRunning ? 'Đang phát sóng' : 'Sẵn sàng'}
+              </div>
+            </div>
+
+            {/* Team 2 */}
+            <div className="text-center">
+              <div className="mb-4">
+                <h2 className="text-2xl font-black mb-2">{team2?.name || 'Team 2'}</h2>
+                {team2?.members && team2.members.length > 0 && (
+                  <p className="text-sm text-white/60">{team2.members.length} thành viên</p>
+                )}
+              </div>
+              <div className="flex items-center justify-center gap-2 max-w-[180px] mx-auto">
+                <button
+                  onClick={() => handleScoreChange('team2', -1)}
+                  className="px-3.5 py-2.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-400 text-sm font-bold transition-all"
+                  title="Trừ 1 điểm"
+                >
+                  −
+                </button>
+                <button
+                  onClick={() => handleScoreChange('team2', 1)}
+                  className="flex-1 py-2.5 px-3 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-xs font-bold transition-all text-green-400"
+                >
+                  + Điểm / Bàn thắng
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
 
 

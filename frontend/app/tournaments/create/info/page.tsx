@@ -16,6 +16,7 @@ const formats = [
   { id: 'single_elimination', name: 'Loại trực tiếp', desc: 'Thua 1 trận là bị loại ngay lập tức', icon: '🏆' },
   { id: 'round_robin', name: 'Vòng bảng & Knockout', desc: 'Chia bảng đấu tính điểm và lấy đội đi tiếp đấu Knockout', icon: '⚽' },
   { id: 'double_elimination', name: 'Nhánh thắng - Nhánh thua', desc: 'Esport chuyên nghiệp, thua 1 lần vẫn còn cơ hội sửa sai', icon: '🎮' },
+  { id: 'league', name: 'Đường đua điểm số (League)', desc: 'Thể thức PUBG: Đấu nhiều trận, tích lũy điểm hạng & diệt địch', icon: '📊' },
 ];
 
 export default function TournamentInfoPage() {
@@ -25,11 +26,43 @@ export default function TournamentInfoPage() {
   const [sport, setSport] = useState(data.sport || '');
   const [matchDuration, setMatchDuration] = useState(data.matchDuration || 1);
   const [allowExtraTime, setAllowExtraTime] = useState(data.allowExtraTime || false);
-  const [format, setFormat] = useState<'single_elimination' | 'round_robin' | 'double_elimination' | 'battle_royale'>(data.format || 'single_elimination');
+  const [format, setFormat] = useState<'single_elimination' | 'round_robin' | 'double_elimination' | 'battle_royale' | 'league'>(data.format || 'single_elimination');
   const [groupsCount, setGroupsCount] = useState<number>(data.groupsCount || 1);
   const [advancingCount, setAdvancingCount] = useState<number>(data.advancingCount || 2);
   const [matchesCount, setMatchesCount] = useState<number>(data.matchesCount || 5);
+  const [leagueMatchesCount, setLeagueMatchesCount] = useState<number>(data.leagueMatchesCount || 5);
+  const [pointRules, setPointRules] = useState<Record<string, number>>(data.pointRules || {
+    "1": 10,
+    "2": 6,
+    "3": 5,
+    "4": 4,
+    "5": 3,
+    "6": 2,
+    "7": 2,
+    "8": 1,
+    "9": 1,
+    "10": 1,
+    "11": 1,
+    "12": 1
+  });
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const updatePointRule = (rankKey: string, val: number) => {
+    setPointRules(prev => {
+      const next = { ...prev };
+      if (rankKey === '6-7') {
+        next['6'] = val;
+        next['7'] = val;
+      } else if (rankKey === '8-12') {
+        for (let r = 8; r <= 12; r++) {
+          next[r.toString()] = val;
+        }
+      } else {
+        next[rankKey] = val;
+      }
+      return next;
+    });
+  };
 
   const handleContinue = () => {
     const newErrors: Record<string, string> = {};
@@ -45,7 +78,18 @@ export default function TournamentInfoPage() {
 
     if (Object.keys(newErrors).length === 0) {
       const finalFormat = sport === 'battle_royale' ? 'battle_royale' : format;
-      setTournamentInfo(name, sport, matchDuration, allowExtraTime, finalFormat as any, groupsCount, advancingCount, matchesCount);
+      setTournamentInfo(
+        name,
+        sport,
+        matchDuration,
+        allowExtraTime,
+        finalFormat as any,
+        groupsCount,
+        advancingCount,
+        matchesCount,
+        leagueMatchesCount,
+        pointRules
+      );
       router.push('/tournaments/create/teams');
     }
   };
@@ -247,6 +291,71 @@ export default function TournamentInfoPage() {
                 <p className="text-[11px] text-white/40 mt-1.5">
                   Tất cả các đội tuyển sẽ tham gia thi đấu cùng lúc trong {matchesCount} trận đấu này để tính điểm tích lũy.
                 </p>
+              </div>
+            </div>
+          )}
+
+          {/* League Config Options */}
+          {format === 'league' && (
+            <div className="p-5 rounded-lg bg-[#0f1419] border border-white/[0.06] space-y-4">
+              <h4 className="text-sm font-bold text-[#22c55e]">Cấu hình Đường đua điểm số (League)</h4>
+              <div>
+                <label className="block text-xs text-white/60 mb-2 font-medium">Số lượng trận đấu</label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); setLeagueMatchesCount(prev => Math.max(1, prev - 1)); }}
+                    className="w-10 h-10 rounded-lg bg-[#080b10] border border-white/[0.06] flex items-center justify-center font-bold text-lg hover:border-white/[0.12] transition-colors"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    value={leagueMatchesCount}
+                    onChange={(e) => setLeagueMatchesCount(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-20 py-2 rounded-lg bg-[#080b10] border border-white/[0.06] text-white font-bold text-center focus:outline-none focus:border-[#22c55e]"
+                  />
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); setLeagueMatchesCount(prev => Math.min(50, prev + 1)); }}
+                    className="w-10 h-10 rounded-lg bg-[#080b10] border border-white/[0.06] flex items-center justify-center font-bold text-lg hover:border-white/[0.12] transition-colors"
+                  >
+                    +
+                  </button>
+                  <span className="text-[11px] text-white/40 font-medium">Trận (Tối đa 50)</span>
+                </div>
+              </div>
+              
+              <div className="border-t border-white/[0.06] pt-4">
+                <label className="block text-xs text-white/60 mb-3 font-medium">Cấu hình Điểm Hạng (Placement Points)</label>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Top 1 (Hạng 1)', key: '1' },
+                    { label: 'Top 2 (Hạng 2)', key: '2' },
+                    { label: 'Top 3 (Hạng 3)', key: '3' },
+                    { label: 'Top 4 (Hạng 4)', key: '4' },
+                    { label: 'Top 5 (Hạng 5)', key: '5' },
+                    { label: 'Top 6-7', key: '6-7', displayVal: pointRules['6'] },
+                    { label: 'Top 8-12', key: '8-12', displayVal: pointRules['8'] },
+                  ].map((rule) => (
+                    <div key={rule.key} className="bg-[#080b10] border border-white/[0.04] p-3 rounded-lg flex flex-col gap-1.5">
+                      <span className="text-[10px] text-white/50 font-semibold">{rule.label}</span>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          value={rule.displayVal !== undefined ? rule.displayVal : (pointRules[rule.key] ?? 0)}
+                          onChange={(e) => updatePointRule(rule.key, Math.max(0, parseInt(e.target.value) || 0))}
+                          className="w-full px-2 py-1 rounded bg-[#0f1419] border border-white/[0.06] text-sm text-[#22c55e] font-black text-center focus:outline-none focus:border-[#22c55e]"
+                        />
+                        <span className="text-[10px] text-white/30 font-bold">Pts</span>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="bg-[#080b10]/40 border border-dashed border-white/[0.04] p-3 rounded-lg flex flex-col justify-center items-center text-center">
+                    <span className="text-[9px] text-[#22c55e] font-bold">1 Kill hạ gục</span>
+                    <span className="text-[12px] font-black text-white mt-0.5">1 Điểm</span>
+                  </div>
+                </div>
               </div>
             </div>
           )}
