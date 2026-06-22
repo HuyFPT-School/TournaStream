@@ -7,7 +7,7 @@ import { useState } from 'react';
 
 const sports = [
   { id: 'moba', name: 'Game MOBA (Liên Quân, LOL, Tốc Chiến...)', icon: '⚔️' },
-  { id: 'fps', name: 'Game Bắn súng (Valorant, CS, PUBG...)', icon: '🔫' },
+  { id: 'fps', name: 'Game Bắn súng đối kháng (Valorant, CS, Đột Kích...)', icon: '🔫' },
   { id: 'fighting_sports', name: 'Game Đối kháng / FIFA', icon: '🎮' },
 ];
 
