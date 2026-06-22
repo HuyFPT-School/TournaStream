@@ -78,7 +78,7 @@ export default function MyTournamentsPage() {
       router.push('/tournaments/create/teams');
     } else if (!allTeamsHaveMembers) {
       router.push('/tournaments/create/members');
-    } else if (!draft.bracketSeeded) {
+    } else if (!draft.bracketSeeded && draft.format !== 'league') {
       router.push('/tournaments/create/bracket');
     } else {
       router.push('/tournaments/create/finalize');

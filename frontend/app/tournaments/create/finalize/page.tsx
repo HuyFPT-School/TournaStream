@@ -167,6 +167,7 @@ export default function FinalizeCreatePage() {
     const tournamentId = 'tourn_' + Date.now();
     let bracket = null;
     let groups: any[] | null = null;
+    let leagueMatches: any[] | null = null;
     let stage = null;
 
     if (data.format === 'round_robin') {
@@ -187,6 +188,24 @@ export default function FinalizeCreatePage() {
       stage = 'group';
     } else if (data.format === 'double_elimination') {
       bracket = buildDoubleEliminationBracket(data.teams);
+    } else if (data.format === 'league') {
+      const matchesCount = data.leagueMatchesCount || 5;
+      leagueMatches = Array.from({ length: matchesCount }, (_, mIdx) => ({
+        id: `league-match-${mIdx}`,
+        name: `Trận ${mIdx + 1}`,
+        isFinished: false,
+        results: data.teams.map((team) => ({
+          teamId: team.id,
+          teamName: team.name,
+          placement: null,
+          kills: 0,
+          placementPoints: 0,
+          killPoints: 0,
+          totalPoints: 0,
+          win: false
+        }))
+      }));
+      stage = 'league';
     } else {
       bracket = buildInitialBracket(data.teams);
     }
@@ -197,6 +216,7 @@ export default function FinalizeCreatePage() {
       orderedTeams: data.teams,
       bracket,
       groups,
+      leagueMatches,
       stage,
       createdAt: new Date().toISOString(),
     };
