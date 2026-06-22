@@ -169,8 +169,24 @@ export default function FinalizeCreatePage() {
     let groups: any[] | null = null;
     let leagueMatches: any[] | null = null;
     let stage = null;
+    let matches: any[] | null = null;
 
-    if (data.format === 'round_robin') {
+    if (data.sport === 'battle_royale') {
+      stage = 'battle_royale';
+      const matchesCount = data.matchesCount || 5;
+      matches = Array.from({ length: matchesCount }, (_, idx) => ({
+        id: `br-${idx}`,
+        name: `Trận ${idx + 1}`,
+        isFinished: false,
+        results: data.teams.map((t: any) => ({
+          teamId: t.id || t.name,
+          teamName: t.name,
+          rank: null,
+          kills: 0,
+          pts: 0,
+        })),
+      }));
+    } else if (data.format === 'round_robin') {
       const groupsCount = data.groupsCount || 1;
       groups = Array.from({ length: groupsCount }, (_, gIdx) => ({
         name: `Bảng ${String.fromCharCode(65 + gIdx)}`,
@@ -218,6 +234,7 @@ export default function FinalizeCreatePage() {
       groups,
       leagueMatches,
       stage,
+      matches,
       createdAt: new Date().toISOString(),
     };
 
@@ -362,7 +379,13 @@ export default function FinalizeCreatePage() {
           </div>
           <div className="p-4 rounded-lg bg-[#0f1419] border border-white/[0.06]">
             <p className="text-sm text-white/60 mb-1">Môn thể thao</p>
-            <p className="font-semibold">{tournament.sport}</p>
+            <p className="font-semibold">
+              {tournament.sport === 'battle_royale' ? 'Game Sinh tồn (PUBG)' : 
+               tournament.sport === 'moba' ? 'Game MOBA' :
+               tournament.sport === 'fps' ? 'Game FPS' : 
+               tournament.sport === 'fighting_sports' ? 'Game Đối kháng / FIFA' : 
+               tournament.sport}
+            </p>
           </div>
           <div className="p-4 rounded-lg bg-[#0f1419] border border-white/[0.06]">
             <p className="text-sm text-white/60 mb-1">Số đội</p>

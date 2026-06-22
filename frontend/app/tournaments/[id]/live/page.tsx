@@ -331,6 +331,57 @@ function calculateGroupStandings(groupTeams: any[], groupMatches: any[], matchSt
   });
 }
 
+function getPlacementPoints(rank: number | null): number {
+  if (rank === null) return 0;
+  if (rank === 1) return 10;
+  if (rank === 2) return 6;
+  if (rank === 3) return 5;
+  if (rank === 4) return 4;
+  if (rank === 5) return 3;
+  if (rank === 6) return 2;
+  if (rank === 7 || rank === 8) return 1;
+  return 0;
+}
+
+function calculateBattleRoyaleStandings(teams: any[], matches: any[]) {
+  const standings = teams.map((team: any) => {
+    const teamId = team.id || team.name;
+    let mp = 0;
+    let placementPts = 0;
+    let killPts = 0;
+
+    matches?.forEach((match: any) => {
+      if (match.isFinished) {
+        const teamResult = match.results?.find((r: any) => (r.teamId === teamId || r.teamName === team.name));
+        if (teamResult && teamResult.rank !== null) {
+          mp += 1;
+          placementPts += getPlacementPoints(teamResult.rank);
+          killPts += teamResult.kills || 0;
+        }
+      }
+    });
+
+    return {
+      teamId,
+      teamName: team.name,
+      mp,
+      placementPts,
+      killPts,
+      totalPts: placementPts + killPts,
+    };
+  });
+
+  return standings.sort((a: any, b: any) => {
+    if (b.totalPts !== a.totalPts) {
+      return b.totalPts - a.totalPts;
+    }
+    if (b.placementPts !== a.placementPts) {
+      return b.placementPts - a.placementPts;
+    }
+    return a.teamName.localeCompare(b.teamName);
+  });
+}
+
 interface LeagueStandingRow {
   teamId: string;
   teamName: string;
@@ -367,20 +418,20 @@ function calculateLeagueStandings(
   });
 
   const finishedMatches = (leagueMatches || []).filter(m => 
-    m.isFinished || (m.results && m.results.some((r: any) => (r.placement !== null && r.placement !== undefined && r.placement !== '') || (r.kills || 0) > 0))
+    m.isFinished || (m.results && m.results.some((r: any) => (r.placement !== null && r.placement !== undefined && r.placement !== '') || (r.kills || 0) > 0 || r.pts !== undefined))
   );
   
   finishedMatches.forEach(match => {
     (match.results || []).forEach((res: any) => {
       const team = standingsMap[res.teamId];
       if (team) {
-        if (match.isFinished || (res.placement !== null && res.placement !== undefined && res.placement !== '')) {
+        if (match.isFinished || (res.placement !== null && res.placement !== undefined && res.placement !== '') || res.pts !== undefined) {
           team.matchesPlayed += 1;
         }
         team.totalKills += res.kills || 0;
         team.placementPoints += res.placementPoints || 0;
         team.killPoints += res.killPoints || 0;
-        team.totalPoints += res.totalPoints || 0;
+        team.totalPoints += res.totalPoints || res.pts || 0;
         if (res.placement === 1) {
           team.wins += 1;
         }
@@ -426,11 +477,13 @@ function calculateLeagueStandings(
       (match.results || []).forEach((res: any) => {
         const team = prevStandingsMap[res.teamId];
         if (team) {
-          team.matchesPlayed += 1;
+          if (match.isFinished || (res.placement !== null && res.placement !== undefined && res.placement !== '') || res.pts !== undefined) {
+            team.matchesPlayed += 1;
+          }
           team.totalKills += res.kills || 0;
           team.placementPoints += res.placementPoints || 0;
           team.killPoints += res.killPoints || 0;
-          team.totalPoints += res.totalPoints || 0;
+          team.totalPoints += res.totalPoints || res.pts || 0;
           if (res.placement === 1) {
             team.wins += 1;
           }
@@ -1059,7 +1112,7 @@ export default function TournamentLiveViewPage() {
 
         {/* Bracket Tree View */}
         <div className="w-full">
-          {tournament.format === 'league' ? (
+          {tournament.format === 'battle_royale' || tournament.format === 'league' ? (
             <div className="space-y-12 animate-fade-in">
               {/* Split layout: Leaderboard on Left, Matches on Right */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -1071,7 +1124,7 @@ export default function TournamentLiveViewPage() {
                       Bảng Xếp Hạng Real-time
                     </h3>
                     <span className="text-[9px] text-white/30 uppercase font-black tracking-wider">
-                      PUBG Scoring
+                      {tournament.format === 'battle_royale' ? 'PUBG Scoring' : 'League Stats'}
                     </span>
                   </div>
 
@@ -1082,15 +1135,19 @@ export default function TournamentLiveViewPage() {
                           <th className="py-2.5 px-2 text-center w-10">Hạng</th>
                           <th className="py-2.5 px-2">Đội tuyển</th>
                           <th className="py-2.5 px-1 text-center">Trận</th>
-                          <th className="py-2.5 px-1 text-center">Top 1</th>
-                          <th className="py-2.5 px-1 text-center">Kills</th>
+                          {tournament.format !== 'battle_royale' && (
+                            <>
+                              <th className="py-2.5 px-1 text-center">Top 1</th>
+                              <th className="py-2.5 px-1 text-center">Kills</th>
+                            </>
+                          )}
                           <th className="py-2.5 px-2 text-center font-bold text-white">Tổng</th>
                         </tr>
                       </thead>
                       <tbody>
                         {calculateLeagueStandings(
                           tournament.teams,
-                          tournament.leagueMatches,
+                          tournament.leagueMatches || tournament.matches || [],
                           tournament.pointRules || {}
                         ).map((row, idx) => {
                           const isTop3 = idx < 3;
@@ -1123,8 +1180,12 @@ export default function TournamentLiveViewPage() {
                                 )}
                               </td>
                               <td className="py-2.5 px-1 text-center font-medium text-white/50">{row.matchesPlayed}</td>
-                              <td className="py-2.5 px-1 text-center text-green-500 font-bold">{row.wins}</td>
-                              <td className="py-2.5 px-1 text-center font-medium text-white/50">{row.totalKills}</td>
+                              {tournament.format !== 'battle_royale' && (
+                                <>
+                                  <td className="py-2.5 px-1 text-center text-green-500 font-bold">{row.wins}</td>
+                                  <td className="py-2.5 px-1 text-center font-medium text-white/50">{row.totalKills}</td>
+                                </>
+                              )}
                               <td className="py-2.5 px-2 text-center font-black text-[#22c55e] text-xs bg-[#22c55e]/5">
                                 {row.totalPoints}
                               </td>
@@ -1145,7 +1206,7 @@ export default function TournamentLiveViewPage() {
                       Chọn Trận Đấu Đang Chiếu
                     </span>
                     <div className="flex gap-2 overflow-x-auto pb-1 justify-center">
-                      {(tournament.leagueMatches || []).map((m: any) => {
+                      {(tournament.leagueMatches || tournament.matches || []).map((m: any) => {
                         const isSelected = selectedLeagueMatchId === m.id;
                         const liveState = tournament.matchStates?.[m.id];
                         const hasStream = m.streamUrl || liveState?.streamUrl;
@@ -1171,7 +1232,7 @@ export default function TournamentLiveViewPage() {
                   </div>
 
                   {(() => {
-                    const selectedMatch = (tournament.leagueMatches || []).find((m: any) => m.id === selectedLeagueMatchId);
+                    const selectedMatch = (tournament.leagueMatches || tournament.matches || []).find((m: any) => m.id === selectedLeagueMatchId);
                     if (!selectedMatch) {
                       return (
                         <div className="bg-[#0f1419] border border-white/[0.06] rounded-2xl p-8 text-center text-white/40 text-sm">
@@ -1266,22 +1327,35 @@ export default function TournamentLiveViewPage() {
                             </span>
                           </div>
 
-                          {(selectedMatch.isFinished || (selectedMatch.results && selectedMatch.results.length > 0 && selectedMatch.results[0].placement !== null)) ? (
+                          {(selectedMatch.isFinished || (selectedMatch.results && selectedMatch.results.length > 0)) ? (
                             <div className="space-y-1.5">
-                              {[...(selectedMatch.results || [])].sort((a: any, b: any) => a.placement - b.placement).map((res: any) => (
-                                <div key={res.teamId} className="flex items-center justify-between text-xs py-2 border-b border-white/[0.02] last:border-0 text-white/80">
-                                  <div className="flex items-center gap-2">
-                                    <span className={`w-5 text-center font-black ${res.placement === 1 ? 'text-yellow-400 font-extrabold text-sm' : 'text-white/40'}`}>
-                                      #{res.placement}
-                                    </span>
-                                    <span className="font-bold text-white">{res.teamName}</span>
+                              {[...(selectedMatch.results || [])]
+                                .sort((a: any, b: any) => {
+                                  if (tournament.format === 'battle_royale') {
+                                    return (b.pts || 0) - (a.pts || 0);
+                                  }
+                                  return (a.placement || 99) - (b.placement || 99);
+                                })
+                                .map((res: any, rIdx: number) => (
+                                  <div key={res.teamId} className="flex items-center justify-between text-xs py-2 border-b border-white/[0.02] last:border-0 text-white/80">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`w-5 text-center font-black ${
+                                        (tournament.format === 'battle_royale' ? rIdx === 0 : res.placement === 1)
+                                          ? 'text-yellow-400 font-extrabold text-sm'
+                                          : 'text-white/40'
+                                      }`}>
+                                        #{tournament.format === 'battle_royale' ? rIdx + 1 : res.placement}
+                                      </span>
+                                      <span className="font-bold text-white">{res.teamName}</span>
+                                    </div>
+                                    <div className="flex gap-4 font-mono text-[10px]">
+                                      {tournament.format !== 'battle_royale' && <span>{res.kills} Kills</span>}
+                                      <span className="text-[#22c55e] font-bold">
+                                        +{tournament.format === 'battle_royale' ? (res.pts || 0) : (res.totalPoints || 0)} Pts
+                                      </span>
+                                    </div>
                                   </div>
-                                  <div className="flex gap-4 font-mono text-[10px]">
-                                    <span>{res.kills} Kills</span>
-                                    <span className="text-[#22c55e] font-bold">+{res.totalPoints} Pts</span>
-                                  </div>
-                                </div>
-                              ))}
+                                ))}
                             </div>
                           ) : (
                             <div className="text-center py-8 text-xs text-white/30">
@@ -1296,61 +1370,63 @@ export default function TournamentLiveViewPage() {
               </div>
 
               {/* Bottom: Team Stats Grid */}
-              <div className="border-t border-white/[0.06] pt-8 space-y-6">
-                <h3 className="text-sm font-black tracking-widest text-[#22c55e] uppercase text-center">
-                  Thống Kê Đội Tuyển Chi Tiết
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {tournament.teams.map((team: any) => {
-                    const matches = (tournament.leagueMatches || []).filter((m: any) => m.isFinished);
-                    const teamResults = matches.flatMap((m: any) => m.results?.filter((r: any) => r.teamId === team.id) || []);
-                    
-                    const totalMatches = teamResults.length;
-                    const totalKills = teamResults.reduce((acc: number, curr: any) => acc + (curr.kills || 0), 0);
-                    const avgKills = totalMatches > 0 ? (totalKills / totalMatches).toFixed(1) : '0.0';
-                    const avgPlacement = totalMatches > 0 ? (teamResults.reduce((acc: number, curr: any) => acc + (curr.placement || 0), 0) / totalMatches).toFixed(1) : '0.0';
-                    
-                    const firstPlaces = teamResults.filter((r: any) => r.placement === 1).length;
-                    const top3Places = teamResults.filter((r: any) => r.placement >= 1 && r.placement <= 3).length;
+              {tournament.format !== 'battle_royale' && (
+                <div className="border-t border-white/[0.06] pt-8 space-y-6">
+                  <h3 className="text-sm font-black tracking-widest text-[#22c55e] uppercase text-center">
+                    Thống Kê Đội Tuyển Chi Tiết
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {tournament.teams.map((team: any) => {
+                      const matches = (tournament.leagueMatches || tournament.matches || []).filter((m: any) => m.isFinished);
+                      const teamResults = matches.flatMap((m: any) => m.results?.filter((r: any) => r.teamId === team.id) || []);
+                      
+                      const totalMatches = teamResults.length;
+                      const totalKills = teamResults.reduce((acc: number, curr: any) => acc + (curr.kills || 0), 0);
+                      const avgKills = totalMatches > 0 ? (totalKills / totalMatches).toFixed(1) : '0.0';
+                      const avgPlacement = totalMatches > 0 ? (teamResults.reduce((acc: number, curr: any) => acc + (curr.placement || 0), 0) / totalMatches).toFixed(1) : '0.0';
+                      
+                      const firstPlaces = teamResults.filter((r: any) => r.placement === 1).length;
+                      const top3Places = teamResults.filter((r: any) => r.placement >= 1 && r.placement <= 3).length;
 
-                    return (
-                      <div key={team.id} className="bg-[#0f1419] border border-white/[0.06] rounded-2xl p-5 space-y-4 shadow-lg">
-                        <h4 className="font-black text-sm text-[#22c55e] border-b border-white/[0.06] pb-2 text-center">
-                          {team.name}
-                        </h4>
-                        
-                        <div className="grid grid-cols-2 gap-4 text-center">
-                          <div className="bg-[#080b10] p-2.5 rounded-lg border border-white/[0.02]">
-                            <span className="text-[10px] text-white/40 block">Trận đấu</span>
-                            <span className="text-sm font-black text-white">{totalMatches}</span>
+                      return (
+                        <div key={team.id} className="bg-[#0f1419] border border-white/[0.06] rounded-2xl p-5 space-y-4 shadow-lg">
+                          <h4 className="font-black text-sm text-[#22c55e] border-b border-white/[0.06] pb-2 text-center">
+                            {team.name}
+                          </h4>
+                          
+                          <div className="grid grid-cols-2 gap-4 text-center">
+                            <div className="bg-[#080b10] p-2.5 rounded-lg border border-white/[0.02]">
+                              <span className="text-[10px] text-white/40 block">Trận đấu</span>
+                              <span className="text-sm font-black text-white">{totalMatches}</span>
+                            </div>
+                            <div className="bg-[#080b10] p-2.5 rounded-lg border border-white/[0.02]">
+                              <span className="text-[10px] text-white/40 block">Hạng TB</span>
+                              <span className="text-sm font-black text-[#22c55e]">#{avgPlacement}</span>
+                            </div>
+                            <div className="bg-[#080b10] p-2.5 rounded-lg border border-white/[0.02]">
+                              <span className="text-[10px] text-white/40 block">Tổng Kills</span>
+                              <span className="text-sm font-black text-white">{totalKills}</span>
+                            </div>
+                            <div className="bg-[#080b10] p-2.5 rounded-lg border border-white/[0.02]">
+                              <span className="text-[10px] text-white/40 block">Kills TB / Trận</span>
+                              <span className="text-sm font-black text-white">{avgKills}</span>
+                            </div>
                           </div>
-                          <div className="bg-[#080b10] p-2.5 rounded-lg border border-white/[0.02]">
-                            <span className="text-[10px] text-white/40 block">Hạng TB</span>
-                            <span className="text-sm font-black text-[#22c55e]">#{avgPlacement}</span>
-                          </div>
-                          <div className="bg-[#080b10] p-2.5 rounded-lg border border-white/[0.02]">
-                            <span className="text-[10px] text-white/40 block">Tổng Kills</span>
-                            <span className="text-sm font-black text-white">{totalKills}</span>
-                          </div>
-                          <div className="bg-[#080b10] p-2.5 rounded-lg border border-white/[0.02]">
-                            <span className="text-[10px] text-white/40 block">Kills TB / Trận</span>
-                            <span className="text-sm font-black text-white">{avgKills}</span>
-                          </div>
-                        </div>
 
-                        <div className="border-t border-white/[0.04] pt-3 flex justify-between text-xs text-white/60">
-                          <span>Số trận TOP 1 (Win):</span>
-                          <span className="font-bold text-green-400">{firstPlaces}</span>
+                          <div className="border-t border-white/[0.04] pt-3 flex justify-between text-xs text-white/60">
+                            <span>Số trận TOP 1 (Win):</span>
+                            <span className="font-bold text-green-400">{firstPlaces}</span>
+                          </div>
+                          <div className="flex justify-between text-xs text-white/60">
+                            <span>Số trận lọt TOP 3:</span>
+                            <span className="font-bold text-amber-500">{top3Places}</span>
+                          </div>
                         </div>
-                        <div className="flex justify-between text-xs text-white/60">
-                          <span>Số trận lọt TOP 3:</span>
-                          <span className="font-bold text-amber-500">{top3Places}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           ) : tournament.format === 'round_robin' && tournament.stage === 'group' ? (
             <div className="space-y-12">
@@ -1630,7 +1706,7 @@ export default function TournamentLiveViewPage() {
               {/* Timer/Period */}
               <div className="text-sm font-semibold text-white/60 mb-4">
                 {selectedDetails.isLive 
-                  ? (tournament?.sport === 'moba' ? `Đang thi đấu Game ${selectedDetails.hiep}` : tournament?.sport === 'fps' ? `Đang thi đấu Map ${selectedDetails.hiep}` : `Hiệp ${selectedDetails.hiep}`)
+                  ? 'Đang thi đấu'
                   : selectedDetails.isFinished 
                   ? 'Chung cuộc' 
                   : 'Chờ bắt đầu'
@@ -1643,53 +1719,15 @@ export default function TournamentLiveViewPage() {
                   <h4 className="text-lg font-bold text-white truncate">{selectedDetails.team1?.name || 'Chờ xác định'}</h4>
                 </div>
                 
-                {tournament?.sport === 'moba' ? (
-                  <div className="flex flex-col items-center justify-center gap-1.5">
-                    <div className="flex justify-center items-center gap-3 text-3xl font-black text-[#22c55e]">
-                      <span>{selectedDetails.scoreA !== null ? selectedDetails.scoreA : '0'}</span>
-                      <span className="text-white/20">:</span>
-                      <span>{selectedDetails.scoreB !== null ? selectedDetails.scoreB : '0'}</span>
-                    </div>
-                    <div className="text-[9px] font-black text-white/30 uppercase tracking-wider">Ván thắng (BO)</div>
-                    
-                    {(selectedDetails.team1SetPoints !== null || selectedDetails.team2SetPoints !== null) && (
-                      <div className="flex items-center gap-2 px-2 py-0.5 rounded bg-white/[0.03] border border-white/[0.05] text-xs font-bold font-mono mt-1 text-white/70">
-                        <span>{selectedDetails.team1SetPoints ?? 0}</span>
-                        <span className="text-white/20">:</span>
-                        <span>{selectedDetails.team2SetPoints ?? 0}</span>
-                      </div>
-                    )}
-                    <div className="text-[8px] text-white/40">Hạ gục (Kills)</div>
-                  </div>
-                ) : tournament?.sport === 'fps' ? (
-                  <div className="flex flex-col items-center justify-center gap-1.5">
-                    <div className="flex justify-center items-center gap-3 text-3xl font-black text-[#22c55e]">
-                      <span>{selectedDetails.scoreA !== null ? selectedDetails.scoreA : '0'}</span>
-                      <span className="text-white/20">:</span>
-                      <span>{selectedDetails.scoreB !== null ? selectedDetails.scoreB : '0'}</span>
-                    </div>
-                    <div className="text-[9px] font-black text-white/30 uppercase tracking-wider">Map thắng (BO)</div>
-                    
-                    {(selectedDetails.team1SetPoints !== null || selectedDetails.team2SetPoints !== null) && (
-                      <div className="flex items-center gap-2 px-2 py-0.5 rounded bg-white/[0.03] border border-white/[0.05] text-xs font-bold font-mono mt-1 text-white/70">
-                        <span>{selectedDetails.team1SetPoints ?? 0}</span>
-                        <span className="text-white/20">:</span>
-                        <span>{selectedDetails.team2SetPoints ?? 0}</span>
-                      </div>
-                    )}
-                    <div className="text-[8px] text-white/40">Số vòng (Rounds)</div>
-                  </div>
-                ) : (
-                  <div className="flex justify-center items-center gap-3 text-3xl font-black">
-                    <span className={selectedDetails.scoreA !== null ? 'text-white' : 'text-white/20'}>
-                      {selectedDetails.scoreA !== null ? selectedDetails.scoreA : '-'}
-                    </span>
-                    <span className="text-white/20">:</span>
-                    <span className={selectedDetails.scoreB !== null ? 'text-white' : 'text-white/20'}>
-                      {selectedDetails.scoreB !== null ? selectedDetails.scoreB : '-'}
-                    </span>
-                  </div>
-                )}
+                <div className="flex justify-center items-center gap-3 text-3xl font-black text-[#22c55e]">
+                  <span className={selectedDetails.scoreA !== null ? 'text-[#22c55e]' : 'text-white/20'}>
+                    {selectedDetails.scoreA !== null ? selectedDetails.scoreA : '0'}
+                  </span>
+                  <span className="text-white/20">:</span>
+                  <span className={selectedDetails.scoreB !== null ? 'text-[#22c55e]' : 'text-white/20'}>
+                    {selectedDetails.scoreB !== null ? selectedDetails.scoreB : '0'}
+                  </span>
+                </div>
 
                 <div>
                   <h4 className="text-lg font-bold text-white truncate">{selectedDetails.team2?.name || 'Chờ xác định'}</h4>
