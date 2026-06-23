@@ -60,6 +60,18 @@ function buildInitialBracket(teams: TeamRef[]): BracketState {
   };
 }
 
+function getPlacementPoints(rank: number | null): number {
+  if (rank === null) return 0;
+  if (rank === 1) return 10;
+  if (rank === 2) return 6;
+  if (rank === 3) return 5;
+  if (rank === 4) return 4;
+  if (rank === 5) return 3;
+  if (rank === 6) return 2;
+  if (rank === 7 || rank === 8) return 1;
+  return 0;
+}
+
 function getCurrentBracketMatch(bracket?: BracketState) {
   if (!bracket) return null;
   const round = bracket.rounds[bracket.currentRound];
@@ -219,6 +231,10 @@ function getParsedIndices(key: string | null) {
 function getMatchLabel(key: string | null, tournament: any) {
   if (!key) return 'VÒNG 1 • TRẬN 1';
   const parts = key.split('-');
+  if (key.startsWith('br-')) {
+    const idx = parseInt(parts[1], 10) || 0;
+    return `Game Sinh tồn • Trận ${idx + 1}`;
+  }
   if (key.startsWith('league-') || key.startsWith('m-')) {
     const match = tournament?.leagueMatches?.find((m: any) => m.id === key);
     return match ? match.name : 'Trận đấu League';
@@ -335,6 +351,16 @@ export default function LiveMatchPage() {
   const [streamType, setStreamType] = useState<'youtube' | 'twitch' | 'webcam' | null>(null);
   const [streamUrlInput, setStreamUrlInput] = useState('');
   const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [brResults, setBrResults] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (tournament && matchKey && matchKey.startsWith('br-')) {
+      const match = tournament.matches?.find((m: any) => m.id === matchKey);
+      if (match) {
+        setBrResults(match.results || []);
+      }
+    }
+  }, [tournament, matchKey]);
   const localStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionsRef = useRef<Record<string, RTCPeerConnection>>({});
   const iceQueuesRef = useRef<Record<string, RTCIceCandidateInit[]>>({});
@@ -1342,9 +1368,90 @@ export default function LiveMatchPage() {
   const team2 = resolveTeamRef(tournament, currentBracketMatch?.teamB) || fallbackTeamB || tournament.teams?.[1];
   const roundLabel = getMatchLabel(matchKey, tournament);
 
-  const winnableTeam = (tournament?.sport === 'tennis' || tournament?.sport === 'volleyball')
-    ? checkSetWinCondition(matchState.team1SetPoints ?? 0, matchState.team2SetPoints ?? 0)
-    : null;
+  const winnableTeam = null;
+
+  const handleBrScoreChange = (teamId: string, delta: number) => {
+    setBrResults(prev => prev.map((r: any) => {
+      if (r.teamId === teamId) {
+        return {
+          ...r,
+          pts: Math.max(0, (r.pts || 0) + delta)
+        };
+      }
+      return r;
+    }));
+  };
+
+  const handleBrScoreInput = (teamId: string, val: string) => {
+    const numericVal = val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0);
+    setBrResults(prev => prev.map((r: any) => {
+      if (r.teamId === teamId) {
+        return {
+          ...r,
+          pts: numericVal
+        };
+      }
+      return r;
+    }));
+  };
+
+  const saveBattleRoyaleMatchResults = async (isFinal: boolean) => {
+    if (!tournament || !matchKey) return;
+
+    const calculatedResults = brResults.map((r: any) => {
+      return {
+        ...r,
+        pts: r.pts || 0
+      };
+    });
+
+    const updatedMatches = (tournament.matches || []).map((m: any) => {
+      if (m.id === matchKey) {
+        return {
+          ...m,
+          isFinished: isFinal,
+          results: calculatedResults
+        };
+      }
+      return m;
+    });
+
+    const allMatchesFinished = updatedMatches.every((m: any) => m.isFinished);
+
+    const updatedTournament = {
+      ...tournament,
+      matches: updatedMatches,
+      isFinished: allMatchesFinished,
+    };
+
+    setTournament(updatedTournament);
+    localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
+
+    const savedList = localStorage.getItem(tournamentsKey);
+    if (savedList) {
+      try {
+        const list = JSON.parse(savedList);
+        const index = list.findIndex((t: any) => t.id === tournament.id);
+        if (index > -1) {
+          list[index] = updatedTournament;
+          localStorage.setItem(tournamentsKey, JSON.stringify(list));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    try {
+      await syncTournamentToBackend(updatedTournament);
+    } catch (err) {
+      console.error('Error syncing Battle Royale results to backend:', err);
+    }
+
+    alert(isFinal ? 'Đã hoàn tất trận đấu!' : 'Đã lưu kết quả tạm thời!');
+    if (isFinal) {
+      router.push(`/tournaments/${tournament.id}`);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-[#080b10] text-white font-sans">
@@ -1389,7 +1496,91 @@ export default function LiveMatchPage() {
 
       {/* Main Content */}
       <section className="relative z-10 max-w-4xl mx-auto px-6 py-8">
-        {/* Match Header */}
+        {matchKey?.startsWith('br-') ? (
+          <div className="space-y-8 animate-fade-in">
+            {/* Title / Header */}
+            <div className="text-center">
+              <h1 className="text-3xl font-black mb-2">Nhập Điểm Giải Đấu Sinh Tồn</h1>
+              <p className="text-white/60">
+                {tournament.matches?.find((m: any) => m.id === matchKey)?.name || 'Trận đấu'}
+              </p>
+            </div>
+
+            {/* Main Scoring Table */}
+            <div className="bg-[#0f1419] border border-white/[0.06] rounded-2xl p-6">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-white/[0.06] text-white/50">
+                      <th className="py-3 px-4">Đội tuyển</th>
+                      <th className="py-3 px-4 text-center w-48 font-bold text-white">Tỉ số / Điểm số</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {brResults.map((result: any) => {
+                      return (
+                        <tr key={result.teamId} className="border-b border-white/[0.04] hover:bg-white/[0.02]">
+                          <td className="py-3 px-4 font-bold text-white text-sm">{result.teamName}</td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center justify-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => handleBrScoreChange(result.teamId, -1)}
+                                className="w-8 h-8 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-400 text-sm font-bold transition-all flex items-center justify-center"
+                                title="Trừ 1 điểm"
+                              >
+                                −
+                              </button>
+                              <input
+                                type="number"
+                                min="0"
+                                value={result.pts || 0}
+                                onChange={(e) => handleBrScoreInput(result.teamId, e.target.value)}
+                                className="w-20 px-3 py-1.5 rounded bg-[#080b10] border border-white/[0.08] text-white text-center text-sm font-black focus:outline-none focus:border-[#22c55e] transition-colors"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleBrScoreChange(result.teamId, 1)}
+                                className="w-8 h-8 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-green-400 text-sm font-bold transition-all flex items-center justify-center"
+                                title="Cộng 1 điểm"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-4">
+              <Link
+                href={`/tournaments/${tournament.id}`}
+                className="flex-1 px-6 py-3 rounded-xl border border-white/[0.06] text-white font-semibold hover:bg-white/[0.05] transition-all duration-200 text-center text-sm"
+              >
+                Hủy & Quay lại
+              </Link>
+              <button
+                onClick={() => saveBattleRoyaleMatchResults(false)}
+                className="flex-1 px-6 py-3 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-400 font-semibold hover:bg-blue-500/20 transition-all duration-200 text-sm"
+              >
+                Lưu tạm thời
+              </button>
+              <button
+                onClick={() => saveBattleRoyaleMatchResults(true)}
+                className="flex-1 px-6 py-3 rounded-xl bg-[#22c55e] text-[#080b10] font-black hover:bg-[#16a34a] shadow-[0_0_20px_rgba(34,197,94,0.25)] transition-all duration-200 text-sm"
+              >
+                Hoàn tất trận đấu
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Match Header */}
         <div className="text-center mb-8">
           <div className="text-sm font-semibold text-[#22c55e] mb-2">{roundLabel}</div>
         </div>
@@ -1406,18 +1597,14 @@ export default function LiveMatchPage() {
                 <div className="px-6 py-3 rounded-lg font-bold text-xs bg-white/[0.02] border border-white/[0.08] text-white/40 uppercase tracking-widest cursor-not-allowed">
                   🏁 Trận đấu đã kết thúc
                 </div>
-              ) : (
+              ) : !matchState.isRunning ? (
                 <button
                   onClick={handleStartStop}
-                  className={`px-8 py-3 rounded-lg font-bold text-xs uppercase tracking-widest transition-all duration-200 border shadow-lg ${
-                    matchState.isRunning
-                      ? 'bg-yellow-500/20 hover:bg-yellow-500/30 border-yellow-500/50 text-yellow-400'
-                      : 'bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border-[#22c55e]/50 text-green-400'
-                  }`}
+                  className="px-8 py-3 rounded-lg font-bold text-xs uppercase tracking-widest transition-all duration-200 border bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border-[#22c55e]/50 text-green-400"
                 >
-                  {matchState.isRunning ? '⏸ Tạm dừng trận đấu' : '▶ Bắt đầu trận đấu'}
+                  ▶ Bắt đầu trận đấu
                 </button>
-              )}
+              ) : null}
 
               {/* Status */}
               <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider ${
@@ -1495,7 +1682,7 @@ export default function LiveMatchPage() {
                 <div className="px-6 py-3 rounded-lg font-semibold bg-gray-500/20 border border-gray-500/30 text-gray-400 mb-4 cursor-not-allowed">
                   🏁 Trận đấu đã kết thúc
                 </div>
-              ) : (
+              ) : !matchState.isRunning ? (
                 <div className="flex flex-col gap-2 w-full max-w-[200px] mb-4">
                   {!matchState.isRunning && (
                     <button
@@ -1514,7 +1701,7 @@ export default function LiveMatchPage() {
                     </button>
                   )}
                 </div>
-              )}
+              ) : null}
 
               {/* Status */}
               <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
@@ -1558,23 +1745,7 @@ export default function LiveMatchPage() {
           </div>
         )}
 
-        {/* Set Win Condition Banner */}
-        {winnableTeam && !matchState.isFinished && (
-          <div className="mb-12 p-5 bg-[#22c55e]/10 border border-[#22c55e]/20 rounded-xl flex items-center justify-between animate-pulse">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">🏆</span>
-              <span className="text-sm font-bold text-[#22c55e]">
-                {(winnableTeam === 'team1' ? team1?.name : team2?.name) || 'Đội chơi'} đủ điều kiện thắng Set {matchState.hiep}!
-              </span>
-            </div>
-            <button
-              onClick={() => handleWinSet(winnableTeam)}
-              className="px-5 py-2.5 rounded-lg bg-[#22c55e] text-black font-black text-xs hover:bg-[#16a34a] transition-all duration-200 shadow-[0_0_15px_rgba(34,197,94,0.3)]"
-            >
-              Xác nhận thắng Set {matchState.hiep}
-            </button>
-          </div>
-        )}
+
 
 
         {/* Livestream Configuration */}
@@ -1719,6 +1890,8 @@ export default function LiveMatchPage() {
             </button>
           )}
         </div>
+        </>
+        )}
       </section>
 
       {/* Feedback Modal Overlay */}

@@ -29,9 +29,10 @@ export interface TournamentData {
   allowExtraTime: boolean;
 
   // Format selection
-  format?: 'single_elimination' | 'round_robin' | 'double_elimination' | 'league';
+  format?: 'single_elimination' | 'round_robin' | 'double_elimination' | 'battle_royale' | 'league';
   groupsCount?: number;
   advancingCount?: number;
+  matchesCount?: number;
   leagueMatchesCount?: number;
   pointRules?: Record<string, number>;
 
@@ -51,9 +52,10 @@ interface TournamentContextType {
     sport: string,
     matchDuration: number,
     allowExtraTime: boolean,
-    format?: 'single_elimination' | 'round_robin' | 'double_elimination' | 'league',
+    format?: 'single_elimination' | 'round_robin' | 'double_elimination' | 'battle_royale' | 'league',
     groupsCount?: number,
     advancingCount?: number,
+    matchesCount?: number,
     leagueMatchesCount?: number,
     pointRules?: Record<string, number>
   ) => void;
@@ -147,9 +149,10 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
     sport: string,
     matchDuration: number,
     allowExtraTime: boolean,
-    format?: 'single_elimination' | 'round_robin' | 'double_elimination' | 'league',
+    format?: 'single_elimination' | 'round_robin' | 'double_elimination' | 'battle_royale' | 'league',
     groupsCount?: number,
     advancingCount?: number,
+    matchesCount?: number,
     leagueMatchesCount?: number,
     pointRules?: Record<string, number>
   ) => {
@@ -162,6 +165,7 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
       format: format || 'single_elimination',
       groupsCount: groupsCount || 1,
       advancingCount: advancingCount || 2,
+      matchesCount: matchesCount || 5,
       leagueMatchesCount: leagueMatchesCount || 5,
       pointRules: pointRules || {
         "1": 10,
