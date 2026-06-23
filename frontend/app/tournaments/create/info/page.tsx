@@ -77,6 +77,7 @@ export default function TournamentInfoPage() {
 
     if (Object.keys(newErrors).length === 0) {
       const finalFormat = sport === 'battle_royale' ? 'battle_royale' : format;
+      const finalMatchesCount = sport === 'battle_royale' ? leagueMatchesCount : matchesCount;
       setTournamentInfo(
         name,
         sport,
@@ -85,7 +86,7 @@ export default function TournamentInfoPage() {
         finalFormat as any,
         groupsCount,
         advancingCount,
-        matchesCount,
+        finalMatchesCount,
         leagueMatchesCount,
         pointRules
       );
@@ -278,26 +279,7 @@ export default function TournamentInfoPage() {
             </div>
           )}
 
-          {/* Battle Royale Config */}
-          {sport === 'battle_royale' && (
-            <div className="p-5 rounded-lg bg-[#0f1419] border border-white/[0.06] space-y-4">
-              <h4 className="text-sm font-bold text-[#22c55e]">Cấu hình trận đấu Sinh tồn</h4>
-              <div>
-                <label className="block text-xs text-white/60 mb-2 font-medium">Số trận thi đấu (Matches)</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="20"
-                  value={matchesCount}
-                  onChange={(e) => setMatchesCount(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-full px-4 py-2.5 rounded-lg bg-[#080b10] border border-white/[0.06] text-white focus:outline-none focus:border-[#22c55e] text-sm"
-                />
-                <p className="text-[11px] text-white/40 mt-1.5">
-                  Tất cả các đội tuyển sẽ tham gia thi đấu cùng lúc trong {matchesCount} trận đấu này để tính điểm tích lũy.
-                </p>
-              </div>
-            </div>
-          )}
+
 
           {/* League Config Options */}
           {format === 'league' && (

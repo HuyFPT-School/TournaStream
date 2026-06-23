@@ -182,7 +182,11 @@ export default function FinalizeCreatePage() {
           teamId: t.id || t.name,
           teamName: t.name,
           rank: null,
+          placement: null,
           kills: 0,
+          placementPoints: 0,
+          killPoints: 0,
+          totalPoints: 0,
           pts: 0,
         })),
       }));

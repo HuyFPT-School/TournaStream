@@ -1370,25 +1370,49 @@ export default function LiveMatchPage() {
 
   const winnableTeam = null;
 
-  const handleBrScoreChange = (teamId: string, delta: number) => {
+  const handleBrPlacementChange = (teamId: string, val: string) => {
+    const numericRank = val === '' ? null : parseInt(val, 10);
+    const pointRules = tournament.pointRules || {
+      "1": 10, "2": 6, "3": 5, "4": 4, "5": 3, "6": 2, "7": 2, "8": 1, "9": 1, "10": 1, "11": 1, "12": 1
+    };
+
     setBrResults(prev => prev.map((r: any) => {
       if (r.teamId === teamId) {
+        const placementPoints = numericRank !== null ? (pointRules[numericRank.toString()] || 0) : 0;
+        const killPoints = Number(r.kills || 0) * 1;
+        const totalPoints = placementPoints + killPoints;
         return {
           ...r,
-          pts: Math.max(0, (r.pts || 0) + delta)
+          rank: numericRank,
+          placement: numericRank,
+          placementPoints,
+          killPoints,
+          totalPoints,
+          pts: totalPoints
         };
       }
       return r;
     }));
   };
 
-  const handleBrScoreInput = (teamId: string, val: string) => {
-    const numericVal = val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0);
+  const handleBrKillsChange = (teamId: string, val: string) => {
+    const numericKills = val === '' ? 0 : Math.max(0, parseInt(val, 10) || 0);
+    const pointRules = tournament.pointRules || {
+      "1": 10, "2": 6, "3": 5, "4": 4, "5": 3, "6": 2, "7": 2, "8": 1, "9": 1, "10": 1, "11": 1, "12": 1
+    };
+
     setBrResults(prev => prev.map((r: any) => {
       if (r.teamId === teamId) {
+        const placementPoints = r.placement !== null && r.placement !== undefined && r.placement !== '' ? (pointRules[r.placement.toString()] || 0) : 0;
+        const killPoints = numericKills * 1;
+        const totalPoints = placementPoints + killPoints;
         return {
           ...r,
-          pts: numericVal
+          kills: numericKills,
+          placementPoints,
+          killPoints,
+          totalPoints,
+          pts: totalPoints
         };
       }
       return r;
@@ -1398,10 +1422,51 @@ export default function LiveMatchPage() {
   const saveBattleRoyaleMatchResults = async (isFinal: boolean) => {
     if (!tournament || !matchKey) return;
 
+    // Validate placements if final
+    if (isFinal) {
+      const placements = brResults.map(r => r.placement);
+      const hasEmptyPlacement = placements.some(p => p === '' || p === null || p === undefined);
+      if (hasEmptyPlacement) {
+        alert('Vui lòng nhập thứ hạng (placement) cho tất cả các đội trước khi kết thúc.');
+        return;
+      }
+
+      const placementSet = new Set(placements.filter(p => p !== null && p !== undefined));
+      if (placementSet.size !== placements.length) {
+        if (!window.confirm('Có một số thứ hạng bị trùng lặp. Bạn có muốn tiếp tục kết thúc không?')) {
+          return;
+        }
+      }
+    } else {
+      // Just check duplicates when saving temporary but don't block
+      const placements = brResults.map(r => r.placement).filter(p => p !== null && p !== undefined && p !== '');
+      const placementSet = new Set(placements);
+      if (placementSet.size !== placements.length) {
+        if (!window.confirm('Có một số thứ hạng bị trùng lặp. Bạn có muốn tiếp tục lưu không?')) {
+          return;
+        }
+      }
+    }
+
+    const pointRules = tournament.pointRules || {
+      "1": 10, "2": 6, "3": 5, "4": 4, "5": 3, "6": 2, "7": 2, "8": 1, "9": 1, "10": 1, "11": 1, "12": 1
+    };
+
     const calculatedResults = brResults.map((r: any) => {
+      const placementVal = r.placement === '' || r.placement === null || r.placement === undefined ? null : Number(r.placement);
+      const placementPoints = placementVal !== null ? (pointRules[placementVal.toString()] || 0) : 0;
+      const killPoints = Number(r.kills || 0) * 1;
+      const totalPoints = placementPoints + killPoints;
+
       return {
         ...r,
-        pts: r.pts || 0
+        rank: placementVal,
+        placement: placementVal,
+        kills: Number(r.kills || 0),
+        placementPoints,
+        killPoints,
+        totalPoints,
+        pts: totalPoints
       };
     });
 
@@ -1513,40 +1578,74 @@ export default function LiveMatchPage() {
                   <thead>
                     <tr className="border-b border-white/[0.06] text-white/50">
                       <th className="py-3 px-4">Đội tuyển</th>
-                      <th className="py-3 px-4 text-center w-48 font-bold text-white">Tỉ số / Điểm số</th>
+                      <th className="py-3 px-4 text-center w-28 font-bold text-white">Thứ hạng</th>
+                      <th className="py-3 px-4 text-center w-28 font-bold text-white">Mạng hạ gục (Kills)</th>
+                      <th className="py-3 px-4 text-center w-24 font-bold text-white">Điểm Hạng</th>
+                      <th className="py-3 px-4 text-center w-24 font-bold text-white">Điểm Mạng</th>
+                      <th className="py-3 px-4 text-center w-24 font-bold text-white">Tổng điểm</th>
                     </tr>
                   </thead>
                   <tbody>
                     {brResults.map((result: any) => {
+                      const pointRules = tournament.pointRules || {
+                        "1": 10, "2": 6, "3": 5, "4": 4, "5": 3, "6": 2, "7": 2, "8": 1, "9": 1, "10": 1, "11": 1, "12": 1
+                      };
+                      const placementPoints = result.placement !== null && result.placement !== undefined && result.placement !== '' ? (pointRules[result.placement.toString()] || 0) : 0;
+                      const killPoints = Number(result.kills || 0) * 1;
+                      const totalPoints = placementPoints + killPoints;
+
                       return (
                         <tr key={result.teamId} className="border-b border-white/[0.04] hover:bg-white/[0.02]">
                           <td className="py-3 px-4 font-bold text-white text-sm">{result.teamName}</td>
-                          <td className="py-3 px-4">
-                            <div className="flex items-center justify-center gap-3">
+                          <td className="py-3 px-4 text-center">
+                            <select
+                              value={result.placement !== null && result.placement !== undefined ? result.placement : ''}
+                              onChange={(e) => handleBrPlacementChange(result.teamId, e.target.value)}
+                              className="w-full max-w-[100px] px-2 py-1.5 rounded bg-[#080b10] border border-white/[0.08] text-white text-center text-xs font-bold focus:outline-none focus:border-[#22c55e] transition-colors inline-block"
+                            >
+                              <option value="">Chọn...</option>
+                              {Array.from({ length: tournament.teams?.length || 0 }, (_, i) => (
+                                <option key={i + 1} value={i + 1}>
+                                  Hạng {i + 1}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
                               <button
                                 type="button"
-                                onClick={() => handleBrScoreChange(result.teamId, -1)}
-                                className="w-8 h-8 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-400 text-sm font-bold transition-all flex items-center justify-center"
-                                title="Trừ 1 điểm"
+                                onClick={() => handleBrKillsChange(result.teamId, String(Math.max(0, Number(result.kills || 0) - 1)))}
+                                className="w-6 h-6 rounded bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-400 text-xs font-bold transition-all flex items-center justify-center"
+                                title="Trừ 1 mạng"
                               >
                                 −
                               </button>
                               <input
                                 type="number"
                                 min="0"
-                                value={result.pts || 0}
-                                onChange={(e) => handleBrScoreInput(result.teamId, e.target.value)}
-                                className="w-20 px-3 py-1.5 rounded bg-[#080b10] border border-white/[0.08] text-white text-center text-sm font-black focus:outline-none focus:border-[#22c55e] transition-colors"
+                                value={result.kills ?? 0}
+                                onChange={(e) => handleBrKillsChange(result.teamId, e.target.value)}
+                                className="w-14 px-1.5 py-1 rounded bg-[#080b10] border border-white/[0.08] text-white text-center text-xs font-black focus:outline-none focus:border-[#22c55e] transition-colors"
                               />
                               <button
                                 type="button"
-                                onClick={() => handleBrScoreChange(result.teamId, 1)}
-                                className="w-8 h-8 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-green-400 text-sm font-bold transition-all flex items-center justify-center"
-                                title="Cộng 1 điểm"
+                                onClick={() => handleBrKillsChange(result.teamId, String(Number(result.kills || 0) + 1))}
+                                className="w-6 h-6 rounded bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-green-400 text-xs font-bold transition-all flex items-center justify-center"
+                                title="Cộng 1 mạng"
                               >
                                 +
                               </button>
                             </div>
+                          </td>
+                          <td className="py-3 px-4 text-center text-blue-400 font-bold text-sm">
+                            {placementPoints}
+                          </td>
+                          <td className="py-3 px-4 text-center text-red-400 font-bold text-sm">
+                            {killPoints}
+                          </td>
+                          <td className="py-3 px-4 text-center text-[#22c55e] font-black text-sm bg-[#22c55e]/5">
+                            {totalPoints}
                           </td>
                         </tr>
                       );

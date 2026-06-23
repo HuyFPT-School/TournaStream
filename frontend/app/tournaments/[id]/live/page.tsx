@@ -1135,7 +1135,14 @@ export default function TournamentLiveViewPage() {
                           <th className="py-2.5 px-2 text-center w-10">Hạng</th>
                           <th className="py-2.5 px-2">Đội tuyển</th>
                           <th className="py-2.5 px-1 text-center">Trận</th>
-                          {tournament.format !== 'battle_royale' && (
+                          {tournament.format === 'battle_royale' ? (
+                            <>
+                              <th className="py-2.5 px-1 text-center font-bold text-white">Top 1</th>
+                              <th className="py-2.5 px-1 text-center font-bold text-white">Kills</th>
+                              <th className="py-2.5 px-1 text-center font-bold text-white">Hạng</th>
+                              <th className="py-2.5 px-1 text-center font-bold text-white">Kill</th>
+                            </>
+                          ) : (
                             <>
                               <th className="py-2.5 px-1 text-center">Top 1</th>
                               <th className="py-2.5 px-1 text-center">Kills</th>
@@ -1180,7 +1187,14 @@ export default function TournamentLiveViewPage() {
                                 )}
                               </td>
                               <td className="py-2.5 px-1 text-center font-medium text-white/50">{row.matchesPlayed}</td>
-                              {tournament.format !== 'battle_royale' && (
+                              {tournament.format === 'battle_royale' ? (
+                                <>
+                                  <td className="py-2.5 px-1 text-center text-green-500 font-bold">{row.wins}</td>
+                                  <td className="py-2.5 px-1 text-center font-medium text-white/50">{row.totalKills}</td>
+                                  <td className="py-2.5 px-1 text-center font-medium text-blue-400">{row.placementPoints}</td>
+                                  <td className="py-2.5 px-1 text-center font-medium text-red-400">{row.killPoints}</td>
+                                </>
+                              ) : (
                                 <>
                                   <td className="py-2.5 px-1 text-center text-green-500 font-bold">{row.wins}</td>
                                   <td className="py-2.5 px-1 text-center font-medium text-white/50">{row.totalKills}</td>
