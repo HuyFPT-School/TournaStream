@@ -964,13 +964,25 @@ export default function LiveMatchPage() {
   };
 
   const handleScoreChange = (team: 'team1' | 'team2', delta: number) => {
-    setMatchState(prev => ({
-      ...prev,
-      [team === 'team1' ? 'team1Score' : 'team2Score']: Math.max(
-        0,
-        (prev[team === 'team1' ? 'team1Score' : 'team2Score'] ?? 0) + delta
-      ),
-    }));
+    const isSetBased = tournament?.sport === 'tennis' || tournament?.sport === 'volleyball';
+    if (isSetBased) {
+      setMatchState(prev => {
+        const field = team === 'team1' ? 'team1SetPoints' : 'team2SetPoints';
+        const currentPoints = prev[field] ?? 0;
+        return {
+          ...prev,
+          [field]: Math.max(0, currentPoints + delta)
+        };
+      });
+    } else {
+      setMatchState(prev => ({
+        ...prev,
+        [team === 'team1' ? 'team1Score' : 'team2Score']: Math.max(
+          0,
+          prev[team === 'team1' ? 'team1Score' : 'team2Score'] + delta
+        ),
+      }));
+    }
   };
 
   const checkSetWinCondition = (t1Points: number, t2Points: number) => {
@@ -1465,7 +1477,13 @@ export default function LiveMatchPage() {
         </Link>
         <div className="flex items-center gap-3">
           <div className="text-sm text-white/50">
-            {tournament.name} • {tournament.sport}
+            {tournament.name} • {
+              tournament.sport === 'battle_royale' ? 'Game Sinh tồn (PUBG)' : 
+              tournament.sport === 'moba' ? 'Game MOBA' :
+              tournament.sport === 'fps' ? 'Game FPS' : 
+              tournament.sport === 'fighting_sports' ? 'Game Đối kháng / FIFA' : 
+              tournament.sport
+            }
           </div>
           <Link
             href={`/tournaments/${tournamentId}`}
@@ -1642,7 +1660,7 @@ export default function LiveMatchPage() {
                   onClick={() => handleScoreChange('team1', 1)}
                   className="flex-1 py-2.5 px-3 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-xs font-bold transition-all text-green-400"
                 >
-                  + Điểm / Bàn thắng
+                  + Điểm số
                 </button>
               </div>
             </div>
@@ -1659,19 +1677,29 @@ export default function LiveMatchPage() {
                 </div>
               </div>
 
-              {/* Start/Stop Button */}
+              {/* Start Button */}
               {matchState.isFinished ? (
                 <div className="px-6 py-3 rounded-lg font-semibold bg-gray-500/20 border border-gray-500/30 text-gray-400 mb-4 cursor-not-allowed">
                   🏁 Trận đấu đã kết thúc
                 </div>
               ) : !matchState.isRunning ? (
                 <div className="flex flex-col gap-2 w-full max-w-[200px] mb-4">
-                  <button
-                    onClick={handleStartStop}
-                    className="w-full px-6 py-3 rounded-lg font-semibold transition-all duration-200 border bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border-[#22c55e]/50 text-green-400"
-                  >
-                    ▶ Bắt đầu trận đấu
-                  </button>
+                  {!matchState.isRunning && (
+                    <button
+                      onClick={handleStartStop}
+                      className="w-full px-6 py-3 rounded-lg font-semibold transition-all duration-200 border bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border-[#22c55e]/50 text-green-400"
+                    >
+                      ▶ Bắt đầu trận đấu
+                    </button>
+                  )}
+                  {tournament?.sport === 'fighting_sports' && (
+                    <button
+                      onClick={() => setMatchState(prev => ({ ...prev, hiep: prev.hiep + 1 }))}
+                      className="w-full px-4 py-2 rounded-lg font-bold text-xs bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-400 transition-all duration-200"
+                    >
+                      ➔ Qua Hiệp {matchState.hiep + 1}
+                    </button>
+                  )}
                 </div>
               ) : null}
 
@@ -1710,7 +1738,7 @@ export default function LiveMatchPage() {
                   onClick={() => handleScoreChange('team2', 1)}
                   className="flex-1 py-2.5 px-3 rounded-lg bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border border-[#22c55e]/50 text-xs font-bold transition-all text-green-400"
                 >
-                  + Điểm / Bàn thắng
+                  + Điểm số
                 </button>
               </div>
             </div>

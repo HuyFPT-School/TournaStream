@@ -1702,13 +1702,25 @@ export default function TournamentDetailPage() {
   };
 
   const handleScoreChange = (team: 'team1' | 'team2', delta: number) => {
-    setMatchState(prev => ({
-      ...prev,
-      [team === 'team1' ? 'team1Score' : 'team2Score']: Math.max(
-        0,
-        (prev[team === 'team1' ? 'team1Score' : 'team2Score'] ?? 0) + delta
-      ),
-    }));
+    const isSetBased = tournament?.sport === 'tennis' || tournament?.sport === 'volleyball';
+    if (isSetBased) {
+      setMatchState(prev => {
+        const field = team === 'team1' ? 'team1SetPoints' : 'team2SetPoints';
+        const currentPoints = prev[field] ?? 0;
+        return {
+          ...prev,
+          [field]: Math.max(0, currentPoints + delta)
+        };
+      });
+    } else {
+      setMatchState(prev => ({
+        ...prev,
+        [team === 'team1' ? 'team1Score' : 'team2Score']: Math.max(
+          0,
+          prev[team === 'team1' ? 'team1Score' : 'team2Score'] + delta
+        ),
+      }));
+    }
   };
 
   const checkSetWinCondition = (t1Points: number, t2Points: number) => {
@@ -2919,7 +2931,7 @@ export default function TournamentDetailPage() {
               </div>
 
               <div className="text-[11px] font-black tracking-wider text-white/40 uppercase mb-4">
-                Tỉ số hiện tại
+                Tỉ số
               </div>
 
               {/* Dynamic Score Controls based on Sport */}
@@ -2945,7 +2957,6 @@ export default function TournamentDetailPage() {
                   </button>
                 </div>
 
-                {/* Score Divider / Overview */}
                 <div className="text-xl font-bold text-white/20">vs</div>
 
                 {/* Team 2 scoring area */}
@@ -2969,6 +2980,18 @@ export default function TournamentDetailPage() {
                   </button>
                 </div>
               </div>
+
+              {tournament?.sport === 'fighting_sports' && !matchState.isFinished && (
+                <div className="flex items-center justify-center mb-6">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team2', 1); }}
+                    className="w-8 h-8 rounded-lg bg-[#22c55e]/10 border border-[#22c55e]/20 hover:bg-[#22c55e]/20 text-[#22c55e] flex items-center justify-center font-bold text-lg transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
+              )}
 
 
 

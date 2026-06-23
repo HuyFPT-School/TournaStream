@@ -380,7 +380,7 @@ export default function FinalizeCreatePage() {
           <div className="p-4 rounded-lg bg-[#0f1419] border border-white/[0.06]">
             <p className="text-sm text-white/60 mb-1">Môn thể thao</p>
             <p className="font-semibold">
-              {tournament.sport === 'battle_royale' ? 'Game Sinh tồn (PUBG)' : 
+              {tournament.sport === 'battle_royale' ? 'Game Sinh tồn (PUBG, Free Fire...)' : 
                tournament.sport === 'moba' ? 'Game MOBA' :
                tournament.sport === 'fps' ? 'Game FPS' : 
                tournament.sport === 'fighting_sports' ? 'Game Đối kháng / FIFA' : 

@@ -1719,15 +1719,11 @@ export default function TournamentLiveViewPage() {
                   <h4 className="text-lg font-bold text-white truncate">{selectedDetails.team1?.name || 'Chờ xác định'}</h4>
                 </div>
                 
-                <div className="flex justify-center items-center gap-3 text-3xl font-black text-[#22c55e]">
-                  <span className={selectedDetails.scoreA !== null ? 'text-[#22c55e]' : 'text-white/20'}>
-                    {selectedDetails.scoreA !== null ? selectedDetails.scoreA : '0'}
-                  </span>
-                  <span className="text-white/20">:</span>
-                  <span className={selectedDetails.scoreB !== null ? 'text-[#22c55e]' : 'text-white/20'}>
-                    {selectedDetails.scoreB !== null ? selectedDetails.scoreB : '0'}
-                  </span>
-                </div>
+                  <div className="flex justify-center items-center gap-3 text-3xl font-black text-[#22c55e]">
+                    <span>{selectedDetails.scoreA !== null ? selectedDetails.scoreA : '0'}</span>
+                    <span className="text-white/20">:</span>
+                    <span>{selectedDetails.scoreB !== null ? selectedDetails.scoreB : '0'}</span>
+                  </div>
 
                 <div>
                   <h4 className="text-lg font-bold text-white truncate">{selectedDetails.team2?.name || 'Chờ xác định'}</h4>

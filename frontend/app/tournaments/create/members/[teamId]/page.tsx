@@ -33,10 +33,10 @@ const positionsBySport: Record<string, string[]> = {
   ],
   battle_royale: [
     'Scout (Trinh sát)',
-    'Fragger (Sát thương chủ lực)',
+    'Fragger (Mở giao tranh)',
     'Support (Hỗ trợ)',
-    'In-Game Leader (Trưởng nhóm / Chỉ huy)',
-    'Sniper (Xạ thủ)',
+    'In-Game Leader (IGL / Chỉ huy)',
+    'Sniper (Bắn tỉa)',
     'Huấn luyện viên / Coach',
     'Dự bị',
   ],
