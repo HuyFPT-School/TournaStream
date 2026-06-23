@@ -7,15 +7,15 @@ import { useState } from 'react';
 
 const sports = [
   { id: 'moba', name: 'Game MOBA (Liên Quân, LOL, Tốc Chiến...)', icon: '⚔️' },
-  { id: 'fps', name: 'Game Bắn súng (Valorant, CS, PUBG...)', icon: '🔫' },
+  { id: 'fps', name: 'Game Bắn súng đối kháng (Valorant, CS, Đột Kích...)', icon: '🔫' },
   { id: 'fighting_sports', name: 'Game Đối kháng / FIFA', icon: '🎮' },
+  { id: 'battle_royale', name: 'Game Sinh tồn (PUBG, Free Fire...)', icon: '🪂' },
 ];
 
 const formats = [
   { id: 'single_elimination', name: 'Loại trực tiếp', desc: 'Thua 1 trận là bị loại ngay lập tức', icon: '🏆' },
   { id: 'round_robin', name: 'Vòng bảng & Knockout', desc: 'Chia bảng đấu tính điểm và lấy đội đi tiếp đấu Knockout', icon: '⚽' },
   { id: 'double_elimination', name: 'Nhánh thắng - Nhánh thua', desc: 'Esport chuyên nghiệp, thua 1 lần vẫn còn cơ hội sửa sai', icon: '🎮' },
-  { id: 'league', name: 'Đường đua điểm số (League)', desc: 'Thể thức PUBG: Đấu nhiều trận, tích lũy điểm hạng & diệt địch', icon: '📊' },
 ];
 
 export default function TournamentInfoPage() {
@@ -164,22 +164,27 @@ export default function TournamentInfoPage() {
           {/* Sport Selection */}
           <div>
             <label className="block text-sm font-semibold mb-3">Thể loại Game Esports</label>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               {sports.map((s) => (
                 <button
                   key={s.id}
                   onClick={() => {
                     setSport(s.id);
+                    if (s.id === 'battle_royale') {
+                      setFormat('league');
+                    } else if (format === 'league') {
+                      setFormat('single_elimination');
+                    }
                     if (errors.sport) setErrors({ ...errors, sport: '' });
                   }}
-                  className={`p-4 rounded-lg border transition-all duration-200 text-center ${
+                  className={`p-4 rounded-lg border transition-all duration-200 text-center flex flex-col items-center justify-center ${
                     sport === s.id
                       ? 'border-[#22c55e] bg-[#1a1f2e]'
                       : 'border-white/[0.06] bg-[#0f1419] hover:border-white/[0.12]'
                   }`}
                 >
                   <div className="text-3xl mb-2">{s.icon}</div>
-                  <div className="text-sm font-medium">{s.name}</div>
+                  <div className="text-xs font-semibold">{s.name}</div>
                 </button>
               ))}
             </div>
@@ -187,28 +192,30 @@ export default function TournamentInfoPage() {
           </div>
 
           {/* Thể thức Selection */}
-          <div>
-            <label className="block text-sm font-semibold mb-3">Thể thức thi đấu</label>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {formats.map((f) => (
-                <button
-                  key={f.id}
-                  onClick={() => setFormat(f.id as any)}
-                  className={`p-4 rounded-lg border transition-all duration-200 text-left flex flex-col justify-between h-full ${
-                    format === f.id
-                      ? 'border-[#22c55e] bg-[#1a1f2e]'
-                      : 'border-white/[0.06] bg-[#0f1419] hover:border-white/[0.12]'
-                  }`}
-                >
-                  <div>
-                    <div className="text-2xl mb-2">{f.icon}</div>
-                    <div className="text-sm font-semibold mb-1">{f.name}</div>
-                    <div className="text-[11px] text-white/50 leading-relaxed">{f.desc}</div>
-                  </div>
-                </button>
-              ))}
+          {sport !== 'battle_royale' && (
+            <div>
+              <label className="block text-sm font-semibold mb-3">Thể thức thi đấu</label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {formats.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setFormat(f.id as any)}
+                    className={`p-4 rounded-lg border transition-all duration-200 text-left flex flex-col justify-between h-full ${
+                      format === f.id
+                        ? 'border-[#22c55e] bg-[#1a1f2e]'
+                        : 'border-white/[0.06] bg-[#0f1419] hover:border-white/[0.12]'
+                    }`}
+                  >
+                    <div>
+                      <div className="text-2xl mb-2">{f.icon}</div>
+                      <div className="text-sm font-semibold mb-1">{f.name}</div>
+                      <div className="text-[11px] text-white/50 leading-relaxed">{f.desc}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Group Stage Config (Round Robin Sub-options) */}
           {format === 'round_robin' && (
@@ -261,7 +268,9 @@ export default function TournamentInfoPage() {
           {/* League Config Options */}
           {format === 'league' && (
             <div className="p-5 rounded-lg bg-[#0f1419] border border-white/[0.06] space-y-4">
-              <h4 className="text-sm font-bold text-[#22c55e]">Cấu hình Đường đua điểm số (League)</h4>
+              <h4 className="text-sm font-bold text-[#22c55e]">
+                {sport === 'battle_royale' ? 'Cấu hình Giải đấu Sinh tồn (PUBG, Free Fire...)' : 'Cấu hình Đường đua điểm số (League)'}
+              </h4>
               <div>
                 <label className="block text-xs text-white/60 mb-2 font-medium">Số lượng trận đấu</label>
                 <div className="flex items-center gap-3">

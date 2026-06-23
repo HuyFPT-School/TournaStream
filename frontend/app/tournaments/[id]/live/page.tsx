@@ -1630,7 +1630,7 @@ export default function TournamentLiveViewPage() {
               {/* Timer/Period */}
               <div className="text-sm font-semibold text-white/60 mb-4">
                 {selectedDetails.isLive 
-                  ? (tournament?.sport === 'moba' ? `Đang thi đấu Game ${selectedDetails.hiep}` : tournament?.sport === 'fps' ? `Đang thi đấu Map ${selectedDetails.hiep}` : `Hiệp ${selectedDetails.hiep}`)
+                  ? 'Đang thi đấu'
                   : selectedDetails.isFinished 
                   ? 'Chung cuộc' 
                   : 'Chờ bắt đầu'
@@ -1643,53 +1643,11 @@ export default function TournamentLiveViewPage() {
                   <h4 className="text-lg font-bold text-white truncate">{selectedDetails.team1?.name || 'Chờ xác định'}</h4>
                 </div>
                 
-                {tournament?.sport === 'moba' ? (
-                  <div className="flex flex-col items-center justify-center gap-1.5">
-                    <div className="flex justify-center items-center gap-3 text-3xl font-black text-[#22c55e]">
-                      <span>{selectedDetails.scoreA !== null ? selectedDetails.scoreA : '0'}</span>
-                      <span className="text-white/20">:</span>
-                      <span>{selectedDetails.scoreB !== null ? selectedDetails.scoreB : '0'}</span>
-                    </div>
-                    <div className="text-[9px] font-black text-white/30 uppercase tracking-wider">Ván thắng (BO)</div>
-                    
-                    {(selectedDetails.team1SetPoints !== null || selectedDetails.team2SetPoints !== null) && (
-                      <div className="flex items-center gap-2 px-2 py-0.5 rounded bg-white/[0.03] border border-white/[0.05] text-xs font-bold font-mono mt-1 text-white/70">
-                        <span>{selectedDetails.team1SetPoints ?? 0}</span>
-                        <span className="text-white/20">:</span>
-                        <span>{selectedDetails.team2SetPoints ?? 0}</span>
-                      </div>
-                    )}
-                    <div className="text-[8px] text-white/40">Hạ gục (Kills)</div>
-                  </div>
-                ) : tournament?.sport === 'fps' ? (
-                  <div className="flex flex-col items-center justify-center gap-1.5">
-                    <div className="flex justify-center items-center gap-3 text-3xl font-black text-[#22c55e]">
-                      <span>{selectedDetails.scoreA !== null ? selectedDetails.scoreA : '0'}</span>
-                      <span className="text-white/20">:</span>
-                      <span>{selectedDetails.scoreB !== null ? selectedDetails.scoreB : '0'}</span>
-                    </div>
-                    <div className="text-[9px] font-black text-white/30 uppercase tracking-wider">Map thắng (BO)</div>
-                    
-                    {(selectedDetails.team1SetPoints !== null || selectedDetails.team2SetPoints !== null) && (
-                      <div className="flex items-center gap-2 px-2 py-0.5 rounded bg-white/[0.03] border border-white/[0.05] text-xs font-bold font-mono mt-1 text-white/70">
-                        <span>{selectedDetails.team1SetPoints ?? 0}</span>
-                        <span className="text-white/20">:</span>
-                        <span>{selectedDetails.team2SetPoints ?? 0}</span>
-                      </div>
-                    )}
-                    <div className="text-[8px] text-white/40">Số vòng (Rounds)</div>
-                  </div>
-                ) : (
-                  <div className="flex justify-center items-center gap-3 text-3xl font-black">
-                    <span className={selectedDetails.scoreA !== null ? 'text-white' : 'text-white/20'}>
-                      {selectedDetails.scoreA !== null ? selectedDetails.scoreA : '-'}
-                    </span>
+                  <div className="flex justify-center items-center gap-3 text-3xl font-black text-[#22c55e]">
+                    <span>{selectedDetails.scoreA !== null ? selectedDetails.scoreA : '0'}</span>
                     <span className="text-white/20">:</span>
-                    <span className={selectedDetails.scoreB !== null ? 'text-white' : 'text-white/20'}>
-                      {selectedDetails.scoreB !== null ? selectedDetails.scoreB : '-'}
-                    </span>
+                    <span>{selectedDetails.scoreB !== null ? selectedDetails.scoreB : '0'}</span>
                   </div>
-                )}
 
                 <div>
                   <h4 className="text-lg font-bold text-white truncate">{selectedDetails.team2?.name || 'Chờ xác định'}</h4>

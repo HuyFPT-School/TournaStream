@@ -1649,7 +1649,7 @@ export default function TournamentDetailPage() {
   };
 
   const handleScoreChange = (team: 'team1' | 'team2', delta: number) => {
-    const isSetBased = tournament?.sport === 'tennis' || tournament?.sport === 'volleyball' || tournament?.sport === 'moba' || tournament?.sport === 'fps';
+    const isSetBased = tournament?.sport === 'tennis' || tournament?.sport === 'volleyball';
     if (isSetBased) {
       setMatchState(prev => {
         const field = team === 'team1' ? 'team1SetPoints' : 'team2SetPoints';
@@ -1735,18 +1735,7 @@ export default function TournamentDetailPage() {
   };
 
   const handleEndHalf = () => {
-    if (matchState.hiep === 1) {
-      if (window.confirm('Bạn có chắc chắn muốn kết thúc Hiệp 1 và chuyển sang Hiệp 2?')) {
-        setMatchState(prev => ({
-          ...prev,
-          hiep: 2,
-          time: 0,
-          isRunning: false,
-        }));
-      }
-    } else {
-      handleFinishMatch();
-    }
+    handleFinishMatch();
   };
 
   const handleFinishMatch = async () => {
@@ -3235,7 +3224,7 @@ export default function TournamentDetailPage() {
                   : 'bg-red-500/10 border border-red-500/20 text-red-500'
               }`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${matchState.isFinished ? 'bg-white/20' : 'bg-red-500 animate-pulse'}`} />
-                {tournament?.sport === 'moba' ? 'Game' : tournament?.sport === 'fps' ? 'Map' : 'Hiệp'} {matchState.hiep}
+                Trận đấu
               </div>
             </div>
 
@@ -3247,247 +3236,54 @@ export default function TournamentDetailPage() {
               </div>
 
               <div className="text-[11px] font-black tracking-wider text-white/40 uppercase mb-4">
-                {tournament?.sport === 'moba' ? `Game ${matchState.hiep}` : tournament?.sport === 'fps' ? `Map ${matchState.hiep}` : `Hiệp ${matchState.hiep}`}
+                Tỉ số
               </div>
 
               {/* Dynamic Score Controls based on Sport */}
               <div className={`flex items-center justify-center gap-8 mb-6 ${matchState.isFinished ? 'pointer-events-none opacity-50' : ''}`}>
                 {/* Team 1 scoring area */}
-                {tournament?.sport === 'moba' ? (
-                  <div className="flex flex-col gap-1.5 items-center">
-                    <div className="text-[9px] font-black tracking-wider text-white/40 uppercase">Hạ gục (Kills)</div>
-                    <div className="flex items-center gap-1.5">
-                      <button 
-                        type="button" 
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team1', -1); }}
-                        className="w-6 h-6 rounded bg-white/[0.05] hover:bg-white/[0.1] text-white/50 text-xs flex items-center justify-center"
-                      >
-                        −
-                      </button>
-                      <div className="w-10 h-10 rounded-lg bg-[#080b10] border border-white/[0.06] flex items-center justify-center font-bold text-sm text-white">
-                        {matchState.team1SetPoints ?? 0}
-                      </div>
-                      <button 
-                        type="button" 
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team1', 1); }}
-                        className="w-6 h-6 rounded bg-[#22c55e]/10 hover:bg-[#22c55e]/20 text-[#22c55e] text-xs flex items-center justify-center font-bold"
-                      >
-                        +
-                      </button>
-                    </div>
-                    <div className="text-[8px] font-semibold text-white/30 uppercase mt-1">Ván thắng: {matchState.team1Score}</div>
-                    <div className="flex gap-1">
-                      <button 
-                        type="button" 
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRevertWinGame('team1'); }}
-                        className="px-1.5 py-0.5 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 text-[8px]"
-                      >
-                        − Ván
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleWinGame('team1'); }}
-                        className="px-1.5 py-0.5 rounded bg-[#22c55e]/10 hover:bg-[#22c55e]/20 text-green-400 text-[8px]"
-                      >
-                        + Ván
-                      </button>
-                    </div>
+                <div className="flex items-center gap-2">
+                  <button 
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team1', -1); }}
+                    className="w-8 h-8 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white flex items-center justify-center font-bold text-lg transition-colors"
+                  >
+                    −
+                  </button>
+                  <div className="w-12 h-12 rounded-xl bg-[#080b10] border border-white/[0.06] flex items-center justify-center font-black text-xl text-white">
+                    {matchState.team1Score}
                   </div>
-                ) : tournament?.sport === 'fps' ? (
-                  <div className="flex flex-col gap-1.5 items-center">
-                    <div className="text-[9px] font-black tracking-wider text-white/40 uppercase">Vòng (Rounds)</div>
-                    <div className="flex items-center gap-1.5">
-                      <button 
-                        type="button" 
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team1', -1); }}
-                        className="w-6 h-6 rounded bg-white/[0.05] hover:bg-white/[0.1] text-white/50 text-xs flex items-center justify-center"
-                      >
-                        −
-                      </button>
-                      <div className="w-10 h-10 rounded-lg bg-[#080b10] border border-white/[0.06] flex items-center justify-center font-bold text-sm text-white">
-                        {matchState.team1SetPoints ?? 0}
-                      </div>
-                      <button 
-                        type="button" 
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team1', 1); }}
-                        className="w-6 h-6 rounded bg-[#22c55e]/10 hover:bg-[#22c55e]/20 text-[#22c55e] text-xs flex items-center justify-center font-bold"
-                      >
-                        +
-                      </button>
-                    </div>
-                    <div className="text-[8px] font-semibold text-white/30 uppercase mt-1">Map thắng: {matchState.team1Score}</div>
-                    <div className="flex gap-1">
-                      <button 
-                        type="button" 
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRevertWinGame('team1'); }}
-                        className="px-1.5 py-0.5 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 text-[8px]"
-                      >
-                        − Map
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleWinGame('team1'); }}
-                        className="px-1.5 py-0.5 rounded bg-[#22c55e]/10 hover:bg-[#22c55e]/20 text-green-400 text-[8px]"
-                      >
-                        + Map
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <button 
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team1', -1); }}
-                      className="w-8 h-8 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white flex items-center justify-center font-bold text-lg transition-colors"
-                    >
-                      −
-                    </button>
-                    <div className="w-12 h-12 rounded-xl bg-[#080b10] border border-white/[0.06] flex items-center justify-center font-black text-xl text-white">
-                      {matchState.team1Score}
-                    </div>
-                    <button 
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team1', 1); }}
-                      className="w-8 h-8 rounded-lg bg-[#22c55e]/10 border border-[#22c55e]/20 hover:bg-[#22c55e]/20 text-[#22c55e] flex items-center justify-center font-bold text-lg transition-colors"
-                    >
-                      +
-                    </button>
-                  </div>
-                )}
+                  <button 
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team1', 1); }}
+                    className="w-8 h-8 rounded-lg bg-[#22c55e]/10 border border-[#22c55e]/20 hover:bg-[#22c55e]/20 text-[#22c55e] flex items-center justify-center font-bold text-lg transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
 
-                {/* Score Divider / Overview */}
-                {tournament?.sport === 'moba' || tournament?.sport === 'fps' ? (
-                  <div className="flex flex-col items-center gap-0.5 justify-center min-w-[80px]">
-                    <div className="text-2xl font-black text-[#22c55e] font-mono leading-none">
-                      {matchState.team1Score} : {matchState.team2Score}
-                    </div>
-                    <div className="text-[8px] font-black text-white/30 uppercase tracking-widest mt-1">
-                      {tournament?.sport === 'moba' ? 'Ván thắng (BO)' : 'Map thắng (BO)'}
-                    </div>
-                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/[0.03] border border-white/[0.05] text-[10px] font-bold font-mono mt-1 text-white/70">
-                      <span>{matchState.team1SetPoints ?? 0}</span>
-                      <span className="text-white/20">:</span>
-                      <span>{matchState.team2SetPoints ?? 0}</span>
-                    </div>
-                    <div className="text-[7px] text-white/40 uppercase tracking-wider font-semibold">
-                      {tournament?.sport === 'moba' ? 'Kills' : 'Rounds'}
-                    </div>
-                  </div>
-                ) : tournament?.sport === 'tennis' || tournament?.sport === 'volleyball' ? (
-                  <div className="flex flex-col items-center gap-0.5 justify-center min-w-[60px]">
-                    <div className="text-2xl font-black text-[#22c55e] font-mono leading-none">
-                      {matchState.team1Score} : {matchState.team2Score}
-                    </div>
-                    <div className="text-[8px] font-black text-white/30 uppercase tracking-widest mt-1">
-                      Sets
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-xl font-bold text-white/20">vs</div>
-                )}
+                <div className="text-xl font-bold text-white/20">vs</div>
 
                 {/* Team 2 scoring area */}
-                {tournament?.sport === 'moba' ? (
-                  <div className="flex flex-col gap-1.5 items-center">
-                    <div className="text-[9px] font-black tracking-wider text-white/40 uppercase">Hạ gục (Kills)</div>
-                    <div className="flex items-center gap-1.5">
-                      <button 
-                        type="button" 
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team2', -1); }}
-                        className="w-6 h-6 rounded bg-white/[0.05] hover:bg-white/[0.1] text-white/50 text-xs flex items-center justify-center"
-                      >
-                        −
-                      </button>
-                      <div className="w-10 h-10 rounded-lg bg-[#080b10] border border-white/[0.06] flex items-center justify-center font-bold text-sm text-white">
-                        {matchState.team2SetPoints ?? 0}
-                      </div>
-                      <button 
-                        type="button" 
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team2', 1); }}
-                        className="w-6 h-6 rounded bg-[#22c55e]/10 hover:bg-[#22c55e]/20 text-[#22c55e] text-xs flex items-center justify-center font-bold"
-                      >
-                        +
-                      </button>
-                    </div>
-                    <div className="text-[8px] font-semibold text-white/30 uppercase mt-1">Ván thắng: {matchState.team2Score}</div>
-                    <div className="flex gap-1">
-                      <button 
-                        type="button" 
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRevertWinGame('team2'); }}
-                        className="px-1.5 py-0.5 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 text-[8px]"
-                      >
-                        − Ván
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleWinGame('team2'); }}
-                        className="px-1.5 py-0.5 rounded bg-[#22c55e]/10 hover:bg-[#22c55e]/20 text-green-400 text-[8px]"
-                      >
-                        + Ván
-                      </button>
-                    </div>
+                <div className="flex items-center gap-2">
+                  <button 
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team2', -1); }}
+                    className="w-8 h-8 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white flex items-center justify-center font-bold text-lg transition-colors"
+                  >
+                    −
+                  </button>
+                  <div className="w-12 h-12 rounded-xl bg-[#080b10] border border-white/[0.06] flex items-center justify-center font-black text-xl text-white">
+                    {matchState.team2Score}
                   </div>
-                ) : tournament?.sport === 'fps' ? (
-                  <div className="flex flex-col gap-1.5 items-center">
-                    <div className="text-[9px] font-black tracking-wider text-white/40 uppercase">Vòng (Rounds)</div>
-                    <div className="flex items-center gap-1.5">
-                      <button 
-                        type="button" 
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team2', -1); }}
-                        className="w-6 h-6 rounded bg-white/[0.05] hover:bg-white/[0.1] text-white/50 text-xs flex items-center justify-center"
-                      >
-                        −
-                      </button>
-                      <div className="w-10 h-10 rounded-lg bg-[#080b10] border border-white/[0.06] flex items-center justify-center font-bold text-sm text-white">
-                        {matchState.team2SetPoints ?? 0}
-                      </div>
-                      <button 
-                        type="button" 
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team2', 1); }}
-                        className="w-6 h-6 rounded bg-[#22c55e]/10 hover:bg-[#22c55e]/20 text-[#22c55e] text-xs flex items-center justify-center font-bold"
-                      >
-                        +
-                      </button>
-                    </div>
-                    <div className="text-[8px] font-semibold text-white/30 uppercase mt-1">Map thắng: {matchState.team2Score}</div>
-                    <div className="flex gap-1">
-                      <button 
-                        type="button" 
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRevertWinGame('team2'); }}
-                        className="px-1.5 py-0.5 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 text-[8px]"
-                      >
-                        − Map
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleWinGame('team2'); }}
-                        className="px-1.5 py-0.5 rounded bg-[#22c55e]/10 hover:bg-[#22c55e]/20 text-green-400 text-[8px]"
-                      >
-                        + Map
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <button 
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team2', -1); }}
-                      className="w-8 h-8 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white flex items-center justify-center font-bold text-lg transition-colors"
-                    >
-                      −
-                    </button>
-                    <div className="w-12 h-12 rounded-xl bg-[#080b10] border border-white/[0.06] flex items-center justify-center font-black text-xl text-white">
-                      {matchState.team2Score}
-                    </div>
-                    <button 
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team2', 1); }}
-                      className="w-8 h-8 rounded-lg bg-[#22c55e]/10 border border-[#22c55e]/20 hover:bg-[#22c55e]/20 text-[#22c55e] flex items-center justify-center font-bold text-lg transition-colors"
-                    >
-                      +
-                    </button>
-                  </div>
-                )}
+                  <button 
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team2', 1); }}
+                    className="w-8 h-8 rounded-lg bg-[#22c55e]/10 border border-[#22c55e]/20 hover:bg-[#22c55e]/20 text-[#22c55e] flex items-center justify-center font-bold text-lg transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
 
               {tournament?.sport === 'fighting_sports' && !matchState.isFinished && (
@@ -3575,7 +3371,7 @@ export default function TournamentDetailPage() {
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleEndHalf(); }}
                       className="px-5 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 font-black text-xs transition-all duration-200 active:scale-95 flex items-center gap-1 shadow-[0_0_15px_rgba(239,68,68,0.15)]"
                     >
-                      {matchState.hiep === 1 ? '→ Kết thúc H1' : '🏁 Kết thúc trận'}
+                      🏁 Kết thúc trận
                     </button>
                   </>
                 )}
