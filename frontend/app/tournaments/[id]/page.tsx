@@ -2991,7 +2991,7 @@ export default function TournamentDetailPage() {
                     +
                   </button>
                 </div>
-              </div>
+              )}
 
 
 
