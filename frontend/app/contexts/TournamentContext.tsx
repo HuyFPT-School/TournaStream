@@ -39,6 +39,11 @@ export interface TournamentData {
   // Teams and members
   teams: Team[];
 
+  // Registration config
+  isPublicRegistration?: boolean;
+  registrationOpen?: boolean;
+  maxTeams?: number;
+
   // Bracket
   bracketSeeded: boolean;
   shuffled: boolean;

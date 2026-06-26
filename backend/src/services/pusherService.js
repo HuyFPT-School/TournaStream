@@ -52,4 +52,28 @@ async function triggerMatchSignaling(tournamentId, signalingData) {
 module.exports = {
   triggerTournamentUpdate,
   triggerMatchSignaling,
+  triggerChatMessage,
+  triggerAnnouncement,
 };
+
+async function triggerChatMessage(tournamentId, messageData) {
+  const pusher = getPusher();
+  if (!pusher) return;
+
+  try {
+    await pusher.trigger(String(tournamentId), "chat_message", messageData);
+  } catch (error) {
+    console.error(`Error triggering Pusher chat for tournament ${tournamentId}:`, error);
+  }
+}
+
+async function triggerAnnouncement(tournamentId, announcementData) {
+  const pusher = getPusher();
+  if (!pusher) return;
+
+  try {
+    await pusher.trigger(String(tournamentId), "new_announcement", announcementData);
+  } catch (error) {
+    console.error(`Error triggering Pusher announcement for tournament ${tournamentId}:`, error);
+  }
+}

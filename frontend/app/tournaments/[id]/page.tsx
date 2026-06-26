@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import { fetchTournamentFromBackend, syncTournamentToBackend } from '@/app/lib/tournaments';
-import { getSession, getApiBaseUrl } from '@/app/lib/authStorage';
+import { getSession, getApiBaseUrl, getAccessToken } from '@/app/lib/authStorage';
 import { getPusherClient } from '@/app/lib/pusher';
 
 interface MatchState {
@@ -104,6 +104,123 @@ function buildInitialBracket(teams: TeamRef[]): BracketState {
     currentRound: 0,
     currentMatch: 0,
     isFinished: false,
+  };
+}
+
+function buildRoundRobinMatches(groupTeams: TeamRef[], groupIdx: number) {
+  const list = [...groupTeams];
+  const matches: any[] = [];
+  const n = list.length;
+  if (n < 2) return [];
+
+  const hasBye = n % 2 !== 0;
+  if (hasBye) {
+    list.push({ id: 'bye', name: 'BYE' });
+  }
+  const numTeams = list.length;
+  const roundsCount = numTeams - 1;
+  const matchesPerRound = numTeams / 2;
+
+  let matchCounter = 0;
+  for (let round = 0; round < roundsCount; round++) {
+    for (let i = 0; i < matchesPerRound; i++) {
+      const teamA = list[i];
+      const teamB = list[numTeams - 1 - i];
+
+      if (teamA.id !== 'bye' && teamB.id !== 'bye') {
+        matches.push({
+          id: `g-${groupIdx}-${matchCounter++}`,
+          teamA,
+          teamB,
+          scoreA: null,
+          scoreB: null,
+          isFinished: false,
+          roundIndex: round
+        });
+      }
+    }
+    // Rotate: keep list[0] fixed, rotate the rest clockwise
+    const rotated = [list[0], list[numTeams - 1], ...list.slice(1, numTeams - 1)];
+    for (let idx = 0; idx < numTeams; idx++) {
+      list[idx] = rotated[idx];
+    }
+  }
+  return matches;
+}
+
+function buildDoubleEliminationBracket(teams: TeamRef[]) {
+  const n = teams.length; // power of 2, e.g. 4, 8, 16, 32
+  const numUpperRounds = Math.ceil(Math.log2(n));
+
+  // 1. Upper Rounds
+  const upperRounds: any[][] = [];
+  // Upper Round 0 matches
+  const u0Matches: any[] = [];
+  for (let i = 0; i < n; i += 2) {
+    u0Matches.push({
+      teamA: teams[i],
+      teamB: teams[i + 1],
+      scoreA: null,
+      scoreB: null,
+      isFinished: false,
+    });
+  }
+  upperRounds.push(u0Matches);
+
+  // Remaining Upper Rounds (with placeholders '?' for names)
+  for (let r = 1; r < numUpperRounds; r++) {
+    const matchesInRound = n / Math.pow(2, r + 1);
+    const roundMatches: any[] = [];
+    for (let m = 0; m < matchesInRound; m++) {
+      roundMatches.push({
+        teamA: { id: '', name: '?' },
+        teamB: { id: '', name: '?' },
+        scoreA: null,
+        scoreB: null,
+        isFinished: false,
+      });
+    }
+    upperRounds.push(roundMatches);
+  }
+
+  // 2. Lower Rounds
+  const lowerRounds: any[][] = [];
+  const totalLowerRounds = 2 * numUpperRounds - 2;
+  for (let r = 0; r < totalLowerRounds; r++) {
+    const k = Math.floor(r / 2);
+    const matchesInRound = n / Math.pow(2, k + 2);
+    const roundMatches: any[] = [];
+    for (let m = 0; m < matchesInRound; m++) {
+      roundMatches.push({
+        teamA: { id: '', name: '?' },
+        teamB: { id: '', name: '?' },
+        scoreA: null,
+        scoreB: null,
+        isFinished: false,
+      });
+    }
+    lowerRounds.push(roundMatches);
+  }
+
+  // 3. Grand Final (up to 2 matches for bracket reset)
+  const grandFinal = [
+    {
+      teamA: { id: '', name: '?' },
+      teamB: { id: '', name: '?' },
+      scoreA: null,
+      scoreB: null,
+      isFinished: false,
+    }
+  ];
+
+  return {
+    upperRounds,
+    lowerRounds,
+    grandFinal,
+    currentRound: 0,
+    currentMatch: 0,
+    isFinished: false,
+    activeMatches: []
   };
 }
 
@@ -1372,6 +1489,14 @@ export default function TournamentDetailPage() {
   const [pendingFinishData, setPendingFinishData] = useState<{ bracket: BracketState; nextMatchState: MatchState; updatedTournament: any } | null>(null);
   const [finishedMatchInfo, setFinishedMatchInfo] = useState<{ teamA: string; teamB: string; scoreA: number; scoreB: number; roundLabel: string } | null>(null);
 
+  // Announcement states
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [announcementsLoading, setAnnouncementsLoading] = useState(false);
+  const [announcementTitle, setAnnouncementTitle] = useState('');
+  const [announcementContent, setAnnouncementContent] = useState('');
+  const [announcementType, setAnnouncementType] = useState<'info' | 'warning' | 'update'>('info');
+  const [announcementPosting, setAnnouncementPosting] = useState(false);
+
   const session = getSession();
   const tournamentsKey = session ? `tournaments_${session.id}` : 'tournaments';
   const currentTournamentKey = session ? `currentTournament_${session.id}` : 'currentTournament';
@@ -1418,6 +1543,52 @@ export default function TournamentDetailPage() {
     }
   };
 
+  // --- Announcements ---
+  const fetchAnnouncements = async () => {
+    if (!tournamentId) return;
+    setAnnouncementsLoading(true);
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/tournaments/${tournamentId}/announcements`);
+      if (res.ok) {
+        const data = await res.json();
+        setAnnouncements(data);
+      }
+    } catch (err) {
+      console.error('Error fetching announcements:', err);
+    } finally {
+      setAnnouncementsLoading(false);
+    }
+  };
+
+  const handlePostAnnouncement = async () => {
+    if (!announcementTitle.trim() || !announcementContent.trim()) return;
+    setAnnouncementPosting(true);
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/tournaments/${tournamentId}/announcements`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getAccessToken()}`,
+        },
+        body: JSON.stringify({
+          title: announcementTitle.trim(),
+          content: announcementContent.trim(),
+          type: announcementType,
+        }),
+      });
+      if (res.ok) {
+        setAnnouncementTitle('');
+        setAnnouncementContent('');
+        setAnnouncementType('info');
+        await fetchAnnouncements();
+      }
+    } catch (err) {
+      console.error('Error posting announcement:', err);
+    } finally {
+      setAnnouncementPosting(false);
+    }
+  };
+
   useEffect(() => {
     let isOwnerUser = false;
     const savedList = localStorage.getItem(tournamentsKey);
@@ -1435,16 +1606,43 @@ export default function TournamentDetailPage() {
 
     const loadTournament = async () => {
       let loadedTournament = null;
-      // 1. Try local storage first
-      if (savedList) {
-        try {
-          const list = JSON.parse(savedList);
-          const tourn = list.find((t: any) => t.id === tournamentId);
-          if (tourn) {
-            loadedTournament = tourn;
+      
+      // Always fetch from backend first to get the most up-to-date data (registrations, scores, etc.)
+      try {
+        const data = await fetchTournamentFromBackend(tournamentId);
+        if (data) {
+          loadedTournament = data;
+          // Synchronize back to local storage list
+          if (savedList) {
+            try {
+              const list = JSON.parse(savedList);
+              const idx = list.findIndex((t: any) => t.id === tournamentId);
+              if (idx > -1) {
+                list[idx] = data;
+                localStorage.setItem(tournamentsKey, JSON.stringify(list));
+              }
+            } catch (e) {
+              console.error('Error syncing backend data to local list:', e);
+            }
           }
-        } catch (e) {
-          console.error(e);
+          localStorage.setItem(currentTournamentKey, JSON.stringify(data));
+        }
+      } catch (err) {
+        console.error('Error fetching tournament from backend, fallback to local storage:', err);
+      }
+
+      // Fallback to local storage if backend fails
+      if (!loadedTournament) {
+        if (savedList) {
+          try {
+            const list = JSON.parse(savedList);
+            const tourn = list.find((t: any) => t.id === tournamentId);
+            if (tourn) {
+              loadedTournament = tourn;
+            }
+          } catch (e) {
+            console.error(e);
+          }
         }
       }
 
@@ -1459,16 +1657,6 @@ export default function TournamentDetailPage() {
           } catch (e) {
             console.error(e);
           }
-        }
-      }
-
-      // 2. Fallback to backend
-      if (!loadedTournament) {
-        try {
-          const data = await fetchTournamentFromBackend(tournamentId);
-          loadedTournament = data;
-        } catch (err) {
-          console.error('Error fetching tournament from backend:', err);
         }
       }
 
@@ -1496,12 +1684,15 @@ export default function TournamentDetailPage() {
     };
 
     loadTournament();
+
+    fetchAnnouncements();
   }, [tournamentId, currentTournamentKey, tournamentsKey]);
 
   useEffect(() => {
-    // If the user is the owner, do not subscribe to Pusher updates on this page.
-    // Overwriting the local editing state via Pusher updates triggers an infinite feedback loop (Race Condition).
-    if (isOwner) return;
+    // If the user is the owner AND the tournament has already started (bracket seeded),
+    // do not subscribe to Pusher updates on this page to prevent feedback loops.
+    // However, if the tournament has NOT started yet, the admin must receive real-time updates when teams register!
+    if (isOwner && tournament && tournament.bracketSeeded) return;
 
     const pusher = getPusherClient();
     let channel: any = null;
@@ -1535,7 +1726,7 @@ export default function TournamentDetailPage() {
         pusher.unsubscribe(tournamentId);
       }
     };
-  }, [tournamentId, isOwner]);
+  }, [tournamentId, isOwner, tournament?.bracketSeeded, selectedMatchKey]);
 
   // Timer is disabled for Esports
   useEffect(() => {
@@ -2079,6 +2270,169 @@ export default function TournamentDetailPage() {
     await commitFinishMatch();
   };
 
+  const handleToggleRegistration = async () => {
+    if (!tournament) return;
+    const updatedTournament = {
+      ...tournament,
+      registrationOpen: !tournament.registrationOpen,
+    };
+    setTournament(updatedTournament);
+    localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
+    try {
+      await syncTournamentToBackend(updatedTournament);
+    } catch (err) {
+      console.error('Error toggling registrationOpen:', err);
+    }
+  };
+
+  const handleRemoveTeam = async (teamId: string) => {
+    if (!tournament) return;
+    if (!window.confirm('Bạn có chắc chắn muốn loại bỏ đội này khỏi giải đấu?')) return;
+    const updatedTeams = (tournament.teams || []).filter((t: any) => t.id !== teamId);
+    const updatedTournament = {
+      ...tournament,
+      teams: updatedTeams,
+    };
+    setTournament(updatedTournament);
+    localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
+    try {
+      await syncTournamentToBackend(updatedTournament);
+    } catch (err) {
+      console.error('Error removing team from tournament:', err);
+    }
+  };
+
+  const handleShuffleTeams = () => {
+    if (!tournament) return;
+    const shuffled = [...(tournament.teams || [])];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    setTournament({
+      ...tournament,
+      teams: shuffled,
+    });
+  };
+
+  const handleStartTournament = async () => {
+    if (!tournament) return;
+    const shuffledTeams = tournament.teams || [];
+    
+    // Check validation constraints based on format
+    const len = shuffledTeams.length;
+    const format = tournament.format;
+    const groupsCount = tournament.groupsCount || 1;
+    const isPowerOfTwo = (n: number) => n > 1 && (n & (n - 1)) === 0;
+
+    let isValid = false;
+    if (format === 'single_elimination') {
+      isValid = len >= 2 && isPowerOfTwo(len);
+    } else if (format === 'double_elimination') {
+      isValid = len >= 4 && isPowerOfTwo(len);
+    } else if (format === 'round_robin') {
+      isValid = len >= groupsCount * 2;
+    } else if (format === 'league' || format === 'battle_royale') {
+      isValid = len >= 2;
+    }
+
+    if (!isValid) {
+      alert('Số lượng đội tham gia chưa hợp lệ để tạo bảng đấu. Vui lòng kiểm tra lại thể thức giải đấu!');
+      return;
+    }
+
+    if (!window.confirm('Bạn có chắc chắn muốn xác nhận danh sách và Khởi tranh giải đấu? Thao tác này sẽ khóa đăng ký và tạo sơ đồ thi đấu.')) {
+      return;
+    }
+
+    let bracket = null;
+    let groups: any[] | null = null;
+    let leagueMatches: any[] | null = null;
+    let stage = null;
+    let matches: any[] | null = null;
+
+    if (tournament.sport === 'battle_royale') {
+      stage = 'battle_royale';
+      const matchesCount = tournament.matchesCount || 5;
+      matches = Array.from({ length: matchesCount }, (_, idx) => ({
+        id: `br-${idx}`,
+        name: `Trận ${idx + 1}`,
+        isFinished: false,
+        results: shuffledTeams.map((t: any) => ({
+          teamId: t.id || t.name,
+          teamName: t.name,
+          rank: null,
+          placement: null,
+          kills: 0,
+          placementPoints: 0,
+          killPoints: 0,
+          totalPoints: 0,
+          pts: 0,
+        })),
+      }));
+    } else if (tournament.format === 'round_robin') {
+      groups = Array.from({ length: groupsCount }, (_, gIdx) => ({
+        name: `Bảng ${String.fromCharCode(65 + gIdx)}`,
+        teams: [] as TeamRef[],
+        matches: [] as any[]
+      }));
+      shuffledTeams.forEach((team: any, idx: number) => {
+        const gIdx = idx % groupsCount;
+        groups![gIdx].teams.push(team);
+      });
+
+      groups!.forEach((group: any, gIdx: number) => {
+        group.matches = buildRoundRobinMatches(group.teams, gIdx);
+      });
+      stage = 'group';
+    } else if (tournament.format === 'double_elimination') {
+      bracket = buildDoubleEliminationBracket(shuffledTeams);
+    } else if (tournament.format === 'league') {
+      const matchesCount = tournament.leagueMatchesCount || 5;
+      leagueMatches = Array.from({ length: matchesCount }, (_, mIdx) => ({
+        id: `league-match-${mIdx}`,
+        name: `Trận ${mIdx + 1}`,
+        isFinished: false,
+        results: shuffledTeams.map((team: any) => ({
+          teamId: team.id,
+          teamName: team.name,
+          placement: null,
+          kills: 0,
+          placementPoints: 0,
+          killPoints: 0,
+          totalPoints: 0,
+          win: false
+        }))
+      }));
+      stage = 'league';
+    } else {
+      bracket = buildInitialBracket(shuffledTeams);
+    }
+
+    const updatedTournament = {
+      ...tournament,
+      orderedTeams: shuffledTeams,
+      bracket,
+      groups,
+      leagueMatches,
+      stage,
+      matches,
+      bracketSeeded: true,
+      registrationOpen: false,
+    };
+
+    setTournament(updatedTournament);
+    localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
+    
+    try {
+      await syncTournamentToBackend(updatedTournament);
+      alert('Giải đấu đã khởi tranh và tạo sơ đồ thi đấu thành công!');
+    } catch (err) {
+      console.error('Error starting tournament:', err);
+      alert('Lỗi kết nối mạng khi tạo sơ đồ thi đấu.');
+    }
+  };
+
   const handleStartPendingMatch = async (matchIdx: number) => {
     if (!tournament || !tournament.bracket) return;
 
@@ -2554,9 +2908,197 @@ export default function TournamentDetailPage() {
           </div>
         )}
 
-        {/* Bracket Diagram Container */}
+        {/* Bracket Diagram Container / Registration Management View */}
         <div className="w-full">
-          {tournament.format === 'battle_royale' || tournament.format === 'league' ? (
+          {!tournament.bracketSeeded && tournament.isPublicRegistration ? (
+            <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
+              {/* Registration Toggle Panel */}
+              <div className="flex items-center justify-between p-6 rounded-2xl bg-[#0f1419] border border-white/[0.06] shadow-xl">
+                <div className="space-y-1.5">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#22c55e]/10 border border-[#22c55e]/20 text-[#22c55e] text-[10px] font-black uppercase tracking-wider">
+                    <span className={`w-1.5 h-1.5 rounded-full ${tournament.registrationOpen ? 'bg-[#22c55e] animate-pulse' : 'bg-red-500'}`} />
+                    {tournament.registrationOpen ? 'Đang mở đăng ký trực tuyến' : 'Đã đóng đăng ký trực tuyến'}
+                  </span>
+                  <h2 className="text-xl font-black text-white">Quản lý Cổng Đăng ký</h2>
+                  <p className="text-xs text-white/50">Cho phép các đội tự đăng ký tên đội và thành viên ngoài trang Live</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToggleRegistration}
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 focus:outline-none ${
+                    tournament.registrationOpen ? 'bg-[#22c55e]' : 'bg-white/[0.1]'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform duration-300 ${
+                      tournament.registrationOpen ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Seeding & Kickoff Controls */}
+              {(() => {
+                const len = (tournament.teams || []).length;
+                const format = tournament.format;
+                const groupsCount = tournament.groupsCount || 1;
+                const isPowerOfTwo = (n: number) => n > 1 && (n & (n - 1)) === 0;
+
+                let isValid = false;
+                let reason = '';
+                if (format === 'single_elimination') {
+                  isValid = len >= 2 && isPowerOfTwo(len);
+                  if (!isValid) reason = 'Thể thức Loại trực tiếp yêu cầu số lượng đội phải là lũy thừa của 2 (2, 4, 8, 16, 32...) và tối thiểu 2 đội.';
+                } else if (format === 'double_elimination') {
+                  isValid = len >= 4 && isPowerOfTwo(len);
+                  if (!isValid) reason = 'Thể thức Nhánh thắng-thua yêu cầu số lượng đội phải là lũy thừa của 2 và tối thiểu 4 đội.';
+                } else if (format === 'round_robin') {
+                  isValid = len >= groupsCount * 2;
+                  if (!isValid) reason = `Thể thức Vòng bảng với ${groupsCount} bảng yêu cầu tối thiểu ${groupsCount * 2} đội (2 đội mỗi bảng).`;
+                } else if (format === 'league' || format === 'battle_royale') {
+                  isValid = len >= 2;
+                  if (!isValid) reason = 'Thể thức League/Giải đấu yêu cầu tối thiểu 2 đội.';
+                }
+
+                return (
+                  <div className="p-6 rounded-2xl bg-[#0f1419] border border-white/[0.06] shadow-xl space-y-4">
+                    <h3 className="font-extrabold text-white text-base">Khởi tranh giải đấu</h3>
+                    {isValid ? (
+                      <div className="space-y-4">
+                        <div className="p-4 rounded-xl bg-[#22c55e]/5 border border-[#22c55e]/20 text-xs text-[#22c55e] leading-relaxed">
+                          ✓ Số lượng đội hiện tại (<span className="font-bold">{len} đội</span>) đã hợp lệ với thể thức thi đấu. Bạn đã có thể bắt đầu giải đấu và tạo sơ đồ thi đấu ngay bây giờ.
+                        </div>
+                        <div className="flex gap-4">
+                          <button
+                            type="button"
+                            onClick={handleShuffleTeams}
+                            className="flex-1 px-4 py-3.5 rounded-xl bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white font-black uppercase text-xs tracking-wider transition-all duration-200"
+                          >
+                            🔀 Xáo trộn hạt giống
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleStartTournament}
+                            className="flex-1 px-4 py-3.5 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-[#080b10] font-black uppercase text-xs tracking-wider transition-all duration-200 shadow-lg shadow-[#22c55e]/10 hover:shadow-[#22c55e]/20"
+                          >
+                            🚀 Bắt đầu & Tạo sơ đồ
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/20 text-xs text-red-400 leading-relaxed">
+                          ⚠️ Chưa thể tạo sơ đồ thi đấu. Lý do: {reason} (Hiện có: <span className="font-bold">{len} đội</span>)
+                        </div>
+                        <button
+                          type="button"
+                          disabled
+                          className="w-full px-4 py-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04] text-white/20 font-black uppercase text-xs tracking-wider cursor-not-allowed"
+                        >
+                          Chờ các đội đăng ký...
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Registered Teams Grid */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-black tracking-widest text-white/50 uppercase border-b border-white/[0.04] pb-3 flex items-center justify-between">
+                  <span>Danh sách đội đã đăng ký ({(tournament.teams || []).length} / {tournament.maxTeams || 8})</span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const data = await fetchTournamentFromBackend(tournamentId);
+                        if (data) {
+                          const migrated = migrateTournamentData(data);
+                          setTournament(migrated);
+                          localStorage.setItem(currentTournamentKey, JSON.stringify(migrated));
+                          // Update list too
+                          const savedList = localStorage.getItem(tournamentsKey);
+                          if (savedList) {
+                            const list = JSON.parse(savedList);
+                            const idx = list.findIndex((t: any) => t.id === tournamentId);
+                            if (idx > -1) {
+                              list[idx] = migrated;
+                              localStorage.setItem(tournamentsKey, JSON.stringify(list));
+                            }
+                          }
+                        }
+                      } catch (err) {
+                        console.error('Error refreshing teams:', err);
+                      }
+                    }}
+                    className="px-3 py-1 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white/60 hover:text-white text-xs font-bold transition-all duration-200 flex items-center gap-1.5 normal-case tracking-normal"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="23 4 23 10 17 10" />
+                      <polyline points="1 20 1 14 7 14" />
+                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                    </svg>
+                    Làm mới danh sách
+                  </button>
+                </h3>
+
+                {(tournament.teams || []).length === 0 ? (
+                  <div className="p-12 text-center rounded-2xl bg-white/[0.01] border border-white/[0.04]">
+                    <p className="text-sm text-white/30">Chưa có đội nào đăng ký trực tuyến.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {(tournament.teams || []).map((team: any, idx: number) => {
+                      const initials = team.name.slice(0, 2).toUpperCase();
+                      const isEven = idx % 2 === 0;
+                      const avatarBg = isEven
+                        ? 'bg-gradient-to-br from-green-500/20 to-emerald-500/30 text-[#22c55e]'
+                        : 'bg-gradient-to-br from-blue-500/20 to-indigo-500/30 text-blue-400';
+
+                      return (
+                        <div key={team.id} className="p-5 rounded-2xl bg-[#0f1419] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-200 flex flex-col justify-between gap-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex items-start gap-4 min-w-0">
+                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-sm tracking-tight ${avatarBg} border border-white/[0.06] flex-shrink-0`}>
+                                {initials}
+                              </div>
+                              <div className="min-w-0">
+                                <h4 className="font-extrabold text-white text-base truncate">{team.name}</h4>
+                                <span className="text-[10px] text-white/40">Hạt giống #{idx + 1}</span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTeam(team.id)}
+                              className="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-[10px] font-black uppercase tracking-wider transition-all"
+                            >
+                              Loại bỏ
+                            </button>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {team.members && team.members.length > 0 ? (
+                              team.members.map((m: any) => (
+                                <span key={m.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-white/60 text-[10px] font-semibold">
+                                  {m.image ? (
+                                    <img src={m.image} className="w-4.5 h-4.5 rounded-md object-cover flex-shrink-0 border border-white/[0.08]" alt={m.name} />
+                                  ) : (
+                                    <span>👤</span>
+                                  )}
+                                  <span>{m.name}</span>
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-[10px] text-white/30 italic">Chưa đăng ký thành viên</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : tournament.format === 'battle_royale' || tournament.format === 'league' ? (
             <div className="space-y-8 animate-fade-in">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* STANDINGS TABLE (LEFT/MIDDLE) */}
@@ -3476,6 +4018,144 @@ export default function TournamentDetailPage() {
             </div>
           </div>
         )}
+        {/* ====== Announcement Section (Owner only for posting, visible to all) ====== */}
+        {isOwner && (
+          <div className="mt-8 bg-[#0f1419] border border-white/[0.06] rounded-2xl p-8 max-w-2xl mx-auto shadow-2xl">
+            <h3 className="text-sm font-black tracking-widest text-white/50 uppercase mb-6 pb-2 border-b border-white/[0.04]">
+              Thông báo giải đấu
+            </h3>
+
+            {/* Post new announcement form */}
+            <div className="mb-8 p-5 rounded-xl bg-[#080b10] border border-white/[0.06]">
+              <h4 className="text-xs font-black tracking-wider text-white/40 uppercase mb-4">Đăng thông báo mới</h4>
+
+              <div className="space-y-4">
+                <div>
+                  <input
+                    type="text"
+                    value={announcementTitle}
+                    onChange={(e) => setAnnouncementTitle(e.target.value)}
+                    placeholder="Tiêu đề thông báo..."
+                    className="w-full px-4 py-3 rounded-xl bg-[#0f1419] border border-white/[0.08] text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-[#22c55e]/40 focus:ring-1 focus:ring-[#22c55e]/20 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <textarea
+                    value={announcementContent}
+                    onChange={(e) => setAnnouncementContent(e.target.value)}
+                    placeholder="Nội dung thông báo..."
+                    rows={3}
+                    className="w-full px-4 py-3 rounded-xl bg-[#0f1419] border border-white/[0.08] text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-[#22c55e]/40 focus:ring-1 focus:ring-[#22c55e]/20 transition-all resize-none"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="text-xs text-white/40 font-bold">Loại:</label>
+                  <div className="flex gap-2">
+                    {(['info', 'warning', 'update'] as const).map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => setAnnouncementType(type)}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-200 border ${
+                          announcementType === type
+                            ? type === 'info'
+                              ? 'bg-blue-500/20 border-blue-500/30 text-blue-400'
+                              : type === 'warning'
+                              ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400'
+                              : 'bg-[#22c55e]/20 border-[#22c55e]/30 text-[#22c55e]'
+                            : 'bg-white/[0.03] border-white/[0.06] text-white/30 hover:bg-white/[0.06]'
+                        }`}
+                      >
+                        {type === 'info' ? 'Thông tin' : type === 'warning' ? 'Cảnh báo' : 'Cập nhật'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handlePostAnnouncement}
+                    disabled={announcementPosting || !announcementTitle.trim() || !announcementContent.trim()}
+                    className="px-5 py-2.5 rounded-xl bg-[#22c55e] text-[#080b10] font-black text-xs hover:bg-[#16a34a] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {announcementPosting ? (
+                      <>
+                        <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
+                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4" strokeDashoffset="10" />
+                        </svg>
+                        Đang đăng...
+                      </>
+                    ) : (
+                      <>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="22" y1="2" x2="11" y2="13" />
+                          <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                        </svg>
+                        Đăng thông báo
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Existing announcements list */}
+            {announcementsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="w-6 h-6 border-2 border-[#22c55e] border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : announcements.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-white/30 text-sm">Chưa có thông báo nào</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {announcements.map((ann: any, idx: number) => (
+                  <div key={ann._id || idx} className="p-4 rounded-xl bg-[#080b10] border border-white/[0.04]">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <h4 className="text-sm font-bold text-white">{ann.title}</h4>
+                      <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                        ann.type === 'warning'
+                          ? 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/20'
+                          : ann.type === 'update'
+                          ? 'bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/20'
+                          : 'bg-blue-500/15 text-blue-400 border border-blue-500/20'
+                      }`}>
+                        {ann.type === 'warning' ? 'Cảnh báo' : ann.type === 'update' ? 'Cập nhật' : 'Thông tin'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/50 leading-relaxed">{ann.content}</p>
+                    {ann.createdAt && (
+                      <p className="text-[10px] text-white/20 mt-2">
+                        {new Date(ann.createdAt).toLocaleString('vi-VN')}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Refresh button */}
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={fetchAnnouncements}
+                className="px-4 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white/60 text-xs font-bold transition-all duration-200 flex items-center gap-1.5"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="23 4 23 10 17 10" />
+                  <polyline points="1 20 1 14 7 14" />
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                </svg>
+                Làm mới
+              </button>
+            </div>
+          </div>
+        )}
+
       </section>
 
       {/* QR Code Modal Overlay */}

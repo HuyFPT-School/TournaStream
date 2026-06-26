@@ -2,10 +2,27 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { fetchTournamentFromBackend } from '@/app/lib/tournaments';
 import { getPusherClient } from '@/app/lib/pusher';
 import { getApiBaseUrl } from '@/app/lib/authStorage';
+
+interface ChatMsg {
+  _id: string;
+  tournamentId: string;
+  userName: string;
+  message: string;
+  createdAt: string;
+}
+
+interface AnnouncementItem {
+  _id: string;
+  tournamentId: string;
+  title: string;
+  content: string;
+  type: 'info' | 'warning' | 'update';
+  createdAt: string;
+}
 
 interface MatchState {
   team1Score: number;
@@ -594,6 +611,182 @@ export default function TournamentLiveViewPage() {
   const [activeLeagueTab, setActiveLeagueTab] = useState<'leaderboard' | 'matches' | 'stats'>('leaderboard');
   const [selectedLeagueMatchId, setSelectedLeagueMatchId] = useState<string | null>(null);
 
+  // Chat state
+  const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatUserName, setChatUserName] = useState('');
+  const [showChatPanel, setShowChatPanel] = useState(false);
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
+  const [chatSending, setChatSending] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const [unreadChat, setUnreadChat] = useState(0);
+
+  // Announcements state
+  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
+
+  // Registration state
+  const [showRegModal, setShowRegModal] = useState(false);
+  const [regTeamName, setRegTeamName] = useState('');
+  const [regMembers, setRegMembers] = useState<{ name: string; image?: string | null; imagePreview?: string | null; isUploading?: boolean; uploadError?: string | null }[]>([{ name: '', image: null, imagePreview: null, isUploading: false, uploadError: null }]);
+  const [regError, setRegError] = useState('');
+  const [regSubmitting, setRegSubmitting] = useState(false);
+  const [regSuccess, setRegSuccess] = useState(false);
+
+  const handleRegisterTeamSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!regTeamName.trim()) {
+      setRegError('Tên đội không được để trống');
+      return;
+    }
+    const filledMembers = regMembers.filter(m => m.name.trim());
+    if (filledMembers.length === 0) {
+      setRegError('Vui lòng thêm ít nhất 1 thành viên');
+      return;
+    }
+    
+    // Check if any member image is still uploading
+    if (regMembers.some(m => m.isUploading)) {
+      setRegError('Vui lòng đợi quá trình tải ảnh đại diện hoàn tất');
+      return;
+    }
+
+    setRegSubmitting(true);
+    setRegError('');
+    try {
+      const formattedMembers = filledMembers.map(m => ({
+        name: m.name.trim(),
+        image: m.image || null,
+        position: 'Thành viên'
+      }));
+
+      const res = await fetch(`${getApiBaseUrl()}/tournaments/${tournamentId}/register-team`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          teamName: regTeamName,
+          members: formattedMembers,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setRegSuccess(true);
+        setTimeout(() => {
+          setShowRegModal(false);
+          setRegSuccess(false);
+          setRegTeamName('');
+          setRegMembers([{ name: '', image: null, imagePreview: null, isUploading: false, uploadError: null }]);
+        }, 2000);
+      } else {
+        setRegError(data.message || 'Có lỗi xảy ra khi gửi đăng ký');
+      }
+    } catch (err) {
+      console.error('Error registering team:', err);
+      setRegError('Lỗi kết nối mạng, vui lòng thử lại');
+    } finally {
+      setRegSubmitting(false);
+    }
+  };
+
+  const handleAddRegMember = () => {
+    setRegMembers(prev => [...prev, { name: '', image: null, imagePreview: null, isUploading: false, uploadError: null }]);
+  };
+
+  const handleRemoveRegMember = (index: number) => {
+    if (regMembers.length <= 1) return;
+    setRegMembers(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleRegMemberNameChange = (index: number, value: string) => {
+    setRegMembers(prev => prev.map((m, idx) => idx === index ? { ...m, name: value } : m));
+  };
+
+  const handleRegMemberImageChange = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Kích thước ảnh tối đa là 5MB');
+      return;
+    }
+
+    setRegMembers(prev => prev.map((m, idx) => {
+      if (idx === index) {
+        return {
+          ...m,
+          isUploading: true,
+          uploadError: null,
+          imagePreview: URL.createObjectURL(file)
+        };
+      }
+      return m;
+    }));
+
+    try {
+      const cloudName = 'dt6uoyt1t';
+      const uploadPreset = 'ml_default';
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', uploadPreset);
+
+      const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Không thể tải ảnh lên');
+      }
+
+      const responseData = await response.json();
+      if (responseData.secure_url) {
+        setRegMembers(prev => prev.map((m, idx) => {
+          if (idx === index) {
+            return {
+              ...m,
+              image: responseData.secure_url,
+              imagePreview: responseData.secure_url,
+              isUploading: false
+            };
+          }
+          return m;
+        }));
+      } else {
+        throw new Error('Không nhận được URL ảnh');
+      }
+    } catch (err: any) {
+      console.error('Error uploading member avatar:', err);
+      setRegMembers(prev => prev.map((m, idx) => {
+        if (idx === index) {
+          return {
+            ...m,
+            isUploading: false,
+            image: null,
+            imagePreview: null,
+            uploadError: 'Không thể tải ảnh'
+          };
+        }
+        return m;
+      }));
+    }
+  };
+
+  const handleRemoveRegMemberImage = (index: number) => {
+    setRegMembers(prev => prev.map((m, idx) => {
+      if (idx === index) {
+        return {
+          ...m,
+          image: null,
+          imagePreview: null,
+          uploadError: null
+        };
+      }
+      return m;
+    }));
+  };
+
   useEffect(() => {
     if (tournament && tournament.format === 'league' && !selectedLeagueMatchId) {
       const activeMatch = tournament.leagueMatches?.find((m: any) => !m.isFinished);
@@ -623,6 +816,98 @@ export default function TournamentLiveViewPage() {
   useEffect(() => {
     selectedMatchKeyRef.current = selectedMatchKey;
   }, [selectedMatchKey]);
+
+  // ======== CHAT: Fetch + Pusher subscribe ========
+  const fetchChatMessages = useCallback(async () => {
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/tournaments/${tournamentId}/chat`);
+      if (res.ok) {
+        const data = await res.json();
+        setChatMessages(data);
+      }
+    } catch (err) { console.error('Error fetching chat:', err); }
+  }, [tournamentId]);
+
+  const fetchAnnouncements = useCallback(async () => {
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/tournaments/${tournamentId}/announcements`);
+      if (res.ok) {
+        const data = await res.json();
+        setAnnouncements(data);
+      }
+    } catch (err) { console.error('Error fetching announcements:', err); }
+  }, [tournamentId]);
+
+  useEffect(() => {
+    if (!tournamentId) return;
+    fetchChatMessages();
+    fetchAnnouncements();
+  }, [tournamentId, fetchChatMessages, fetchAnnouncements]);
+
+  // Subscribe to Pusher chat + announcement events
+  useEffect(() => {
+    if (!tournamentId) return;
+    const pusher = getPusherClient();
+    if (!pusher) return;
+    const channel = pusher.subscribe(String(tournamentId));
+
+    const handleChatMsg = (data: ChatMsg) => {
+      setChatMessages(prev => [...prev.slice(-99), data]);
+      setUnreadChat(prev => prev + 1);
+    };
+    const handleAnnouncement = (data: AnnouncementItem) => {
+      setAnnouncements(prev => [data, ...prev].slice(0, 20));
+    };
+
+    channel.bind('chat_message', handleChatMsg);
+    channel.bind('new_announcement', handleAnnouncement);
+
+    return () => {
+      channel.unbind('chat_message', handleChatMsg);
+      channel.unbind('new_announcement', handleAnnouncement);
+    };
+  }, [tournamentId]);
+
+  useEffect(() => {
+    if (showChatPanel) {
+      setUnreadChat(0);
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [showChatPanel, chatMessages]);
+
+  // Restore saved chat username
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ts_chat_username');
+      if (saved) setChatUserName(saved);
+    }
+  }, []);
+
+  const handleSendChat = async () => {
+    if (!chatInput.trim()) return;
+    if (!chatUserName.trim()) {
+      setShowNamePrompt(true);
+      return;
+    }
+    setChatSending(true);
+    try {
+      await fetch(`${getApiBaseUrl()}/tournaments/${tournamentId}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userName: chatUserName.trim(), message: chatInput.trim() }),
+      });
+      setChatInput('');
+    } catch (err) { console.error('Error sending chat:', err); }
+    setChatSending(false);
+  };
+
+  const handleSaveChatName = () => {
+    if (chatUserName.trim()) {
+      localStorage.setItem('ts_chat_username', chatUserName.trim());
+      setShowNamePrompt(false);
+    }
+  };
+
 
   const sendSignalingMessage = async (mKey: string, payload: any) => {
     try {
@@ -1001,7 +1286,7 @@ export default function TournamentLiveViewPage() {
     };
   };
 
-  if (!tournament) {
+  if (!tournament || (!tournament.bracketSeeded && !tournament.isPublicRegistration)) {
     return (
       <main className="min-h-screen bg-[#080b10] text-white font-sans flex items-center justify-center">
         <div className="text-center">
@@ -1086,11 +1371,55 @@ export default function TournamentLiveViewPage() {
             </svg>
             Copy link
           </button>
+          {/* Chat toggle */}
+          <button
+            onClick={() => setShowChatPanel(!showChatPanel)}
+            className="relative px-4 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white text-xs font-bold transition-all duration-200 flex items-center gap-1.5"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Chat
+            {unreadChat > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">{unreadChat > 9 ? '9+' : unreadChat}</span>
+            )}
+          </button>
         </div>
       </nav>
 
       {/* Main Content */}
       <section className="relative z-10 max-w-6xl mx-auto px-6 py-16">
+
+        {/* Announcements Section */}
+        {announcements.length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-xs font-black tracking-widest text-white/50 uppercase mb-4 flex items-center gap-2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#22c55e]"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              Thông báo
+            </h3>
+            <div className="space-y-3">
+              {announcements.slice(0, 5).map((ann) => (
+                <div key={ann._id} className={`p-4 rounded-xl border transition-all ${
+                  ann.type === 'warning' ? 'bg-amber-500/5 border-amber-500/20' :
+                  ann.type === 'update' ? 'bg-blue-500/5 border-blue-500/20' :
+                  'bg-[#22c55e]/5 border-[#22c55e]/20'
+                }`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-xs font-black uppercase tracking-wider ${
+                      ann.type === 'warning' ? 'text-amber-400' :
+                      ann.type === 'update' ? 'text-blue-400' :
+                      'text-[#22c55e]'
+                    }`}>
+                      {ann.type === 'warning' ? '⚠️' : ann.type === 'update' ? '🔄' : 'ℹ️'} {ann.title}
+                    </span>
+                    <span className="text-[10px] text-white/30 ml-auto">
+                      {new Date(ann.createdAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                    </span>
+                  </div>
+                  <p className="text-xs text-white/60 leading-relaxed">{ann.content}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         
         {tournamentWinnerName && (
           <div className="mb-12 p-8 rounded-2xl bg-gradient-to-r from-yellow-500/10 via-amber-500/15 to-yellow-500/10 border border-yellow-500/30 text-center shadow-[0_0_30px_rgba(234,179,8,0.2)] relative overflow-hidden animate-pulse">
@@ -1110,9 +1439,92 @@ export default function TournamentLiveViewPage() {
           </div>
         )}
 
-        {/* Bracket Tree View */}
+        {/* Bracket Tree View / Registration View */}
         <div className="w-full">
-          {tournament.format === 'battle_royale' || tournament.format === 'league' ? (
+          {!tournament.bracketSeeded && tournament.isPublicRegistration ? (
+            <div className="max-w-3xl mx-auto space-y-8 animate-fade-in">
+              {/* Registration Header Banner */}
+              <div className="p-8 rounded-2xl bg-[#0f1419] border border-white/[0.06] flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl relative overflow-hidden">
+                {/* Decorative background glow */}
+                <div className="absolute top-0 right-0 w-64 h-64 bg-[#22c55e]/5 rounded-full blur-3xl pointer-events-none" />
+                
+                <div className="space-y-2 text-center md:text-left relative z-10">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#22c55e]/10 border border-[#22c55e]/20 text-[#22c55e] text-[10px] font-black uppercase tracking-wider">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
+                    Đăng ký trực tuyến đang mở
+                  </span>
+                  <h2 className="text-2xl font-black text-white">Hãy đăng ký đội tham gia ngay!</h2>
+                  <p className="text-xs text-white/50">
+                    Số lượng đội hiện tại: <span className="text-white font-bold">{(tournament.teams || []).length} / {tournament.maxTeams || 8}</span>
+                  </p>
+                </div>
+
+                {tournament.registrationOpen && (tournament.teams || []).length < (tournament.maxTeams || 8) ? (
+                  <button
+                    onClick={() => setShowRegModal(true)}
+                    className="relative z-10 px-6 py-3.5 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-[#080b10] font-black uppercase text-xs tracking-wider transition-all duration-200 shadow-lg shadow-[#22c55e]/10 hover:shadow-[#22c55e]/20 hover:-translate-y-0.5 active:translate-y-0"
+                  >
+                    Đăng ký đội của bạn
+                  </button>
+                ) : (
+                  <span className="px-5 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white/40 text-xs font-bold uppercase tracking-wider">
+                    Đã đóng đăng ký
+                  </span>
+                )}
+              </div>
+
+              {/* Registered Teams List */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-black tracking-widest text-white/50 uppercase border-b border-white/[0.04] pb-3 flex items-center justify-between">
+                  <span>Danh sách đội tham gia ({ (tournament.teams || []).length })</span>
+                  <span className="text-xs text-white/30 lowercase font-normal">cập nhật tự động (real-time)</span>
+                </h3>
+
+                {(tournament.teams || []).length === 0 ? (
+                  <div className="p-12 text-center rounded-2xl bg-white/[0.01] border border-white/[0.04]">
+                    <p className="text-sm text-white/30">Chưa có đội nào đăng ký. Hãy là đội đầu tiên đăng ký!</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {(tournament.teams || []).map((team: any, idx: number) => {
+                      const initials = team.name.slice(0, 2).toUpperCase();
+                      const isEven = idx % 2 === 0;
+                      const avatarBg = isEven
+                        ? 'bg-gradient-to-br from-green-500/20 to-emerald-500/30 text-[#22c55e]'
+                        : 'bg-gradient-to-br from-blue-500/20 to-indigo-500/30 text-blue-400';
+
+                      return (
+                        <div key={team.id} className="p-5 rounded-2xl bg-[#0f1419] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-200 flex items-start gap-4">
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-sm tracking-tight ${avatarBg} border border-white/[0.06] flex-shrink-0`}>
+                            {initials}
+                          </div>
+                          <div className="min-w-0 space-y-2">
+                            <h4 className="font-extrabold text-white text-base truncate">{team.name}</h4>
+                            <div className="flex flex-wrap gap-1.5">
+                              {team.members && team.members.length > 0 ? (
+                                team.members.map((m: any) => (
+                                  <span key={m.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-white/60 text-[10px] font-semibold">
+                                    {m.image ? (
+                                      <img src={m.image} className="w-4.5 h-4.5 rounded-md object-cover flex-shrink-0 border border-white/[0.08]" alt={m.name} />
+                                    ) : (
+                                      <span>👤</span>
+                                    )}
+                                    <span>{m.name}</span>
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-[10px] text-white/30 italic">Chưa đăng ký thành viên</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : tournament.format === 'battle_royale' || tournament.format === 'league' ? (
             <div className="space-y-12 animate-fade-in">
               {/* Split layout: Leaderboard on Left, Matches on Right */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -1631,6 +2043,159 @@ export default function TournamentLiveViewPage() {
         </div>
       </section>
 
+      {/* Registration Modal Overlay */}
+      {showRegModal && (
+        <div className="fixed inset-0 z-50 bg-[#080b10]/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0f1419] border border-white/[0.08] p-8 rounded-2xl w-full max-w-md shadow-2xl relative max-h-[85vh] overflow-y-auto">
+            
+            <button
+              onClick={() => setShowRegModal(false)}
+              className="absolute top-4 right-4 text-white/40 hover:text-white transition-colors"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+
+            {regSuccess ? (
+              <div className="text-center py-8 space-y-3">
+                <div className="w-12 h-12 rounded-full bg-[#22c55e]/20 text-[#22c55e] flex items-center justify-center mx-auto text-xl animate-bounce">
+                  ✓
+                </div>
+                <h3 className="text-lg font-bold text-white">Đăng ký thành công!</h3>
+                <p className="text-xs text-white/50">Đội của bạn đã được thêm vào giải đấu.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleRegisterTeamSubmit} className="space-y-6">
+                <div>
+                  <h3 className="font-extrabold text-white text-lg">Đăng ký giải đấu</h3>
+                  <p className="text-xs text-white/50 mt-1">Vui lòng điền tên đội và thành viên tham gia</p>
+                </div>
+
+                {regError && (
+                  <div className="p-3.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold">
+                    ⚠️ {regError}
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-black tracking-wider text-white/40 uppercase">Tên đội tuyển</label>
+                  <input
+                    type="text"
+                    value={regTeamName}
+                    onChange={(e) => setRegTeamName(e.target.value)}
+                    placeholder="Nhập tên đội..."
+                    className="w-full px-4 py-3 rounded-lg bg-[#080b10] border border-white/[0.06] text-white focus:outline-none focus:border-[#22c55e] text-sm transition-all"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black tracking-wider text-white/40 uppercase">Danh sách thành viên</label>
+                    <button
+                      type="button"
+                      onClick={handleAddRegMember}
+                      className="text-[#22c55e] hover:text-[#16a34a] text-xs font-bold transition-all"
+                    >
+                      + Thêm thành viên
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                    {regMembers.map((member, idx) => (
+                      <div key={idx} className="flex items-center gap-3">
+                        {/* Member avatar upload */}
+                        <div className="flex-shrink-0">
+                          {member.imagePreview ? (
+                            <div className="relative w-9 h-9 flex-shrink-0">
+                              <img src={member.imagePreview} className="w-9 h-9 rounded-full object-cover border border-white/[0.12]" alt={`Avatar ${idx + 1}`} />
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveRegMemberImage(idx)}
+                                className="absolute -top-1.5 -right-1.5 w-4.5 h-4.5 rounded-full bg-red-500 hover:bg-red-600 text-white text-[8px] flex items-center justify-center transition-all shadow-md shadow-black/30"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <label
+                                htmlFor={`reg-member-file-${idx}`}
+                                className="w-9 h-9 rounded-full bg-[#080b10] border border-dashed border-white/[0.08] hover:border-white/[0.16] text-white/40 hover:text-white flex items-center justify-center cursor-pointer transition-all"
+                              >
+                                {member.isUploading ? (
+                                  <svg className="animate-spin h-4 w-4 text-[#22c55e]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                ) : (
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                    <circle cx="12" cy="13" r="4"></circle>
+                                  </svg>
+                                )}
+                              </label>
+                              <input
+                                id={`reg-member-file-${idx}`}
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleRegMemberImageChange(idx, e)}
+                                className="hidden"
+                                disabled={member.isUploading}
+                              />
+                            </>
+                          )}
+                        </div>
+
+                        <input
+                          type="text"
+                          value={member.name}
+                          onChange={(e) => handleRegMemberNameChange(idx, e.target.value)}
+                          placeholder={`Tên thành viên ${idx + 1}...`}
+                          className="flex-1 px-3 py-2 h-9 rounded-lg bg-[#080b10] border border-white/[0.06] text-white text-xs focus:outline-none focus:border-[#22c55e]"
+                          required
+                        />
+                        {regMembers.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveRegMember(idx)}
+                            className="p-2 h-9 text-red-400 hover:bg-red-500/10 rounded-lg transition-all flex items-center justify-center"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <line x1="18" y1="6" x2="6" y2="18"></line>
+                              <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowRegModal(false)}
+                    className="flex-1 px-4 py-2.5 rounded-lg border border-white/[0.06] text-white hover:bg-white/[0.05] text-xs font-black uppercase tracking-wider transition-all"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={regSubmitting}
+                    className="flex-1 px-4 py-2.5 rounded-lg bg-[#22c55e] text-[#080b10] hover:bg-[#16a34a] text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {regSubmitting ? 'Đang gửi...' : 'Xác nhận'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* QR Code Modal Overlay */}
       {showQrModal && (
         <div className="fixed inset-0 z-50 bg-[#080b10]/80 backdrop-blur-md flex items-center justify-center p-4">
@@ -1820,8 +2385,12 @@ export default function TournamentLiveViewPage() {
                   <div className="space-y-2">
                     {selectedDetails.team1.members.map((member: any) => (
                       <div key={member.id} className="flex items-center gap-2 p-2 rounded-lg bg-[#080b10] border border-white/[0.04]">
-                        {member.image && (
-                          <img src={member.image} alt={member.name} className="w-8 h-8 rounded object-cover" />
+                        {member.image ? (
+                          <img src={member.image} alt={member.name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-white/10 to-white/5 border border-white/[0.06] flex items-center justify-center flex-shrink-0">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/40"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                          </div>
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold truncate text-white">{member.name}</p>
@@ -1844,8 +2413,12 @@ export default function TournamentLiveViewPage() {
                   <div className="space-y-2">
                     {selectedDetails.team2.members.map((member: any) => (
                       <div key={member.id} className="flex items-center gap-2 p-2 rounded-lg bg-[#080b10] border border-white/[0.04]">
-                        {member.image && (
-                          <img src={member.image} alt={member.name} className="w-8 h-8 rounded object-cover" />
+                        {member.image ? (
+                          <img src={member.image} alt={member.name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-white/10 to-white/5 border border-white/[0.06] flex items-center justify-center flex-shrink-0">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/40"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                          </div>
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold truncate text-white">{member.name}</p>
@@ -1863,6 +2436,95 @@ export default function TournamentLiveViewPage() {
           </div>
         </div>
       )}
+      {/* ======== FLOATING CHAT PANEL ======== */}
+      {showChatPanel && (
+        <div className="fixed bottom-4 right-4 z-50 w-[360px] h-[480px] bg-[#0f1419] border border-white/[0.08] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-scale-in">
+          {/* Chat Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] bg-[#080b10]/80 backdrop-blur-md">
+            <h4 className="text-xs font-black tracking-widest text-[#22c55e] uppercase flex items-center gap-2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              Chat trực tiếp
+            </h4>
+            <button onClick={() => setShowChatPanel(false)} className="text-white/40 hover:text-white transition-colors">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          {/* Chat Messages */}
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+            {chatMessages.length === 0 && (
+              <p className="text-xs text-white/30 text-center py-8">Chưa có tin nhắn. Hãy là người đầu tiên bình luận!</p>
+            )}
+            {chatMessages.map((msg) => (
+              <div key={msg._id} className="flex gap-2">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#22c55e]/30 to-[#22c55e]/10 border border-[#22c55e]/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-[#22c55e] text-[9px] font-black">{msg.userName[0]?.toUpperCase()}</span>
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[11px] font-bold text-[#22c55e]">{msg.userName}</span>
+                    <span className="text-[9px] text-white/20">{new Date(msg.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  <p className="text-xs text-white/70 break-words leading-relaxed">{msg.message}</p>
+                </div>
+              </div>
+            ))}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Name prompt */}
+          {showNamePrompt && (
+            <div className="px-4 py-3 border-t border-white/[0.06] bg-[#080b10]/80">
+              <p className="text-[10px] text-white/50 mb-2">Nhập tên hiển thị của bạn:</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={chatUserName}
+                  onChange={(e) => setChatUserName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSaveChatName()}
+                  placeholder="Tên của bạn..."
+                  className="flex-1 px-3 py-2 rounded-lg bg-[#080b10] border border-white/[0.08] text-white text-xs focus:outline-none focus:border-[#22c55e]/50"
+                  autoFocus
+                  maxLength={50}
+                />
+                <button onClick={handleSaveChatName} className="px-4 py-2 rounded-lg bg-[#22c55e] text-[#080b10] text-xs font-black hover:bg-[#16a34a] transition-all">OK</button>
+              </div>
+            </div>
+          )}
+
+          {/* Chat Input */}
+          {!showNamePrompt && (
+            <div className="px-4 py-3 border-t border-white/[0.06] bg-[#080b10]/80">
+              {chatUserName && (
+                <p className="text-[10px] text-white/30 mb-1.5 flex items-center justify-between">
+                  <span>Gửi với tên: <strong className="text-[#22c55e]">{chatUserName}</strong></span>
+                  <button onClick={() => setShowNamePrompt(true)} className="text-white/30 hover:text-white/60 underline">Đổi</button>
+                </p>
+              )}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && !chatSending && handleSendChat()}
+                  placeholder="Nhập tin nhắn..."
+                  className="flex-1 px-3 py-2 rounded-lg bg-[#080b10] border border-white/[0.08] text-white text-xs focus:outline-none focus:border-[#22c55e]/50"
+                  maxLength={500}
+                  disabled={chatSending}
+                />
+                <button
+                  onClick={handleSendChat}
+                  disabled={chatSending || !chatInput.trim()}
+                  className="px-4 py-2 rounded-lg bg-[#22c55e] text-[#080b10] text-xs font-black hover:bg-[#16a34a] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
     </main>
   );
 }
