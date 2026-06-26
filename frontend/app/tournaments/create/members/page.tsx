@@ -177,11 +177,11 @@ export default function MembersPage() {
                             <img
                               src={member.image}
                               alt={member.name}
-                              className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+                              className="w-12 h-12 rounded-full object-cover flex-shrink-0"
                             />
                           ) : (
-                            <div className="w-12 h-12 rounded-lg bg-[#1a1f2e] flex items-center justify-center flex-shrink-0 text-lg">
-                              👤
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-white/10 to-white/5 border border-white/[0.06] flex items-center justify-center flex-shrink-0">
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/40"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                             </div>
                           )}
                           <div className="flex-1 min-w-0">

@@ -165,6 +165,31 @@ export default function FinalizeCreatePage() {
 
     // Generate a mock tournament ID
     const tournamentId = 'tourn_' + Date.now();
+
+    if (data.isPublicRegistration) {
+      const mockTournament = {
+        id: tournamentId,
+        ...data,
+        isPublicRegistration: true,
+        registrationOpen: true,
+        maxTeams: data.maxTeams || 8,
+        teams: [],
+        bracketSeeded: false,
+        shuffled: false,
+        bracket: null,
+        groups: null,
+        leagueMatches: null,
+        stage: 'registration',
+        matches: null,
+        createdAt: new Date().toISOString(),
+      };
+      setTournament(mockTournament);
+      const link = `${window.location.origin}/tournaments/${tournamentId}/live`;
+      setShareLink(link);
+      setQrCode(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(link)}`);
+      return;
+    }
+
     let bracket = null;
     let groups: any[] | null = null;
     let leagueMatches: any[] | null = null;
