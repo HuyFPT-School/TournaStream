@@ -402,6 +402,7 @@ function calculateBattleRoyaleStandings(teams: any[], matches: any[]) {
 interface LeagueStandingRow {
   teamId: string;
   teamName: string;
+  teamLogo?: string;
   matchesPlayed: number;
   wins: number;
   totalKills: number;
@@ -424,6 +425,7 @@ function calculateLeagueStandings(
       standingsMap[team.id] = {
         teamId: team.id,
         teamName: team.name || '',
+        teamLogo: team.logo || '',
         matchesPlayed: 0,
         wins: 0,
         totalKills: 0,
@@ -627,10 +629,69 @@ export default function TournamentLiveViewPage() {
   // Registration state
   const [showRegModal, setShowRegModal] = useState(false);
   const [regTeamName, setRegTeamName] = useState('');
+  const [regTeamLogo, setRegTeamLogo] = useState('');
+  const [regLogoPreview, setRegLogoPreview] = useState<string | null>(null);
+  const [isRegLogoUploading, setIsRegLogoUploading] = useState(false);
+  const [regLogoUploadError, setRegLogoUploadError] = useState<string | null>(null);
   const [regMembers, setRegMembers] = useState<{ name: string; image?: string | null; imagePreview?: string | null; isUploading?: boolean; uploadError?: string | null }[]>([{ name: '', image: null, imagePreview: null, isUploading: false, uploadError: null }]);
   const [regError, setRegError] = useState('');
   const [regSubmitting, setRegSubmitting] = useState(false);
   const [regSuccess, setRegSuccess] = useState(false);
+
+  const handleRegLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setRegLogoUploadError('Kích thước ảnh tối đa là 5MB');
+      return;
+    }
+
+    setIsRegLogoUploading(true);
+    setRegLogoUploadError(null);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setRegLogoPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    try {
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dt6uoyt1t';
+      const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default';
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', uploadPreset);
+
+      const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Không thể tải ảnh lên server Cloudinary');
+      }
+
+      const responseData = await response.json();
+      if (responseData.secure_url) {
+        setRegTeamLogo(responseData.secure_url);
+      } else {
+        throw new Error('Không nhận được URL ảnh từ Cloudinary');
+      }
+    } catch (err: any) {
+      console.error('Lỗi upload Cloudinary:', err);
+      setRegLogoUploadError(err.message || 'Lỗi khi tải ảnh lên. Vui lòng thử lại.');
+    } finally {
+      setIsRegLogoUploading(false);
+    }
+  };
+
+  const handleRemoveRegLogo = () => {
+    setRegTeamLogo('');
+    setRegLogoPreview(null);
+    setRegLogoUploadError(null);
+  };
 
   const handleRegisterTeamSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -644,9 +705,9 @@ export default function TournamentLiveViewPage() {
       return;
     }
     
-    // Check if any member image is still uploading
-    if (regMembers.some(m => m.isUploading)) {
-      setRegError('Vui lòng đợi quá trình tải ảnh đại diện hoàn tất');
+    // Check if any member image or team logo is still uploading
+    if (regMembers.some(m => m.isUploading) || isRegLogoUploading) {
+      setRegError('Vui lòng đợi quá trình tải ảnh đại diện hoặc logo hoàn tất');
       return;
     }
 
@@ -666,6 +727,7 @@ export default function TournamentLiveViewPage() {
         },
         body: JSON.stringify({
           teamName: regTeamName,
+          logo: regTeamLogo || null,
           members: formattedMembers,
         }),
       });
@@ -676,6 +738,9 @@ export default function TournamentLiveViewPage() {
           setShowRegModal(false);
           setRegSuccess(false);
           setRegTeamName('');
+          setRegTeamLogo('');
+          setRegLogoPreview(null);
+          setRegLogoUploadError(null);
           setRegMembers([{ name: '', image: null, imagePreview: null, isUploading: false, uploadError: null }]);
         }, 2000);
       } else {
@@ -1543,9 +1608,17 @@ export default function TournamentLiveViewPage() {
 
                       return (
                         <div key={team.id} className="p-5 rounded-2xl bg-[#0f1419] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-200 flex items-start gap-4">
-                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-sm tracking-tight ${avatarBg} border border-white/[0.06] flex-shrink-0`}>
-                            {initials}
-                          </div>
+                          {team.logo ? (
+                            <img
+                              src={team.logo}
+                              className="w-12 h-12 rounded-xl object-cover border border-white/[0.06] flex-shrink-0"
+                              alt={team.name}
+                            />
+                          ) : (
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-sm tracking-tight ${avatarBg} border border-white/[0.06] flex-shrink-0`}>
+                              {initials}
+                            </div>
+                          )}
                           <div className="min-w-0 space-y-2">
                             <h4 className="font-extrabold text-white text-base truncate">{team.name}</h4>
                             <div className="flex flex-wrap gap-1.5">
@@ -1625,8 +1698,19 @@ export default function TournamentLiveViewPage() {
                                   {medal}
                                 </span>
                               </td>
-                              <td className="py-2.5 px-2 font-bold text-white flex items-center gap-1.5 min-w-[80px] max-w-[140px] truncate">
-                                <span className="truncate">{row.teamName}</span>
+                              <td className="py-2.5 px-2 font-bold text-white flex items-center gap-2 min-w-[100px] max-w-[160px]">
+                                {row.teamLogo ? (
+                                  <img
+                                    src={row.teamLogo}
+                                    className="w-6 h-6 rounded-full object-cover border border-white/10 flex-shrink-0"
+                                    alt={row.teamName}
+                                  />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-green-500/20 to-emerald-500/30 text-[#22c55e] border border-white/[0.06] flex items-center justify-center font-bold text-[9px] flex-shrink-0">
+                                    {row.teamName.slice(0, 2).toUpperCase()}
+                                  </div>
+                                )}
+                                <span className="truncate flex-1">{row.teamName}</span>
                                 {row.rankChange > 0 && (
                                   <span className="text-green-500 text-[8px] flex items-center font-black">
                                     ▲{row.rankChange}
@@ -2121,6 +2205,52 @@ export default function TournamentLiveViewPage() {
                     className="w-full px-4 py-3 rounded-lg bg-[#080b10] border border-white/[0.06] text-white focus:outline-none focus:border-[#22c55e] text-sm transition-all"
                     required
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-black tracking-wider text-white/40 uppercase">Logo đội tuyển</label>
+                  <div className="flex items-center gap-4">
+                    <div className="flex-shrink-0">
+                      {regLogoPreview ? (
+                        <div className="relative w-14 h-14 rounded-full border border-white/[0.12] overflow-hidden group/logo">
+                          <img src={regLogoPreview} className="w-full h-full object-cover" alt="Preview logo" />
+                          <button
+                            type="button"
+                            onClick={handleRemoveRegLogo}
+                            className="absolute inset-0 bg-black/60 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center text-white text-[9px] font-bold transition-opacity"
+                          >
+                            Xóa
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-14 h-14 rounded-full bg-white/[0.02] border border-dashed border-white/[0.12] flex items-center justify-center text-white/20 text-[9px] text-center p-1.5 font-medium">
+                          Không logo
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex-1">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="reg-team-logo-upload"
+                        onChange={handleRegLogoChange}
+                        className="hidden"
+                        disabled={isRegLogoUploading}
+                      />
+                      <label
+                        htmlFor="reg-team-logo-upload"
+                        className={`inline-flex items-center justify-center px-3.5 py-2 rounded-lg border border-white/[0.08] hover:bg-white/[0.04] text-xs font-bold cursor-pointer transition-all ${
+                          isRegLogoUploading ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                      >
+                        {isRegLogoUploading ? 'Đang tải...' : 'Chọn logo'}
+                      </label>
+                      {regLogoUploadError && (
+                        <p className="text-[10px] text-red-500 mt-1 font-medium">{regLogoUploadError}</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="space-y-3">

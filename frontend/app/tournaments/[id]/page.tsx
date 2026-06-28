@@ -361,6 +361,7 @@ function calculateBattleRoyaleStandings(teams: any[], matches: any[]) {
 interface LeagueStandingRow {
   teamId: string;
   teamName: string;
+  teamLogo?: string;
   matchesPlayed: number;
   wins: number;
   totalKills: number;
@@ -372,7 +373,7 @@ interface LeagueStandingRow {
 }
 
 function calculateLeagueStandings(
-  teams: TeamRef[],
+  teams: any[],
   leagueMatches: any[],
   pointRules: Record<string, number>
 ): LeagueStandingRow[] {
@@ -383,6 +384,7 @@ function calculateLeagueStandings(
       standingsMap[team.id] = {
         teamId: team.id,
         teamName: team.name || '',
+        teamLogo: team.logo || '',
         matchesPlayed: 0,
         wins: 0,
         totalKills: 0,
@@ -3052,9 +3054,17 @@ export default function TournamentDetailPage() {
                         <div key={team.id} className="p-5 rounded-2xl bg-[#0f1419] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-200 flex flex-col justify-between gap-4">
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex items-start gap-4 min-w-0">
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-sm tracking-tight ${avatarBg} border border-white/[0.06] flex-shrink-0`}>
-                                {initials}
-                              </div>
+                              {team.logo ? (
+                                <img
+                                  src={team.logo}
+                                  className="w-12 h-12 rounded-xl object-cover border border-white/[0.06] flex-shrink-0"
+                                  alt={team.name}
+                                />
+                              ) : (
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-sm tracking-tight ${avatarBg} border border-white/[0.06] flex-shrink-0`}>
+                                  {initials}
+                                </div>
+                              )}
                               <div className="min-w-0">
                                 <h4 className="font-extrabold text-white text-base truncate">{team.name}</h4>
                                 <span className="text-[10px] text-white/40">Hạt giống #{idx + 1}</span>
@@ -3152,7 +3162,22 @@ export default function TournamentDetailPage() {
                                   )}
                                 </td>
                               )}
-                              <td className="py-3.5 px-3 font-bold text-white">{row.teamName}</td>
+                              <td className="py-3.5 px-3 font-bold text-white">
+                                <div className="flex items-center gap-2">
+                                  {row.teamLogo ? (
+                                    <img
+                                      src={row.teamLogo}
+                                      className="w-6 h-6 rounded-full object-cover border border-white/10 flex-shrink-0"
+                                      alt={row.teamName}
+                                    />
+                                  ) : (
+                                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-green-500/20 to-emerald-500/30 text-[#22c55e] border border-white/[0.06] flex items-center justify-center font-bold text-[9px] flex-shrink-0">
+                                      {row.teamName.slice(0, 2).toUpperCase()}
+                                    </div>
+                                  )}
+                                  <span className="truncate">{row.teamName}</span>
+                                </div>
+                              </td>
                               {tournament.format === 'battle_royale' && (
                                 <>
                                   <td className="py-3.5 px-2 text-center font-medium text-blue-400">{row.placementPoints}</td>
@@ -3272,14 +3297,30 @@ export default function TournamentDetailPage() {
                             Đội tuyển thi đấu ({tournament.teams?.length || 0})
                           </h5>
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                            {(tournament.teams || []).map((team: any) => (
-                              <div key={team.id} className="p-2.5 rounded-lg bg-[#080b10] border border-white/[0.04] flex flex-col items-center justify-center text-center">
-                                <span className="font-extrabold text-[11px] text-white truncate max-w-full">{team.name}</span>
-                                <span className="text-[9px] text-white/30 mt-0.5 font-semibold">
-                                  {team.members && team.members.length > 0 ? `${team.members.length} thành viên` : 'Chưa xếp đội hình'}
-                                </span>
-                              </div>
-                            ))}
+                            {(tournament.teams || []).map((team: any) => {
+                              const initials = team.name.slice(0, 2).toUpperCase();
+                              return (
+                                <div key={team.id} className="p-2.5 rounded-lg bg-[#080b10] border border-white/[0.04] flex flex-col items-center justify-center text-center gap-1.5">
+                                  {team.logo ? (
+                                    <img
+                                      src={team.logo}
+                                      className="w-8 h-8 rounded-full object-cover border border-white/10"
+                                      alt={team.name}
+                                    />
+                                  ) : (
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-500/20 to-emerald-500/30 text-[#22c55e] border border-white/[0.06] flex items-center justify-center font-bold text-[9px] uppercase">
+                                      {initials}
+                                    </div>
+                                  )}
+                                  <div className="min-w-0 max-w-full text-center">
+                                    <div className="font-extrabold text-[11px] text-white truncate max-w-full">{team.name}</div>
+                                    <div className="text-[9px] text-white/30 mt-0.5 font-semibold">
+                                      {team.members && team.members.length > 0 ? `${team.members.length} TV` : 'Chưa xếp đ/h'}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       </>

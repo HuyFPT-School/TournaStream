@@ -9,9 +9,68 @@ export default function TeamsPage() {
   const router = useRouter();
   const { data, addTeam, removeTeam, loadTournamentData } = useTournament();
   const [teamName, setTeamName] = useState('');
+  const [teamLogo, setTeamLogo] = useState('');
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isPublicReg, setIsPublicReg] = useState(data.isPublicRegistration || false);
+
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError('Kích thước ảnh tối đa là 5MB');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadError(null);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setLogoPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    try {
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dt6uoyt1t';
+      const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default';
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', uploadPreset);
+
+      const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Không thể tải ảnh lên server Cloudinary');
+      }
+
+      const responseData = await response.json();
+      if (responseData.secure_url) {
+        setTeamLogo(responseData.secure_url);
+      } else {
+        throw new Error('Không nhận được URL ảnh từ Cloudinary');
+      }
+    } catch (err: any) {
+      console.error('Lỗi upload Cloudinary:', err);
+      setUploadError(err.message || 'Lỗi khi tải ảnh lên. Vui lòng thử lại.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setTeamLogo('');
+    setLogoPreview(null);
+    setUploadError(null);
+  };
 
   const maxTeams = data.packageId === 'free' ? 8 : data.packageId === 'basic' ? 16 : 32;
 
@@ -33,9 +92,13 @@ export default function TeamsPage() {
         id: Date.now().toString(),
         name: teamName,
         members: [],
+        logo: teamLogo || undefined,
       };
       addTeam(newTeam);
       setTeamName('');
+      setTeamLogo('');
+      setLogoPreview(null);
+      setUploadError(null);
       setShowForm(false);
     }
   };
@@ -199,67 +262,137 @@ export default function TeamsPage() {
           <>
             {/* Teams Grid */}
             <div className="space-y-3 mb-8">
-              {data.teams.map((team, idx) => (
-                <div
-                  key={team.id}
-                  className="flex items-center justify-between p-4 rounded-lg bg-[#0f1419] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-200 group"
-                >
-                  <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <div className="text-white/40 font-semibold flex-shrink-0">{idx + 1}</div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold truncate">{team.name}</h3>
-                      <p className="text-sm text-white/50">{team.members.length} thành viên</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => removeTeam(team.id)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-2 text-red-500 hover:bg-red-500/10 rounded-lg"
+              {data.teams.map((team, idx) => {
+                const initials = team.name.slice(0, 2).toUpperCase();
+                return (
+                  <div
+                    key={team.id}
+                    className="flex items-center justify-between p-4 rounded-lg bg-[#0f1419] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-200 group"
                   >
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <path
-                        d="M15 5L5 15M5 5L15 15"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              ))}
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className="text-white/40 font-semibold flex-shrink-0 w-6 text-center">{idx + 1}</div>
+                      {team.logo ? (
+                        <img
+                          src={team.logo}
+                          className="w-10 h-10 rounded-full object-cover border border-white/[0.08] flex-shrink-0"
+                          alt={team.name}
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-500/20 to-emerald-500/30 text-[#22c55e] border border-white/[0.06] flex items-center justify-center font-bold text-xs flex-shrink-0">
+                          {initials}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold truncate text-white">{team.name}</h3>
+                        <p className="text-xs text-white/40">{team.members.length} thành viên</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeTeam(team.id)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-2 text-red-500 hover:bg-red-500/10 rounded-lg flex-shrink-0"
+                    >
+                      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path
+                          d="M15 5L5 15M5 5L15 15"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Add Team Form */}
             {showForm ? (
-              <div className="p-4 rounded-lg bg-[#0f1419] border border-white/[0.06] mb-8">
-                <label className="block text-sm font-semibold mb-2">Tên đội</label>
-                <input
-                  type="text"
-                  value={teamName}
-                  onChange={(e) => {
-                    setTeamName(e.target.value);
-                    if (errors.teamName) setErrors({ ...errors, teamName: '' });
-                  }}
-                  placeholder="VD: Team A, FC Barcelona..."
-                  className={`w-full px-4 py-3 rounded-lg bg-[#080b10] border transition-all duration-200 text-white placeholder-white/30 focus:outline-none mb-3 ${
-                    errors.teamName ? 'border-red-500' : 'border-white/[0.06] focus:border-[#22c55e]'
-                  }`}
-                  autoFocus
-                />
-                {errors.teamName && <p className="text-red-500 text-sm mb-3">{errors.teamName}</p>}
-                <div className="flex gap-3">
+              <div className="p-5 rounded-xl bg-[#0f1419] border border-white/[0.06] mb-8 space-y-5">
+                <div>
+                  <label className="block text-xs font-black tracking-wider text-white/40 uppercase mb-2">Tên đội tuyển</label>
+                  <input
+                    type="text"
+                    value={teamName}
+                    onChange={(e) => {
+                      setTeamName(e.target.value);
+                      if (errors.teamName) setErrors({ ...errors, teamName: '' });
+                    }}
+                    placeholder="VD: Team A, FC Barcelona..."
+                    className={`w-full px-4 py-3 rounded-lg bg-[#080b10] border transition-all duration-200 text-white placeholder-white/30 focus:outline-none mb-1 text-sm ${
+                      errors.teamName ? 'border-red-500' : 'border-white/[0.06] focus:border-[#22c55e]'
+                    }`}
+                    autoFocus
+                  />
+                  {errors.teamName && <p className="text-red-500 text-xs mt-1 font-medium">{errors.teamName}</p>}
+                </div>
+
+                {/* Team Logo Upload */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-black tracking-wider text-white/40 uppercase">Logo đội tuyển</label>
+                  <div className="flex items-center gap-4">
+                    <div className="flex-shrink-0">
+                      {logoPreview ? (
+                        <div className="relative w-16 h-16 rounded-full border border-white/[0.12] overflow-hidden group/logo">
+                          <img src={logoPreview} className="w-full h-full object-cover" alt="Preview logo" />
+                          <button
+                            type="button"
+                            onClick={handleRemoveLogo}
+                            className="absolute inset-0 bg-black/60 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center text-white text-[10px] font-bold transition-opacity"
+                          >
+                            Xóa
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-16 h-16 rounded-full bg-white/[0.02] border border-dashed border-white/[0.12] flex items-center justify-center text-white/20 text-[10px] text-center p-2 font-medium">
+                          Chưa có logo
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex-1">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="team-logo-upload"
+                        onChange={handleLogoChange}
+                        className="hidden"
+                        disabled={isUploading}
+                      />
+                      <label
+                        htmlFor="team-logo-upload"
+                        className={`inline-flex items-center justify-center px-4 py-2.5 rounded-lg border border-white/[0.08] hover:bg-white/[0.04] text-xs font-bold cursor-pointer transition-all ${
+                          isUploading ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                      >
+                        {isUploading ? 'Đang tải lên...' : 'Chọn logo'}
+                      </label>
+                      {uploadError && (
+                        <p className="text-xs text-red-500 mt-1.5 font-medium">{uploadError}</p>
+                      )}
+                      <p className="text-[10px] text-white/40 mt-1.5">Kích thước tối đa 5MB</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
                   <button
                     onClick={() => {
                       setShowForm(false);
                       setTeamName('');
+                      setTeamLogo('');
+                      setLogoPreview(null);
+                      setUploadError(null);
                       setErrors({});
                     }}
-                    className="flex-1 px-4 py-2 rounded-lg border border-white/[0.06] text-white font-semibold hover:bg-white/[0.05] transition-all duration-200"
+                    className="flex-1 px-4 py-2.5 rounded-lg border border-white/[0.06] text-white text-xs font-bold hover:bg-white/[0.05] transition-all duration-200"
+                    disabled={isUploading}
                   >
                     Hủy
                   </button>
                   <button
                     onClick={handleAddTeam}
-                    className="flex-1 px-4 py-2 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200"
+                    className="flex-1 px-4 py-2.5 rounded-lg bg-[#22c55e] text-[#080b10] text-xs font-black hover:bg-[#16a34a] transition-all duration-200 disabled:opacity-40"
+                    disabled={isUploading || !teamName.trim()}
                   >
                     Thêm đội
                   </button>
