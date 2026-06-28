@@ -744,7 +744,7 @@ export default function LiveMatchPage() {
   }, [tournamentId, currentTournamentKey]);
 
   useEffect(() => {
-    if (!tournament || tournament.format === 'round_robin' || tournament.format === 'double_elimination' || tournament.format === 'league' || tournament.bracket?.rounds?.length) return;
+    if (!tournament || tournament.format === 'round_robin' || tournament.format === 'double_elimination' || tournament.format === 'league' || tournament.format === 'battle_royale' || tournament.bracket?.rounds?.length) return;
 
     const teams = getFallbackTeams(tournament);
     const bracket = buildInitialBracket(teams);

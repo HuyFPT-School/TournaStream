@@ -58,7 +58,7 @@ const packages: Package[] = [
 
 export default function PackageSelectionPage() {
   const router = useRouter();
-  const { setPackage } = useTournament();
+  const { data, setPackage } = useTournament();
   const [selectedPackage, setSelectedPackage] = useState<string>('basic');
   const [activeCheckout, setActiveCheckout] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -229,7 +229,9 @@ export default function PackageSelectionPage() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          <span>Sắp xếp & Tạo</span>
+          <span>
+            {data?.format === 'league' || data?.format === 'battle_royale' ? 'Tạo giải đấu' : 'Sắp xếp & Tạo'}
+          </span>
         </div>
 
         {/* Header */}

@@ -184,6 +184,9 @@ export default function FinalizeCreatePage() {
         createdAt: new Date().toISOString(),
       };
       setTournament(mockTournament);
+      syncTournamentToBackend(mockTournament).catch(err => {
+        console.error('Error auto-syncing public registration tournament to backend:', err);
+      });
       const link = `${window.location.origin}/tournaments/${tournamentId}/live`;
       setShareLink(link);
       setQrCode(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(link)}`);
@@ -268,6 +271,9 @@ export default function FinalizeCreatePage() {
     };
 
     setTournament(mockTournament);
+    syncTournamentToBackend(mockTournament).catch(err => {
+      console.error('Error auto-syncing tournament to backend:', err);
+    });
 
     // Generate mock QR code and share link
     const link = `${window.location.origin}/tournaments/${tournamentId}/live`;

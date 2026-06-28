@@ -12,7 +12,7 @@ export default function BracketPage() {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   useEffect(() => {
-    if (data.format === 'league') {
+    if (data.format === 'league' || data.format === 'battle_royale') {
       router.replace('/tournaments/create/finalize');
       return;
     }

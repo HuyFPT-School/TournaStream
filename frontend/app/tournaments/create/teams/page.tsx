@@ -146,7 +146,9 @@ export default function TeamsPage() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
             <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          <span className="text-white/40 whitespace-nowrap">Sắp xếp & Tạo</span>
+          <span className="text-white/40 whitespace-nowrap">
+            {data.format === 'league' || data.format === 'battle_royale' ? 'Tạo giải đấu' : 'Sắp xếp & Tạo'}
+          </span>
         </div>
 
         {/* Header */}

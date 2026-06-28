@@ -377,7 +377,7 @@ function calculateLeagueStandings(
   pointRules: Record<string, number>
 ): LeagueStandingRow[] {
   const standingsMap: Record<string, Omit<LeagueStandingRow, 'currentRank' | 'rankChange'>> = {};
-  
+
   (teams || []).forEach(team => {
     if (team.id) {
       standingsMap[team.id] = {
@@ -393,10 +393,10 @@ function calculateLeagueStandings(
     }
   });
 
-  const finishedMatches = (leagueMatches || []).filter(m => 
+  const finishedMatches = (leagueMatches || []).filter(m =>
     m.isFinished || (m.results && m.results.some((r: any) => (r.placement !== null && r.placement !== undefined && r.placement !== '') || (r.kills || 0) > 0 || r.pts !== undefined))
   );
-  
+
   finishedMatches.forEach(match => {
     (match.results || []).forEach((res: any) => {
       const team = standingsMap[res.teamId];
@@ -627,47 +627,40 @@ interface BracketMatchCardProps {
 function BracketMatchCard({ a, b, sa, sb, done, isLive, winner, onClick }: BracketMatchCardProps) {
   const winA = done && winner ? a === winner : (sa !== null && sb !== null && sa > sb);
   const winB = done && winner ? b === winner : (sa !== null && sb !== null && sb > sa);
-  
+
   return (
-    <div 
+    <div
       onClick={onClick}
-      className={`w-[160px] rounded-xl border overflow-hidden text-[12px] shadow-lg transition-all duration-300 cursor-pointer ${
-        isLive 
-          ? 'border-[#22c55e] bg-[#22c55e]/[0.05] shadow-[0_0_15px_rgba(34,197,94,0.15)] scale-[1.03] hover:scale-[1.05]' 
+      className={`w-[160px] rounded-xl border overflow-hidden text-[12px] shadow-lg transition-all duration-300 cursor-pointer ${isLive
+          ? 'border-[#22c55e] bg-[#22c55e]/[0.05] shadow-[0_0_15px_rgba(34,197,94,0.15)] scale-[1.03] hover:scale-[1.05]'
           : 'border-white/[0.08] bg-[#0f1419] hover:border-white/[0.15] hover:scale-[1.02]'
-      }`}
+        }`}
     >
       {/* Team A */}
-      <div className={`flex items-center justify-between px-3.5 py-2.5 border-b border-white/[0.04] transition-colors ${
-        winA ? 'bg-[#22c55e]/10' : ''
-      }`}>
-        <span className={`font-semibold truncate max-w-[100px] ${
-          winA ? 'text-[#22c55e]' : 'text-white/80'
+      <div className={`flex items-center justify-between px-3.5 py-2.5 border-b border-white/[0.04] transition-colors ${winA ? 'bg-[#22c55e]/10' : ''
         }`}>
+        <span className={`font-semibold truncate max-w-[100px] ${winA ? 'text-[#22c55e]' : 'text-white/80'
+          }`}>
           {a}
         </span>
         {sa !== null && (
-          <span className={`font-bold ml-2 ${
-            winA ? 'text-[#22c55e]' : 'text-white/40'
-          }`}>
+          <span className={`font-bold ml-2 ${winA ? 'text-[#22c55e]' : 'text-white/40'
+            }`}>
             {sa}
           </span>
         )}
       </div>
 
       {/* Team B */}
-      <div className={`flex items-center justify-between px-3.5 py-2.5 transition-colors ${
-        winB ? 'bg-[#22c55e]/10' : ''
-      }`}>
-        <span className={`font-semibold truncate max-w-[100px] ${
-          winB ? 'text-[#22c55e]' : 'text-white/80'
+      <div className={`flex items-center justify-between px-3.5 py-2.5 transition-colors ${winB ? 'bg-[#22c55e]/10' : ''
         }`}>
+        <span className={`font-semibold truncate max-w-[100px] ${winB ? 'text-[#22c55e]' : 'text-white/80'
+          }`}>
           {b}
         </span>
         {sb !== null && (
-          <span className={`font-bold ml-2 ${
-            winB ? 'text-[#22c55e]' : 'text-white/40'
-          }`}>
+          <span className={`font-bold ml-2 ${winB ? 'text-[#22c55e]' : 'text-white/40'
+            }`}>
             {sb}
           </span>
         )}
@@ -704,10 +697,10 @@ function buildBracketData(tournament: any, matchState: any, selectedMatchKey: st
     if (roundIdx < 0) return null;
     const roundMatches = tournament.bracket?.rounds?.[roundIdx] || [];
     const match = roundMatches[matchIdx];
-    
+
     const mKey = `${roundIdx}-${matchIdx}`;
     const isLive = tournament.bracket?.currentRound === roundIdx && (tournament.bracket?.activeMatches || []).includes(matchIdx);
-    
+
     let currentMS = tournament.matchStates?.[mKey];
     if (selectedMatchKey === mKey) {
       currentMS = matchState;
@@ -737,7 +730,7 @@ function buildBracketData(tournament: any, matchState: any, selectedMatchKey: st
     const prevMatchIdx = matchIdx * 2 + (slot === 'A' ? 0 : 1);
     const roundMatches = tournament.bracket?.rounds?.[roundIdx] || [];
     const match = roundMatches[matchIdx];
-    
+
     if (match) {
       const teamRef = slot === 'A' ? match.teamA : match.teamB;
       if (teamRef) {
@@ -761,7 +754,7 @@ function buildBracketData(tournament: any, matchState: any, selectedMatchKey: st
 
       const mKey = `${r}-${m}`;
       const isLive = tournament.bracket?.currentRound === r && (tournament.bracket?.activeMatches || []).includes(m);
-      
+
       let currentMS = tournament.matchStates?.[mKey];
       if (selectedMatchKey === mKey) {
         currentMS = matchState;
@@ -926,7 +919,7 @@ export default function TournamentDetailPage() {
       const placementPoints = tp.placement !== null ? (pointRules[tp.placement.toString()] || 0) : 0;
       const killPoints = tp.kills * 1;
       const totalPoints = placementPoints + killPoints;
-      
+
       const teamObj = tournament.teams.find((t: any) => t.id === tp.teamId);
 
       return {
@@ -955,7 +948,7 @@ export default function TournamentDetailPage() {
 
     setTournament(updatedTournament);
     localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
-    
+
     const savedList = localStorage.getItem(tournamentsKey);
     if (savedList) {
       try {
@@ -1014,7 +1007,7 @@ export default function TournamentDetailPage() {
       const placementPoints = pointRules[tp.placement.toString()] || 0;
       const killPoints = tp.kills * 1;
       const totalPoints = placementPoints + killPoints;
-      
+
       const teamObj = tournament.teams.find((t: any) => t.id === tp.teamId);
 
       return {
@@ -1139,7 +1132,7 @@ export default function TournamentDetailPage() {
     setLeagueStreamType(type);
     if (type === 'webcam') {
       setLeagueStreamUrlInput('webcam');
-      
+
       const matchesList = tournament.leagueMatches || tournament.matches || [];
       const updatedMatches = matchesList.map((m: any) => {
         if (m.id === selectedLeagueMatchId) {
@@ -1163,7 +1156,7 @@ export default function TournamentDetailPage() {
 
   const handleSaveLeagueStreamUrl = async () => {
     if (!selectedLeagueMatchId || !tournament) return;
-    
+
     const matchesList = tournament.leagueMatches || tournament.matches || [];
     const updatedMatches = matchesList.map((m: any) => {
       if (m.id === selectedLeagueMatchId) {
@@ -1171,7 +1164,7 @@ export default function TournamentDetailPage() {
       }
       return m;
     });
-    
+
     const updatedTournament = {
       ...tournament,
       ...(tournament.leagueMatches ? { leagueMatches: updatedMatches } : { matches: updatedMatches })
@@ -1179,7 +1172,7 @@ export default function TournamentDetailPage() {
 
     setTournament(updatedTournament);
     localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
-    
+
     const savedList = localStorage.getItem(tournamentsKey);
     if (savedList) {
       try {
@@ -1222,13 +1215,13 @@ export default function TournamentDetailPage() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       leagueLocalStreamRef.current = stream;
-      
+
       if (leagueBroadcasterVideoRef.current) {
         leagueBroadcasterVideoRef.current.srcObject = stream;
       }
-      
+
       setIsLeagueBroadcasting(true);
-      
+
       const updatedMatchStates = {
         ...(tournament.matchStates || {}),
         [selectedLeagueMatchId!]: {
@@ -1243,7 +1236,8 @@ export default function TournamentDetailPage() {
         }
       };
 
-      const updatedMatches = tournament.leagueMatches.map((m: any) => {
+      const matchesList = tournament.leagueMatches || tournament.matches || [];
+      const updatedMatches = matchesList.map((m: any) => {
         if (m.id === selectedLeagueMatchId) {
           return { ...m, streamType: 'webcam', streamUrl: 'webcam' };
         }
@@ -1253,7 +1247,7 @@ export default function TournamentDetailPage() {
       const updatedTournament = {
         ...tournament,
         matchStates: updatedMatchStates,
-        leagueMatches: updatedMatches
+        ...(tournament.leagueMatches ? { leagueMatches: updatedMatches } : { matches: updatedMatches })
       };
 
       setTournament(updatedTournament);
@@ -1268,7 +1262,7 @@ export default function TournamentDetailPage() {
   const startLeagueScreenShareBroadcast = async () => {
     try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      
+
       let combinedStream = screenStream;
       try {
         const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1277,15 +1271,15 @@ export default function TournamentDetailPage() {
       } catch (audioErr) {
         console.warn('Không thể truy cập microphone, phát màn hình không tiếng:', audioErr);
       }
-      
+
       leagueLocalStreamRef.current = combinedStream;
-      
+
       if (leagueBroadcasterVideoRef.current) {
         leagueBroadcasterVideoRef.current.srcObject = combinedStream;
       }
-      
+
       setIsLeagueBroadcasting(true);
-      
+
       const updatedMatchStates = {
         ...(tournament.matchStates || {}),
         [selectedLeagueMatchId!]: {
@@ -1300,7 +1294,8 @@ export default function TournamentDetailPage() {
         }
       };
 
-      const updatedMatches = tournament.leagueMatches.map((m: any) => {
+      const matchesList = tournament.leagueMatches || tournament.matches || [];
+      const updatedMatches = matchesList.map((m: any) => {
         if (m.id === selectedLeagueMatchId) {
           return { ...m, streamType: 'webcam', streamUrl: 'webcam' };
         }
@@ -1310,7 +1305,7 @@ export default function TournamentDetailPage() {
       const updatedTournament = {
         ...tournament,
         matchStates: updatedMatchStates,
-        leagueMatches: updatedMatches
+        ...(tournament.leagueMatches ? { leagueMatches: updatedMatches } : { matches: updatedMatches })
       };
 
       setTournament(updatedTournament);
@@ -1333,16 +1328,16 @@ export default function TournamentDetailPage() {
       leagueLocalStreamRef.current.getTracks().forEach(track => track.stop());
       leagueLocalStreamRef.current = null;
     }
-    
+
     if (leagueBroadcasterVideoRef.current) {
       leagueBroadcasterVideoRef.current.srcObject = null;
     }
-    
+
     Object.keys(leaguePeerConnectionsRef.current).forEach(peerId => {
       leaguePeerConnectionsRef.current[peerId].close();
     });
     leaguePeerConnectionsRef.current = {};
-    
+
     setIsLeagueBroadcasting(false);
   };
 
@@ -1380,40 +1375,40 @@ export default function TournamentDetailPage() {
 
   useEffect(() => {
     if (!isLoaded || !tournamentId || !selectedLeagueMatchId) return;
-    
+
     const pusher = getPusherClient();
     if (!pusher) return;
-    
+
     const channel = pusher.subscribe(tournamentId);
-    
+
     const handleSignaling = async (data: any) => {
       if (data.matchKey !== selectedLeagueMatchId) return;
-      
+
       const { type, peerId, sender, sdp, candidate } = data;
       if (sender === 'referee') return;
-      
+
       if (type === 'join') {
         if (!isLeagueBroadcasting || !leagueLocalStreamRef.current) return;
-        
+
         delete leagueIceQueuesRef.current[peerId];
-        
+
         if (leaguePeerConnectionsRef.current[peerId]) {
           leaguePeerConnectionsRef.current[peerId].close();
         }
-        
+
         const pc = new RTCPeerConnection({
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
           ]
         });
-        
+
         leaguePeerConnectionsRef.current[peerId] = pc;
-        
+
         leagueLocalStreamRef.current.getTracks().forEach(track => {
           pc.addTrack(track, leagueLocalStreamRef.current!);
         });
-        
+
         pc.onicecandidate = (event) => {
           if (event.candidate) {
             sendLeagueSignalingMessage({
@@ -1425,10 +1420,10 @@ export default function TournamentDetailPage() {
             });
           }
         };
-        
+
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        
+
         sendLeagueSignalingMessage({
           type: 'offer',
           peerId,
@@ -1470,9 +1465,9 @@ export default function TournamentDetailPage() {
         }
       }
     };
-    
+
     channel.bind('match_signaling', handleSignaling);
-    
+
     return () => {
       channel.unbind('match_signaling', handleSignaling);
       pusher.unsubscribe(tournamentId);
@@ -1606,7 +1601,7 @@ export default function TournamentDetailPage() {
 
     const loadTournament = async () => {
       let loadedTournament = null;
-      
+
       // Always fetch from backend first to get the most up-to-date data (registrations, scores, etc.)
       try {
         const data = await fetchTournamentFromBackend(tournamentId);
@@ -1703,7 +1698,7 @@ export default function TournamentDetailPage() {
         console.log("Pusher received tournament update in dashboard:", data);
         const migrated = migrateTournamentData(data);
         setTournament(migrated);
-        
+
         let mKey = selectedMatchKey;
         if (!mKey && migrated.bracket) {
           const rIdx = migrated.bracket.currentRound ?? 0;
@@ -1711,7 +1706,7 @@ export default function TournamentDetailPage() {
           mKey = `${rIdx}-${mIdx}`;
           setSelectedMatchKey(mKey);
         }
-        
+
         if (mKey && migrated.matchStates?.[mKey]) {
           setMatchState(migrated.matchStates[mKey]);
         } else if (migrated.matchState) {
@@ -1742,7 +1737,7 @@ export default function TournamentDetailPage() {
       }
 
       const currentStored = tournament.matchStates?.[selectedMatchKey];
-      const isEquivalent = currentStored && 
+      const isEquivalent = currentStored &&
         currentStored.team1Score === matchState.team1Score &&
         currentStored.team2Score === matchState.team2Score &&
         currentStored.time === matchState.time &&
@@ -1761,16 +1756,16 @@ export default function TournamentDetailPage() {
         ...(tournament.matchStates || {}),
         [selectedMatchKey]: matchState
       };
-      
+
       const updatedTournament = {
         ...tournament,
         matchStates: updatedMatchStates,
         matchState: matchState,
         anyMatchRunning: Object.values(updatedMatchStates).some((ms: any) => ms.isRunning && !ms.isFinished),
       };
-      
+
       localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
-      
+
       const savedList = localStorage.getItem(tournamentsKey);
       if (savedList) {
         try {
@@ -1799,7 +1794,7 @@ export default function TournamentDetailPage() {
     }
 
     const currentStored = tournament.matchStates?.[selectedMatchKey];
-    const isEquivalent = currentStored && 
+    const isEquivalent = currentStored &&
       currentStored.team1Score === matchState.team1Score &&
       currentStored.team2Score === matchState.team2Score &&
       currentStored.time === matchState.time &&
@@ -2088,7 +2083,7 @@ export default function TournamentDetailPage() {
       );
     } else if (isUpper || isLower || isGF) {
       advanceDoubleElimination(updatedTournament.bracket, roundIndex, matchIndex, dbMatch.winner, loser, isUpper);
-      
+
       const activeMatches = (updatedTournament.bracket.activeMatches || []).filter((idx: number) => idx !== matchIndex);
       updatedTournament.bracket.activeMatches = activeMatches;
 
@@ -2318,7 +2313,7 @@ export default function TournamentDetailPage() {
   const handleStartTournament = async () => {
     if (!tournament) return;
     const shuffledTeams = tournament.teams || [];
-    
+
     // Check validation constraints based on format
     const len = shuffledTeams.length;
     const format = tournament.format;
@@ -2423,7 +2418,7 @@ export default function TournamentDetailPage() {
 
     setTournament(updatedTournament);
     localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
-    
+
     try {
       await syncTournamentToBackend(updatedTournament);
       alert('Giải đấu đã khởi tranh và tạo sơ đồ thi đấu thành công!');
@@ -2636,13 +2631,13 @@ export default function TournamentDetailPage() {
   const getPendingMatches = () => {
     if (!tournament || tournament.format === 'round_robin' || tournament.format === 'double_elimination' || tournament.format === 'league') return [];
     if (!tournament.bracket || tournament.bracket.isFinished) return [];
-    
+
     const round = tournament.bracket.rounds?.[tournament.bracket.currentRound] || [];
     return round.map((m: any, idx: number) => {
       const isLive = (tournament.bracket.activeMatches || []).includes(idx);
       const done = m.isFinished;
       const hasTeams = m.teamA && m.teamB && m.teamA.name !== '?' && m.teamB.name !== '?';
-      
+
       return {
         match: m,
         matchIdx: idx,
@@ -2671,13 +2666,13 @@ export default function TournamentDetailPage() {
     );
   }
 
-  const selectedMatchIndex = selectedMatchKey 
+  const selectedMatchIndex = selectedMatchKey
     ? (selectedMatchKey.startsWith('g-') || selectedMatchKey.startsWith('u-') || selectedMatchKey.startsWith('l-')
-       ? parseInt(selectedMatchKey.split('-')[2], 10)
-       : parseInt(selectedMatchKey.split('-')[1], 10))
+      ? parseInt(selectedMatchKey.split('-')[2], 10)
+      : parseInt(selectedMatchKey.split('-')[1], 10))
     : 0;
   const isLiveMatchActive = matchState && !matchState.isFinished;
-  
+
   const getSelectedBracketMatch = () => {
     if (!tournament) return null;
     if (selectedMatchKey?.startsWith('g-')) {
@@ -2712,14 +2707,14 @@ export default function TournamentDetailPage() {
     if (!round) return null;
     return round[mIdx] || null;
   };
-  
+
   const currentBracketMatch = getSelectedBracketMatch();
   const matchIndex = selectedMatchIndex;
   const team1 = tournament && currentBracketMatch ? (resolveTeamRef(tournament, currentBracketMatch?.teamA) || tournament.teams?.[0]) : null;
   const team2 = tournament && currentBracketMatch ? (resolveTeamRef(tournament, currentBracketMatch?.teamB) || tournament.teams?.[1]) : null;
-  
-  const showActiveMatch = !!(tournament && currentBracketMatch && 
-                         team1 && team2 && team1.name !== '?' && team2.name !== '?');
+
+  const showActiveMatch = !!(tournament && currentBracketMatch &&
+    team1 && team2 && team1.name !== '?' && team2.name !== '?');
 
   const winnableTeam = (tournament?.sport === 'tennis' || tournament?.sport === 'volleyball')
     ? checkSetWinCondition(matchState.team1SetPoints ?? 0, matchState.team2SetPoints ?? 0)
@@ -2824,8 +2819,8 @@ export default function TournamentDetailPage() {
 
       {/* Header Navbar */}
       <nav className="relative z-20 flex items-center justify-between px-8 py-4 border-b border-white/[0.06] backdrop-blur-md bg-[#080b10]/60 sticky top-0">
-        <Link 
-          href={isOwner ? "/tournaments" : "/"} 
+        <Link
+          href={isOwner ? "/tournaments" : "/"}
           className="flex items-center gap-2 hover:opacity-80 transition-opacity text-white"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -2834,7 +2829,7 @@ export default function TournamentDetailPage() {
           </svg>
           <span className="text-[16px] font-black tracking-tight ml-2">{tournament.name}</span>
         </Link>
-        
+
         <div className="flex items-center gap-3">
           {activeMatchesCount > 0 && isOwner && (
             <button
@@ -2846,7 +2841,7 @@ export default function TournamentDetailPage() {
               Trận đang đấu ({activeMatchesCount})
             </button>
           )}
-          
+
           <button
             type="button"
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowQrModal(true); }}
@@ -2889,7 +2884,7 @@ export default function TournamentDetailPage() {
 
       {/* Main Content */}
       <section className="relative z-10 max-w-5xl mx-auto px-6 py-16">
-        
+
         {tournamentWinnerName && (
           <div className="mb-12 p-8 rounded-2xl bg-gradient-to-r from-yellow-500/10 via-amber-500/15 to-yellow-500/10 border border-yellow-500/30 text-center shadow-[0_0_30px_rgba(234,179,8,0.2)] relative overflow-hidden animate-pulse">
             <div className="relative z-10 flex flex-col items-center gap-3">
@@ -2910,7 +2905,7 @@ export default function TournamentDetailPage() {
 
         {/* Bracket Diagram Container / Registration Management View */}
         <div className="w-full">
-          {!tournament.bracketSeeded && tournament.isPublicRegistration ? (
+          {!tournament.bracketSeeded ? (
             <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
               {/* Registration Toggle Panel */}
               <div className="flex items-center justify-between p-6 rounded-2xl bg-[#0f1419] border border-white/[0.06] shadow-xl">
@@ -2925,14 +2920,12 @@ export default function TournamentDetailPage() {
                 <button
                   type="button"
                   onClick={handleToggleRegistration}
-                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 focus:outline-none ${
-                    tournament.registrationOpen ? 'bg-[#22c55e]' : 'bg-white/[0.1]'
-                  }`}
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 focus:outline-none ${tournament.registrationOpen ? 'bg-[#22c55e]' : 'bg-white/[0.1]'
+                    }`}
                 >
                   <span
-                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform duration-300 ${
-                      tournament.registrationOpen ? 'translate-x-6' : 'translate-x-1'
-                    }`}
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform duration-300 ${tournament.registrationOpen ? 'translate-x-6' : 'translate-x-1'
+                      }`}
                   />
                 </button>
               </div>
@@ -3121,13 +3114,10 @@ export default function TournamentDetailPage() {
                             <th className="py-3 px-1 text-center w-8">+/-</th>
                           )}
                           <th className="py-3 px-3">Đội tuyển</th>
-                          <th className="py-3 px-3 text-center">Trận</th>
                           {tournament.format === 'battle_royale' && (
                             <>
-                              <th className="py-3 px-2 text-center">TOP 1</th>
-                              <th className="py-3 px-2 text-center">Gục</th>
-                              <th className="py-3 px-2 text-center">Hạng</th>
-                              <th className="py-3 px-2 text-center">Kill</th>
+                              <th className="py-3 px-2 text-center">Điểm Hạng</th>
+                              <th className="py-3 px-2 text-center">Điểm Kill</th>
                             </>
                           )}
                           <th className="py-3 px-3 text-center font-bold text-white">Tổng Điểm</th>
@@ -3163,11 +3153,8 @@ export default function TournamentDetailPage() {
                                 </td>
                               )}
                               <td className="py-3.5 px-3 font-bold text-white">{row.teamName}</td>
-                              <td className="py-3.5 px-3 text-center">{row.matchesPlayed}</td>
                               {tournament.format === 'battle_royale' && (
                                 <>
-                                  <td className="py-3.5 px-2 text-center text-green-500 font-bold">{row.wins}</td>
-                                  <td className="py-3.5 px-2 text-center font-medium text-white/50">{row.totalKills}</td>
                                   <td className="py-3.5 px-2 text-center font-medium text-blue-400">{row.placementPoints}</td>
                                   <td className="py-3.5 px-2 text-center font-medium text-red-400">{row.killPoints}</td>
                                 </>
@@ -3193,9 +3180,8 @@ export default function TournamentDetailPage() {
                         <button
                           key={m.id}
                           onClick={() => handleSelectLeagueMatch(m.id)}
-                          className={`w-full text-left p-3.5 rounded-xl border transition-all ${
-                            isSelected ? 'border-[#22c55e] bg-[#22c55e]/10' : 'border-white/[0.06] bg-[#080b10]'
-                          }`}
+                          className={`w-full text-left p-3.5 rounded-xl border transition-all ${isSelected ? 'border-[#22c55e] bg-[#22c55e]/10' : 'border-white/[0.06] bg-[#080b10]'
+                            }`}
                         >
                           <div className="font-bold text-xs">{m.name}</div>
                           <div className="text-[10px] text-white/40">{m.isFinished ? '✓ Đã xong' : '⏳ Chờ'}</div>
@@ -3226,9 +3212,9 @@ export default function TournamentDetailPage() {
 
                   {(() => {
                     const selectedMatchObj = (tournament.leagueMatches || tournament.matches || []).find((m: any) => m.id === selectedLeagueMatchId);
-                    const leagueMatchState = tournament.matchStates?.[selectedLeagueMatchId] || { 
-                      isRunning: false, 
-                      isFinished: selectedMatchObj?.isFinished || false 
+                    const leagueMatchState = tournament.matchStates?.[selectedLeagueMatchId] || {
+                      isRunning: false,
+                      isFinished: selectedMatchObj?.isFinished || false
                     };
                     const isFinished = selectedMatchObj?.isFinished || !!leagueMatchState.isFinished;
                     const isRunning = !isFinished && !!leagueMatchState.isRunning;
@@ -3239,16 +3225,14 @@ export default function TournamentDetailPage() {
                         <div className="p-5 rounded-xl bg-[#080b10]/60 border border-white/[0.04] space-y-4">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-black text-white uppercase tracking-wider">Trạng thái trận đấu</span>
-                            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                              isFinished
+                            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${isFinished
                                 ? 'bg-red-500/20 text-red-400 border border-red-500/50'
                                 : isRunning
-                                ? 'bg-[#22c55e]/20 text-green-400 border border-[#22c55e]/40 shadow-[0_0_10px_rgba(34,197,94,0.1)]'
-                                : 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
-                            }`}>
-                              <div className={`w-1.5 h-1.5 rounded-full ${
-                                isFinished ? 'bg-red-400' : isRunning ? 'bg-[#22c55e] animate-pulse' : 'bg-blue-400'
-                              }`} />
+                                  ? 'bg-[#22c55e]/20 text-green-400 border border-[#22c55e]/40 shadow-[0_0_10px_rgba(34,197,94,0.1)]'
+                                  : 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
+                              }`}>
+                              <div className={`w-1.5 h-1.5 rounded-full ${isFinished ? 'bg-red-400' : isRunning ? 'bg-[#22c55e] animate-pulse' : 'bg-blue-400'
+                                }`} />
                               {isFinished ? 'Đã kết thúc' : isRunning ? 'Đang phát sóng (LIVE)' : 'Sẵn sàng'}
                             </div>
                           </div>
@@ -3263,11 +3247,10 @@ export default function TournamentDetailPage() {
                                 <button
                                   type="button"
                                   onClick={() => handleToggleLeagueMatchRunning(selectedLeagueMatchId)}
-                                  className={`flex-1 py-2 px-4 rounded-lg font-bold text-xs uppercase tracking-wider transition-all duration-200 border shadow-md ${
-                                    isRunning
+                                  className={`flex-1 py-2 px-4 rounded-lg font-bold text-xs uppercase tracking-wider transition-all duration-200 border shadow-md ${isRunning
                                       ? 'bg-yellow-500/20 hover:bg-yellow-500/30 border-yellow-500/50 text-yellow-400'
                                       : 'bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border-[#22c55e]/50 text-green-400'
-                                  }`}
+                                    }`}
                                 >
                                   {isRunning ? '⏸ Tạm dừng trận đấu' : '▶ Bắt đầu trận đấu'}
                                 </button>
@@ -3327,33 +3310,30 @@ export default function TournamentDetailPage() {
                           <button
                             type="button"
                             onClick={() => handleLeagueStreamTypeChange('youtube')}
-                            className={`py-2 px-3 rounded-lg border font-bold text-xs transition-all ${
-                              leagueStreamType === 'youtube'
+                            className={`py-2 px-3 rounded-lg border font-bold text-xs transition-all ${leagueStreamType === 'youtube'
                                 ? 'border-red-500 bg-red-500/10 text-red-400'
                                 : 'border-white/[0.06] bg-white/[0.02] text-white/60 hover:text-white'
-                            }`}
+                              }`}
                           >
                             YouTube URL
                           </button>
                           <button
                             type="button"
                             onClick={() => handleLeagueStreamTypeChange('twitch')}
-                            className={`py-2 px-3 rounded-lg border font-bold text-xs transition-all ${
-                              leagueStreamType === 'twitch'
+                            className={`py-2 px-3 rounded-lg border font-bold text-xs transition-all ${leagueStreamType === 'twitch'
                                 ? 'border-[#a855f7] bg-[#a855f7]/10 text-[#a855f7]'
                                 : 'border-white/[0.06] bg-white/[0.02] text-white/60 hover:text-white'
-                            }`}
+                              }`}
                           >
                             Twitch URL
                           </button>
                           <button
                             type="button"
                             onClick={() => handleLeagueStreamTypeChange('webcam')}
-                            className={`py-2 px-3 rounded-lg border font-bold text-xs transition-all ${
-                              leagueStreamType === 'webcam'
+                            className={`py-2 px-3 rounded-lg border font-bold text-xs transition-all ${leagueStreamType === 'webcam'
                                 ? 'border-[#22c55e] bg-[#22c55e]/10 text-green-400 font-extrabold'
                                 : 'border-white/[0.06] bg-white/[0.02] text-white/60 hover:text-white'
-                            }`}
+                              }`}
                           >
                             🎥 Webcam trực tiếp
                           </button>
@@ -3364,9 +3344,8 @@ export default function TournamentDetailPage() {
                         <div className="p-4 rounded-lg bg-[#080b10] border border-white/[0.04]">
                           <div className="flex items-center justify-between mb-3">
                             <span className="text-xs text-white/60 font-semibold">Tình trạng máy quay (Webcam stream)</span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                              isLeagueBroadcasting ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-white/10 text-white/50'
-                            }`}>
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isLeagueBroadcasting ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-white/10 text-white/50'
+                              }`}>
                               {isLeagueBroadcasting ? 'ĐANG PHÁT (BROADCASTING)' : 'SẴN SÀNG'}
                             </span>
                           </div>
@@ -3424,8 +3403,8 @@ export default function TournamentDetailPage() {
                                 leagueStreamType === 'youtube'
                                   ? 'VD: https://www.youtube.com/watch?v=dQw4w9WgXcQ'
                                   : leagueStreamType === 'twitch'
-                                  ? 'VD: https://www.twitch.tv/ninja'
-                                  : 'Vui lòng chọn loại nguồn phát phía trên...'
+                                    ? 'VD: https://www.twitch.tv/ninja'
+                                    : 'Vui lòng chọn loại nguồn phát phía trên...'
                               }
                               disabled={!leagueStreamType}
                               className="flex-1 px-3 py-2 rounded-lg bg-[#080b10] border border-white/[0.08] text-white placeholder-white/30 text-xs focus:outline-none focus:border-[#22c55e] disabled:opacity-50 disabled:cursor-not-allowed"
@@ -3534,7 +3513,7 @@ export default function TournamentDetailPage() {
                     <h3 className="text-lg font-black tracking-tight text-[#22c55e] border-b border-white/[0.06] pb-3">
                       {group.name}
                     </h3>
-                    
+
                     {/* Standings Table */}
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs border-collapse">
@@ -3579,7 +3558,7 @@ export default function TournamentDetailPage() {
                           const sa = isRunning && ms ? ms.team1Score : (isFinished && ms ? ms.team1Score : m.scoreA);
                           const sb = isRunning && ms ? ms.team2Score : (isFinished && ms ? ms.team2Score : m.scoreB);
                           const done = isFinished;
-                          
+
                           return (
                             <div key={mIdx} className="relative flex items-center justify-center py-2">
                               <BracketMatchCard
@@ -3600,17 +3579,16 @@ export default function TournamentDetailPage() {
                   </div>
                 );
               })}
-              
+
               {/* Transition to Knockout Button */}
               {isOwner && (
                 <div className="flex justify-center pt-6">
                   <button
                     onClick={handleProceedToKnockout}
-                    className={`px-8 py-3 rounded-xl font-black text-sm transition-all duration-200 active:scale-95 flex items-center gap-2 ${
-                      areAllGroupMatchesFinished()
+                    className={`px-8 py-3 rounded-xl font-black text-sm transition-all duration-200 active:scale-95 flex items-center gap-2 ${areAllGroupMatchesFinished()
                         ? 'bg-[#22c55e] text-black hover:bg-[#16a34a] shadow-[0_0_20px_rgba(34,197,94,0.25)]'
                         : 'bg-white/5 border border-white/10 text-white/30 cursor-not-allowed'
-                    }`}
+                      }`}
                     disabled={!areAllGroupMatchesFinished()}
                   >
                     🏁 Tiến vào Vòng Knockout
@@ -3626,11 +3604,10 @@ export default function TournamentDetailPage() {
                   <button
                     key={tab}
                     onClick={() => setActiveDeTab(tab)}
-                    className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider uppercase transition-all duration-200 whitespace-nowrap ${
-                      activeDeTab === tab
+                    className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider uppercase transition-all duration-200 whitespace-nowrap ${activeDeTab === tab
                         ? 'bg-[#22c55e]/10 border border-[#22c55e]/30 text-[#22c55e] shadow-[0_0_15px_rgba(34,197,94,0.1)]'
                         : 'text-white/50 border border-transparent hover:text-white/80'
-                    }`}
+                      }`}
                   >
                     {tab === 'upper' ? 'Nhánh Thắng (Upper)' : tab === 'lower' ? 'Nhánh Thua (Lower)' : 'Chung Kết Tổng (Grand)'}
                   </button>
@@ -3720,8 +3697,8 @@ export default function TournamentDetailPage() {
                       const mKey = `${roundIdx}-${matchIdx}`;
                       return (
                         <div key={matchIdx} className="relative flex items-center justify-center py-2">
-                          <BracketMatchCard 
-                            {...m} 
+                          <BracketMatchCard
+                            {...m}
                             onClick={() => handleMatchCardClick(mKey)}
                           />
                         </div>
@@ -3736,9 +3713,9 @@ export default function TournamentDetailPage() {
 
         {/* Bảng điều khiển trận đấu (Active Match Controls) */}
         {showActiveMatch && isOwner && tournament.format !== 'league' && (
-          <div 
+          <div
             key={selectedMatchKey || 'no-match'}
-            id="match-controller" 
+            id="match-controller"
             className="mt-12 bg-[#0f1419] border border-white/[0.06] rounded-2xl p-8 max-w-2xl mx-auto shadow-2xl relative animate-fade-in-up"
           >
             {(() => {
@@ -3756,35 +3733,34 @@ export default function TournamentDetailPage() {
                 const hasTeams = m.teamA && m.teamB && m.teamA.name !== '?' && m.teamB.name !== '?';
                 return { match: m, idx, hasTeams };
               }).filter((item: any) => item.hasTeams);
-              
+
               if (playableMatches.length <= 1) return null;
-              
+
               return (
                 <div className="mb-6 flex flex-wrap gap-2 pb-4 border-b border-white/[0.04]">
                   {playableMatches.map((item: any) => {
                     const mKey = `${currentRound}-${item.idx}`;
                     const isSelected = selectedMatchKey === mKey;
-                    
+
                     const isActive = (tournament.bracket.activeMatches || []).includes(item.idx);
                     const mState = tournament.matchStates?.[mKey] || {};
                     const isRunning = isActive && mState.isRunning && !mState.isFinished;
                     const isFinished = item.match.isFinished || mState.isFinished;
-                    
+
                     let statusColor = "bg-white/20";
                     if (isRunning) statusColor = "bg-[#22c55e] animate-pulse";
                     else if (isFinished) statusColor = "bg-white/40";
                     else if (isActive) statusColor = "bg-blue-500 animate-pulse";
-                    
+
                     return (
                       <button
                         key={item.idx}
                         type="button"
                         onClick={() => handleMatchCardClick(mKey)}
-                        className={`px-4 py-2.5 rounded-xl border text-xs font-black tracking-tight transition-all duration-200 flex items-center gap-2 ${
-                          isSelected
+                        className={`px-4 py-2.5 rounded-xl border text-xs font-black tracking-tight transition-all duration-200 flex items-center gap-2 ${isSelected
                             ? "bg-[#22c55e]/10 border-[#22c55e]/30 text-[#22c55e] shadow-[0_0_15px_rgba(34,197,94,0.1)]"
                             : "bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05] text-white/60 hover:text-white"
-                        }`}
+                          }`}
                       >
                         <span className={`w-2 h-2 rounded-full ${statusColor}`} />
                         <span>
@@ -3801,28 +3777,25 @@ export default function TournamentDetailPage() {
 
             <div className="flex items-center justify-between mb-8 pb-4 border-b border-white/[0.04]">
               <div className="flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full ${
-                  matchState.isFinished 
-                    ? 'bg-white/30' 
-                    : matchState.isRunning 
-                    ? 'bg-[#22c55e] animate-pulse' 
-                    : 'bg-blue-500 animate-pulse'
-                }`} />
-                <h3 className={`text-sm font-black tracking-widest uppercase ${
-                  matchState.isFinished 
-                    ? 'text-white/40' 
-                    : matchState.isRunning 
-                    ? 'text-[#22c55e]' 
-                    : 'text-blue-400'
-                }`}>
+                <span className={`w-2.5 h-2.5 rounded-full ${matchState.isFinished
+                    ? 'bg-white/30'
+                    : matchState.isRunning
+                      ? 'bg-[#22c55e] animate-pulse'
+                      : 'bg-blue-500 animate-pulse'
+                  }`} />
+                <h3 className={`text-sm font-black tracking-widest uppercase ${matchState.isFinished
+                    ? 'text-white/40'
+                    : matchState.isRunning
+                      ? 'text-[#22c55e]'
+                      : 'text-blue-400'
+                  }`}>
                   {matchState.isFinished ? 'Đã kết thúc' : matchState.isRunning ? 'Đang thi đấu' : 'Sẵn sàng'}
                 </h3>
               </div>
-              <div className={`px-3 py-1.5 rounded-lg border text-[10px] font-black tracking-wider uppercase flex items-center gap-1.5 ${
-                matchState.isFinished
+              <div className={`px-3 py-1.5 rounded-lg border text-[10px] font-black tracking-wider uppercase flex items-center gap-1.5 ${matchState.isFinished
                   ? 'bg-white/[0.02] border-white/10 text-white/40'
                   : 'bg-red-500/10 border border-red-500/20 text-red-500'
-              }`}>
+                }`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${matchState.isFinished ? 'bg-white/20' : 'bg-red-500 animate-pulse'}`} />
                 Trận đấu
               </div>
@@ -3843,7 +3816,7 @@ export default function TournamentDetailPage() {
               <div className={`flex items-center justify-center gap-8 mb-6 ${matchState.isFinished ? 'pointer-events-none opacity-50' : ''}`}>
                 {/* Team 1 scoring area */}
                 <div className="flex items-center gap-2">
-                  <button 
+                  <button
                     type="button"
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team1', -1); }}
                     className="w-8 h-8 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white flex items-center justify-center font-bold text-lg transition-colors"
@@ -3853,7 +3826,7 @@ export default function TournamentDetailPage() {
                   <div className="w-12 h-12 rounded-xl bg-[#080b10] border border-white/[0.06] flex items-center justify-center font-black text-xl text-white">
                     {matchState.team1Score}
                   </div>
-                  <button 
+                  <button
                     type="button"
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team1', 1); }}
                     className="w-8 h-8 rounded-lg bg-[#22c55e]/10 border border-[#22c55e]/20 hover:bg-[#22c55e]/20 text-[#22c55e] flex items-center justify-center font-bold text-lg transition-colors"
@@ -3866,7 +3839,7 @@ export default function TournamentDetailPage() {
 
                 {/* Team 2 scoring area */}
                 <div className="flex items-center gap-2">
-                  <button 
+                  <button
                     type="button"
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team2', -1); }}
                     className="w-8 h-8 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white flex items-center justify-center font-bold text-lg transition-colors"
@@ -3876,7 +3849,7 @@ export default function TournamentDetailPage() {
                   <div className="w-12 h-12 rounded-xl bg-[#080b10] border border-white/[0.06] flex items-center justify-center font-black text-xl text-white">
                     {matchState.team2Score}
                   </div>
-                  <button 
+                  <button
                     type="button"
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team2', 1); }}
                     className="w-8 h-8 rounded-lg bg-[#22c55e]/10 border border-[#22c55e]/20 hover:bg-[#22c55e]/20 text-[#22c55e] flex items-center justify-center font-bold text-lg transition-colors"
@@ -3912,7 +3885,7 @@ export default function TournamentDetailPage() {
                       </span>
                     )}
                   </div>
-                  
+
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -3988,12 +3961,12 @@ export default function TournamentDetailPage() {
             <h3 className="text-sm font-black tracking-widest text-white/50 uppercase mb-6 pb-2 border-b border-white/[0.04]">
               Trận chờ bắt đầu
             </h3>
-            
+
             <div className="space-y-4">
               {getPendingMatches().map((item: any) => {
                 const pendingTeamA = resolveTeamRef(tournament, item.match.teamA);
                 const pendingTeamB = resolveTeamRef(tournament, item.match.teamB);
-                
+
                 return (
                   <div key={item.matchIdx} className="flex flex-col items-center justify-between p-4 rounded-xl bg-[#080b10] border border-white/[0.04]">
                     <div className="flex items-center justify-center gap-4 text-xs text-white/70 mb-3 font-semibold">
@@ -4001,7 +3974,7 @@ export default function TournamentDetailPage() {
                       <span className="text-white/20">vs</span>
                       <span>{pendingTeamB?.name}</span>
                     </div>
-                    
+
                     <button
                       type="button"
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleStartPendingMatch(item.matchIdx); }}
@@ -4058,15 +4031,14 @@ export default function TournamentDetailPage() {
                         key={type}
                         type="button"
                         onClick={() => setAnnouncementType(type)}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-200 border ${
-                          announcementType === type
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-200 border ${announcementType === type
                             ? type === 'info'
                               ? 'bg-blue-500/20 border-blue-500/30 text-blue-400'
                               : type === 'warning'
-                              ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400'
-                              : 'bg-[#22c55e]/20 border-[#22c55e]/30 text-[#22c55e]'
+                                ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400'
+                                : 'bg-[#22c55e]/20 border-[#22c55e]/30 text-[#22c55e]'
                             : 'bg-white/[0.03] border-white/[0.06] text-white/30 hover:bg-white/[0.06]'
-                        }`}
+                          }`}
                       >
                         {type === 'info' ? 'Thông tin' : type === 'warning' ? 'Cảnh báo' : 'Cập nhật'}
                       </button>
@@ -4117,13 +4089,12 @@ export default function TournamentDetailPage() {
                   <div key={ann._id || idx} className="p-4 rounded-xl bg-[#080b10] border border-white/[0.04]">
                     <div className="flex items-start justify-between gap-3 mb-2">
                       <h4 className="text-sm font-bold text-white">{ann.title}</h4>
-                      <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                        ann.type === 'warning'
+                      <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${ann.type === 'warning'
                           ? 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/20'
                           : ann.type === 'update'
-                          ? 'bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/20'
-                          : 'bg-blue-500/15 text-blue-400 border border-blue-500/20'
-                      }`}>
+                            ? 'bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/20'
+                            : 'bg-blue-500/15 text-blue-400 border border-blue-500/20'
+                        }`}>
                         {ann.type === 'warning' ? 'Cảnh báo' : ann.type === 'update' ? 'Cập nhật' : 'Thông tin'}
                       </span>
                     </div>
@@ -4162,7 +4133,7 @@ export default function TournamentDetailPage() {
       {showQrModal && (
         <div className="fixed inset-0 z-50 bg-[#080b10]/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-[#0f1419] border border-white/[0.08] p-8 rounded-2xl w-full max-w-sm text-center shadow-2xl relative">
-            
+
             {/* Close Button */}
             <button
               type="button"
@@ -4176,11 +4147,11 @@ export default function TournamentDetailPage() {
             </button>
 
             <h3 className="font-semibold text-white text-lg mb-6">Mã QR giải đấu</h3>
-            
+
             <div className="flex items-center justify-center p-4 bg-white rounded-xl mb-6 max-w-[240px] mx-auto">
               <img src={qrCode} alt="Spectator Live View QR" className="w-full" />
             </div>
-            
+
             <p className="text-xs text-white/50 mb-6 leading-relaxed">
               Quét mã QR bằng điện thoại hoặc máy chiếu để xem trực tiếp nhánh đấu realtime của giải đấu này.
             </p>
@@ -4208,7 +4179,7 @@ export default function TournamentDetailPage() {
       {showFeedbackModal && finishedMatchInfo && (
         <div className="fixed inset-0 z-[60] bg-[#080b10]/85 backdrop-blur-lg flex items-center justify-center p-4">
           <div className="bg-[#0f1419] border border-white/[0.08] rounded-2xl w-full max-w-md shadow-2xl relative overflow-hidden">
-            
+
             {/* Decorative top gradient */}
             <div className="h-1.5 w-full bg-gradient-to-r from-[#22c55e] via-[#3b82f6] to-[#a855f7]" />
 
@@ -4254,14 +4225,14 @@ export default function TournamentDetailPage() {
                       onMouseLeave={() => setFeedbackHover(0)}
                       className="group relative p-1 transition-transform duration-150 hover:scale-125 active:scale-95"
                     >
-                      <svg 
-                        width="32" 
-                        height="32" 
-                        viewBox="0 0 24 24" 
+                      <svg
+                        width="32"
+                        height="32"
+                        viewBox="0 0 24 24"
                         fill={(feedbackHover || feedbackRating) >= star ? '#facc15' : 'none'}
                         stroke={(feedbackHover || feedbackRating) >= star ? '#facc15' : '#ffffff30'}
-                        strokeWidth="1.5" 
-                        strokeLinecap="round" 
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
                         strokeLinejoin="round"
                         className="transition-all duration-200 drop-shadow-sm"
                         style={(feedbackHover || feedbackRating) >= star ? { filter: 'drop-shadow(0 0 6px rgba(250, 204, 21, 0.4))' } : {}}
