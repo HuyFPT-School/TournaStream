@@ -19,7 +19,7 @@ const {
 function setRefreshCookie(res, token) {
   res.cookie("refreshToken", token, {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: env.cookieSecure ? "none" : "lax",
     secure: env.cookieSecure,
     maxAge: env.refreshTokenExpiresDays * 24 * 60 * 60 * 1000,
   });
@@ -28,7 +28,7 @@ function setRefreshCookie(res, token) {
 function clearRefreshCookie(res) {
   res.clearCookie("refreshToken", {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: env.cookieSecure ? "none" : "lax",
     secure: env.cookieSecure,
   });
 }

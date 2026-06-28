@@ -379,7 +379,20 @@ export default function HomePage() {
   const [sessionUser, setSessionUser] = useState<any>(null);
 
   useEffect(() => {
-    setSessionUser(getSession());
+    const session = getSession();
+    setSessionUser(session);
+
+    if (session) {
+      import("@/app/lib/authStorage").then(async ({ refreshSession }) => {
+        try {
+          const res = await refreshSession();
+          setSessionUser(res.user);
+        } catch (err) {
+          console.error("Proactive session refresh failed:", err);
+          setSessionUser(null);
+        }
+      });
+    }
   }, []);
 
   useEffect(() => {

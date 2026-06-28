@@ -10,7 +10,7 @@ type SePayCheckoutResponse = {
 
 import { getApiBaseUrl, getAccessToken } from "./authStorage";
 
-async function requestJson<T>(path: string, options: RequestInit = {}) {
+async function requestJson<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getAccessToken();
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...options,
@@ -20,6 +20,37 @@ async function requestJson<T>(path: string, options: RequestInit = {}) {
       ...(options.headers || {}),
     },
   });
+
+  if (response.status === 401) {
+    try {
+      const { refreshSession } = await import("./authStorage");
+      const refreshResult = await refreshSession();
+      const newToken = refreshResult.accessToken;
+      
+      const retryResponse = await fetch(`${getApiBaseUrl()}${path}`, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...(newToken ? { "Authorization": `Bearer ${newToken}` } : {}),
+          ...(options.headers || {}),
+        },
+      });
+
+      if (!retryResponse.ok) {
+        throw new Error("Retry request failed after token refresh");
+      }
+
+      return (await retryResponse.json()) as T;
+    } catch (refreshErr) {
+      console.error("Session expired, logging out:", refreshErr);
+      const { clearSession } = await import("./authStorage");
+      clearSession();
+      if (typeof window !== "undefined") {
+        window.location.href = "/login?expired=1";
+      }
+      throw new Error("Session expired. Please log in again.");
+    }
+  }
 
   if (!response.ok) {
     let message = "Request failed";
