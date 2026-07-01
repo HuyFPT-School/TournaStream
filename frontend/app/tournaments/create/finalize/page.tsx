@@ -173,7 +173,7 @@ export default function FinalizeCreatePage() {
         isPublicRegistration: true,
         registrationOpen: true,
         maxTeams: data.maxTeams || 8,
-        teams: [],
+        teams: data.teams || [],
         bracketSeeded: false,
         shuffled: false,
         bracket: null,
@@ -360,6 +360,35 @@ export default function FinalizeCreatePage() {
 
       {/* Main Content */}
       <section className="relative z-10 max-w-4xl mx-auto px-6 py-16">
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-2 mb-8 text-sm text-white/60 overflow-x-auto pb-2">
+          <button className="text-white/40 hover:text-white transition-colors whitespace-nowrap">Gói dịch vụ</button>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
+            <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <button className="text-white/40 hover:text-white transition-colors whitespace-nowrap">Thông tin</button>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
+            <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <button className="text-white/40 hover:text-white transition-colors whitespace-nowrap">Danh sách đội</button>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
+            <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <button className="text-white/40 hover:text-white transition-colors whitespace-nowrap">Thành viên</button>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
+            <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <button className="text-[#22c55e] whitespace-nowrap font-semibold">Quản lý đội</button>
+          {!data.isPublicRegistration && data.sport !== 'battle_royale' && data.format !== 'league' && (
+            <>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
+                <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              <span className="text-white/40 whitespace-nowrap">Sắp xếp & Tạo đội</span>
+            </>
+          )}
+        </div>
+
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className="text-4xl font-black mb-2">Giải đấu đã sẵn sàng! 🎉</h1>
@@ -429,30 +458,67 @@ export default function FinalizeCreatePage() {
         {/* Team List */}
         <div className="mb-8">
           <h3 className="font-semibold mb-4">Danh sách đội ({tournament.teams.length})</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto">
-            {tournament.teams.map((team: any, idx: number) => (
-              <div key={team.id} className="p-3 rounded-lg bg-[#0f1419] border border-white/[0.06]">
-                <div className="font-semibold text-sm">{idx + 1}. {team.name}</div>
-                <div className="text-xs text-white/50 mt-1">{team.members.length} thành viên</div>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto pr-2">
+            {tournament.teams.map((team: any, idx: number) => {
+              const initials = team.name.slice(0, 2).toUpperCase();
+              const isEven = idx % 2 === 0;
+              const avatarBg = isEven
+                ? 'bg-gradient-to-br from-green-500/20 to-emerald-500/30 text-[#22c55e]'
+                : 'bg-gradient-to-br from-blue-500/20 to-indigo-500/30 text-blue-400';
+
+              return (
+                <div key={team.id} className="p-5 rounded-2xl bg-[#0f1419] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-200 flex items-start gap-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-sm tracking-tight ${avatarBg} border border-white/[0.06] flex-shrink-0`}>
+                    {initials}
+                  </div>
+                  <div className="min-w-0 space-y-2">
+                    <h4 className="font-extrabold text-white text-base truncate">{team.name}</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {team.members && team.members.length > 0 ? (
+                        team.members.map((m: any) => (
+                          <span key={m.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06] text-white/60 text-[10px] font-semibold">
+                            {m.image ? (
+                              <img src={m.image} className="w-4 h-4 rounded-full object-cover flex-shrink-0 border border-white/[0.08]" alt={m.name} />
+                            ) : (
+                              <span>👤</span>
+                            )}
+                            <span>{m.name}</span>
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-[10px] text-white/30 italic">Chưa đăng ký thành viên</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
         {/* CTA Buttons */}
         <div className="flex gap-4">
           <Link
-            href="/tournaments"
+            href="/tournaments/create/members"
             className="flex-1 px-6 py-3 rounded-lg border border-white/[0.06] text-white font-semibold hover:bg-white/[0.05] transition-all duration-200 text-center"
           >
-            Quay lại Giải đấu
+            Quay lại
           </Link>
-          <button
-            onClick={handleStartTournament}
-            className="flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200"
-          >
-            Bắt đầu Giải đấu
-          </button>
+          {(!data.isPublicRegistration && data.sport !== 'battle_royale' && data.format !== 'league') ? (
+            <button
+              onClick={() => router.push('/tournaments/create/bracket')}
+              className="flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200"
+            >
+              Tiếp tục
+            </button>
+          ) : (
+            <button
+              onClick={handleStartTournament}
+              className="flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200"
+            >
+              Bắt đầu Giải đấu
+            </button>
+          )}
         </div>
       </section>
     </main>

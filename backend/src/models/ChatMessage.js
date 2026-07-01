@@ -5,6 +5,7 @@ const chatMessageSchema = new mongoose.Schema(
     tournamentId: { type: String, required: true, index: true },
     userName: { type: String, required: true },
     message: { type: String, required: true, maxlength: 500 },
+    userId: { type: String, required: false },
     createdAt: { type: Date, default: Date.now },
   },
   { timestamps: false }
