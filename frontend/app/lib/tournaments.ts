@@ -65,8 +65,12 @@ export async function syncTournamentToBackend(tournamentData: any) {
 }
 
 export async function fetchTournamentFromBackend(id: string) {
-  return requestJson<any>(`/tournaments/${id}`, {
+  return requestJson<any>(`/tournaments/${id}?t=${Date.now()}`, {
     method: "GET",
+    headers: {
+      "Cache-Control": "no-cache",
+      "Pragma": "no-cache"
+    }
   });
 }
 
@@ -77,7 +81,11 @@ export async function fetchUserTournamentsFromBackend() {
 }
 
 export async function fetchLiveTournamentsFromBackend(limit = 8) {
-  return requestJson<any[]>(`/tournaments/live?limit=${limit}`, {
+  return requestJson<any[]>(`/tournaments/live?limit=${limit}&t=${Date.now()}`, {
     method: "GET",
+    headers: {
+      "Cache-Control": "no-cache",
+      "Pragma": "no-cache"
+    }
   });
 }

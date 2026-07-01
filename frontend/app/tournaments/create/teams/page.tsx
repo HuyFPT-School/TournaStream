@@ -9,9 +9,68 @@ export default function TeamsPage() {
   const router = useRouter();
   const { data, addTeam, removeTeam, loadTournamentData } = useTournament();
   const [teamName, setTeamName] = useState('');
+  const [teamLogo, setTeamLogo] = useState('');
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isPublicReg, setIsPublicReg] = useState(data.isPublicRegistration || false);
+
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError('Kích thước ảnh tối đa là 5MB');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadError(null);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setLogoPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    try {
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dt6uoyt1t';
+      const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default';
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', uploadPreset);
+
+      const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Không thể tải ảnh lên server Cloudinary');
+      }
+
+      const responseData = await response.json();
+      if (responseData.secure_url) {
+        setTeamLogo(responseData.secure_url);
+      } else {
+        throw new Error('Không nhận được URL ảnh từ Cloudinary');
+      }
+    } catch (err: any) {
+      console.error('Lỗi upload Cloudinary:', err);
+      setUploadError(err.message || 'Lỗi khi tải ảnh lên. Vui lòng thử lại.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setTeamLogo('');
+    setLogoPreview(null);
+    setUploadError(null);
+  };
 
   const maxTeams = data.packageId === 'free' ? 8 : data.packageId === 'basic' ? 16 : 32;
 
@@ -33,9 +92,13 @@ export default function TeamsPage() {
         id: Date.now().toString(),
         name: teamName,
         members: [],
+        logo: teamLogo || undefined,
       };
       addTeam(newTeam);
       setTeamName('');
+      setTeamLogo('');
+      setLogoPreview(null);
+      setUploadError(null);
       setShowForm(false);
     }
   };
@@ -48,7 +111,7 @@ export default function TeamsPage() {
     const len = data.teams.length;
     const format = data.format || 'single_elimination';
     const groupsCount = data.groupsCount || 1;
- 
+
     if (format === 'single_elimination') {
       return len >= 2 && isPowerOfTwo(len);
     }
@@ -63,7 +126,7 @@ export default function TeamsPage() {
     }
     return false;
   };
- 
+
   const handleContinue = () => {
     if (isPublicReg) {
       loadTournamentData({
@@ -150,6 +213,7 @@ export default function TeamsPage() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
             <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
+
           <span className="text-white/40 whitespace-nowrap">Quản lý đội</span>
           {data.sport !== 'battle_royale' && data.format !== 'league' && (
             <>
@@ -159,6 +223,7 @@ export default function TeamsPage() {
               <span className="text-white/40 whitespace-nowrap">Sắp xếp & Tạo đội</span>
             </>
           )}
+
         </div>
 
         {/* Header */}
@@ -178,14 +243,12 @@ export default function TeamsPage() {
             onClick={() => {
               setIsPublicReg(!isPublicReg);
             }}
-            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 focus:outline-none ${
-              isPublicReg ? 'bg-[#22c55e]' : 'bg-white/[0.1]'
-            }`}
+            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 focus:outline-none ${isPublicReg ? 'bg-[#22c55e]' : 'bg-white/[0.1]'
+              }`}
           >
             <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform duration-300 ${
-                isPublicReg ? 'translate-x-6' : 'translate-x-1'
-              }`}
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform duration-300 ${isPublicReg ? 'translate-x-6' : 'translate-x-1'
+                }`}
             />
           </button>
         </div>
@@ -252,9 +315,8 @@ export default function TeamsPage() {
                 if (errors.teamName) setErrors({ ...errors, teamName: '' });
               }}
               placeholder="VD: Team A, FC Barcelona..."
-              className={`w-full px-4 py-3 rounded-lg bg-[#080b10] border transition-all duration-200 text-white placeholder-white/30 focus:outline-none mb-3 ${
-                errors.teamName ? 'border-red-500' : 'border-white/[0.06] focus:border-[#22c55e]'
-              }`}
+              className={`w-full px-4 py-3 rounded-lg bg-[#080b10] border transition-all duration-200 text-white placeholder-white/30 focus:outline-none mb-3 ${errors.teamName ? 'border-red-500' : 'border-white/[0.06] focus:border-[#22c55e]'
+                }`}
               autoFocus
             />
             {errors.teamName && <p className="text-red-500 text-sm mb-3">{errors.teamName}</p>}
@@ -278,6 +340,7 @@ export default function TeamsPage() {
             </div>
           </div>
         ) : (
+
           <button
             onClick={() => setShowForm(true)}
             disabled={data.teams.length >= maxTeams}
@@ -303,6 +366,7 @@ export default function TeamsPage() {
               }
             </div>
           </div>
+
         )}
 
         {/* CTA Buttons */}

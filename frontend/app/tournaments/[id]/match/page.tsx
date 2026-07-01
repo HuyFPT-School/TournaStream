@@ -744,7 +744,7 @@ export default function LiveMatchPage() {
   }, [tournamentId, currentTournamentKey]);
 
   useEffect(() => {
-    if (!tournament || tournament.format === 'round_robin' || tournament.format === 'double_elimination' || tournament.format === 'league' || tournament.bracket?.rounds?.length) return;
+    if (!tournament || tournament.format === 'round_robin' || tournament.format === 'double_elimination' || tournament.format === 'league' || tournament.format === 'battle_royale' || tournament.bracket?.rounds?.length) return;
 
     const teams = getFallbackTeams(tournament);
     const bracket = buildInitialBracket(teams);
@@ -1726,14 +1726,30 @@ export default function LiveMatchPage() {
                 Đội tuyển thi đấu ({tournament.teams?.length || 0})
               </h5>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {(tournament.teams || []).map((team: any) => (
-                  <div key={team.id} className="p-3.5 rounded-xl bg-[#080b10] border border-white/[0.04] flex flex-col items-center justify-center text-center">
-                    <span className="font-extrabold text-xs text-white truncate max-w-full">{team.name}</span>
-                    <span className="text-[10px] text-white/30 mt-1 font-semibold">
-                      {team.members && team.members.length > 0 ? `${team.members.length} thành viên` : 'Chưa xếp đội hình'}
-                    </span>
-                  </div>
-                ))}
+                {(tournament.teams || []).map((team: any) => {
+                  const initials = team.name.slice(0, 2).toUpperCase();
+                  return (
+                    <div key={team.id} className="p-3.5 rounded-xl bg-[#080b10] border border-white/[0.04] flex flex-col items-center justify-center text-center gap-2">
+                      {team.logo ? (
+                        <img
+                          src={team.logo}
+                          className="w-10 h-10 rounded-full object-cover border border-white/10"
+                          alt={team.name}
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-500/20 to-emerald-500/30 text-[#22c55e] border border-white/[0.06] flex items-center justify-center font-bold text-xs uppercase">
+                          {initials}
+                        </div>
+                      )}
+                      <div className="min-w-0 max-w-full text-center">
+                        <div className="font-extrabold text-xs text-white truncate max-w-full">{team.name}</div>
+                        <div className="text-[10px] text-white/30 mt-1 font-semibold">
+                          {team.members && team.members.length > 0 ? `${team.members.length} TV` : 'Chưa xếp đ/h'}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1741,8 +1757,19 @@ export default function LiveMatchPage() {
           <div className="grid grid-cols-3 gap-6 mb-12">
             {/* Team 1 */}
             <div className="text-center">
-              <div className="mb-4">
-                <h2 className="text-2xl font-black mb-2">{team1?.name || 'Team 1'}</h2>
+              <div className="mb-4 flex flex-col items-center gap-2">
+                {team1?.logo ? (
+                  <img
+                    src={team1.logo}
+                    className="w-16 h-16 rounded-full object-cover border border-white/10"
+                    alt={team1.name}
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-green-500/20 to-emerald-500/30 text-[#22c55e] border border-white/[0.06] flex items-center justify-center font-black text-xl uppercase">
+                    {(team1?.name || 'T1').slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <h2 className="text-2xl font-black">{team1?.name || 'Team 1'}</h2>
                 {team1?.members && team1.members.length > 0 && (
                   <p className="text-sm text-white/60">{team1.members.length} thành viên</p>
                 )}
@@ -1819,8 +1846,19 @@ export default function LiveMatchPage() {
 
             {/* Team 2 */}
             <div className="text-center">
-              <div className="mb-4">
-                <h2 className="text-2xl font-black mb-2">{team2?.name || 'Team 2'}</h2>
+              <div className="mb-4 flex flex-col items-center gap-2">
+                {team2?.logo ? (
+                  <img
+                    src={team2.logo}
+                    className="w-16 h-16 rounded-full object-cover border border-white/10"
+                    alt={team2.name}
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-green-500/20 to-emerald-500/30 text-[#22c55e] border border-white/[0.06] flex items-center justify-center font-black text-xl uppercase">
+                    {(team2?.name || 'T2').slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <h2 className="text-2xl font-black">{team2?.name || 'Team 2'}</h2>
                 {team2?.members && team2.members.length > 0 && (
                   <p className="text-sm text-white/60">{team2.members.length} thành viên</p>
                 )}

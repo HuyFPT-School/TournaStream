@@ -7,6 +7,7 @@ export interface Team {
   id: string;
   name: string;
   members: Member[];
+  logo?: string;
 }
 
 export interface Member {

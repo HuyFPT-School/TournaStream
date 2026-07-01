@@ -229,6 +229,7 @@ export default function PackageSelectionPage() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
+
           <span>Quản lý đội</span>
           {(!data.sport || (data.sport !== 'battle_royale' && data.format !== 'league')) && (
             <>
@@ -238,6 +239,7 @@ export default function PackageSelectionPage() {
               <span>Sắp xếp & Tạo đội</span>
             </>
           )}
+
         </div>
 
         {/* Header */}
@@ -252,11 +254,10 @@ export default function PackageSelectionPage() {
             <div
               key={pkg.id}
               onClick={() => setSelectedPackage(pkg.id)}
-              className={`relative rounded-2xl border transition-all duration-300 cursor-pointer group overflow-hidden ${
-                selectedPackage === pkg.id
-                  ? 'border-[#22c55e] bg-[#1a1f2e] shadow-lg shadow-[#22c55e]/20'
-                  : 'border-white/[0.06] bg-[#0f1419] hover:border-white/[0.12]'
-              } ${pkg.highlighted ? 'md:scale-105 md:shadow-xl md:shadow-[#22c55e]/10' : ''}`}
+              className={`relative rounded-2xl border transition-all duration-300 cursor-pointer group overflow-hidden ${selectedPackage === pkg.id
+                ? 'border-[#22c55e] bg-[#1a1f2e] shadow-lg shadow-[#22c55e]/20'
+                : 'border-white/[0.06] bg-[#0f1419] hover:border-white/[0.12]'
+                } ${pkg.highlighted ? 'md:scale-105 md:shadow-xl md:shadow-[#22c55e]/10' : ''}`}
             >
               {pkg.highlighted && (
                 <div className="absolute top-0 right-0 px-3 py-1 bg-[#22c55e] text-[#080b10] text-xs font-bold rounded-bl-xl">
@@ -300,9 +301,8 @@ export default function PackageSelectionPage() {
                 </div>
 
                 {/* Selection Indicator */}
-                <div className={`w-full h-1 rounded-full transition-all duration-300 ${
-                  selectedPackage === pkg.id ? 'bg-[#22c55e]' : 'bg-white/[0.06]'
-                }`} />
+                <div className={`w-full h-1 rounded-full transition-all duration-300 ${selectedPackage === pkg.id ? 'bg-[#22c55e]' : 'bg-white/[0.06]'
+                  }`} />
               </div>
             </div>
           ))}
@@ -330,9 +330,8 @@ export default function PackageSelectionPage() {
           <button
             onClick={handleContinue}
             disabled={isLoading}
-            className={`flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200 ${
-              isLoading ? 'opacity-70 cursor-wait' : ''
-            }`}
+            className={`flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200 ${isLoading ? 'opacity-70 cursor-wait' : ''
+              }`}
           >
             {isLoading ? 'Đang tạo QR thanh toán...' : 'Tiếp tục'}
           </button>

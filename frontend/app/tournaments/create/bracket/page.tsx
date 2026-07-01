@@ -155,7 +155,7 @@ export default function BracketPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (data.format === 'league') {
+    if (data.format === 'league' || data.format === 'battle_royale') {
       router.replace('/tournaments/create/finalize');
       return;
     }

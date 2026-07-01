@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { fetchTournamentFromBackend } from '@/app/lib/tournaments';
 import { getPusherClient } from '@/app/lib/pusher';
-import { getApiBaseUrl } from '@/app/lib/authStorage';
+import { getApiBaseUrl, getSession } from '@/app/lib/authStorage';
 
 interface ChatMsg {
   _id: string;
@@ -403,6 +403,7 @@ function calculateBattleRoyaleStandings(teams: any[], matches: any[]) {
 interface LeagueStandingRow {
   teamId: string;
   teamName: string;
+  teamLogo?: string;
   matchesPlayed: number;
   wins: number;
   totalKills: number;
@@ -425,6 +426,7 @@ function calculateLeagueStandings(
       standingsMap[team.id] = {
         teamId: team.id,
         teamName: team.name || '',
+        teamLogo: team.logo || '',
         matchesPlayed: 0,
         wins: 0,
         totalKills: 0,
@@ -630,10 +632,69 @@ export default function TournamentLiveViewPage() {
   // Registration state
   const [showRegModal, setShowRegModal] = useState(false);
   const [regTeamName, setRegTeamName] = useState('');
+  const [regTeamLogo, setRegTeamLogo] = useState('');
+  const [regLogoPreview, setRegLogoPreview] = useState<string | null>(null);
+  const [isRegLogoUploading, setIsRegLogoUploading] = useState(false);
+  const [regLogoUploadError, setRegLogoUploadError] = useState<string | null>(null);
   const [regMembers, setRegMembers] = useState<{ name: string; image?: string | null; imagePreview?: string | null; isUploading?: boolean; uploadError?: string | null }[]>([{ name: '', image: null, imagePreview: null, isUploading: false, uploadError: null }]);
   const [regError, setRegError] = useState('');
   const [regSubmitting, setRegSubmitting] = useState(false);
   const [regSuccess, setRegSuccess] = useState(false);
+
+  const handleRegLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setRegLogoUploadError('Kích thước ảnh tối đa là 5MB');
+      return;
+    }
+
+    setIsRegLogoUploading(true);
+    setRegLogoUploadError(null);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setRegLogoPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    try {
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dt6uoyt1t';
+      const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default';
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', uploadPreset);
+
+      const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Không thể tải ảnh lên server Cloudinary');
+      }
+
+      const responseData = await response.json();
+      if (responseData.secure_url) {
+        setRegTeamLogo(responseData.secure_url);
+      } else {
+        throw new Error('Không nhận được URL ảnh từ Cloudinary');
+      }
+    } catch (err: any) {
+      console.error('Lỗi upload Cloudinary:', err);
+      setRegLogoUploadError(err.message || 'Lỗi khi tải ảnh lên. Vui lòng thử lại.');
+    } finally {
+      setIsRegLogoUploading(false);
+    }
+  };
+
+  const handleRemoveRegLogo = () => {
+    setRegTeamLogo('');
+    setRegLogoPreview(null);
+    setRegLogoUploadError(null);
+  };
 
   const handleRegisterTeamSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -647,9 +708,9 @@ export default function TournamentLiveViewPage() {
       return;
     }
     
-    // Check if any member image is still uploading
-    if (regMembers.some(m => m.isUploading)) {
-      setRegError('Vui lòng đợi quá trình tải ảnh đại diện hoàn tất');
+    // Check if any member image or team logo is still uploading
+    if (regMembers.some(m => m.isUploading) || isRegLogoUploading) {
+      setRegError('Vui lòng đợi quá trình tải ảnh đại diện hoặc logo hoàn tất');
       return;
     }
 
@@ -669,6 +730,7 @@ export default function TournamentLiveViewPage() {
         },
         body: JSON.stringify({
           teamName: regTeamName,
+          logo: regTeamLogo || null,
           members: formattedMembers,
         }),
       });
@@ -679,6 +741,9 @@ export default function TournamentLiveViewPage() {
           setShowRegModal(false);
           setRegSuccess(false);
           setRegTeamName('');
+          setRegTeamLogo('');
+          setRegLogoPreview(null);
+          setRegLogoUploadError(null);
           setRegMembers([{ name: '', image: null, imagePreview: null, isUploading: false, uploadError: null }]);
         }, 2000);
       } else {
@@ -791,18 +856,19 @@ export default function TournamentLiveViewPage() {
   };
 
   useEffect(() => {
-    if (tournament && tournament.format === 'league' && !selectedLeagueMatchId) {
-      const activeMatch = tournament.leagueMatches?.find((m: any) => !m.isFinished);
+    if (tournament && (tournament.format === 'league' || tournament.format === 'battle_royale') && !selectedLeagueMatchId) {
+      const matchesList = tournament.leagueMatches || tournament.matches || [];
+      const activeMatch = matchesList.find((m: any) => !m.isFinished);
       if (activeMatch) {
         setSelectedLeagueMatchId(activeMatch.id);
-      } else if (tournament.leagueMatches?.length > 0) {
-        setSelectedLeagueMatchId(tournament.leagueMatches[0].id);
+      } else if (matchesList.length > 0) {
+        setSelectedLeagueMatchId(matchesList[0].id);
       }
     }
   }, [tournament, selectedLeagueMatchId]);
 
   useEffect(() => {
-    if (tournament && tournament.format === 'league' && selectedLeagueMatchId) {
+    if (tournament && (tournament.format === 'league' || tournament.format === 'battle_royale') && selectedLeagueMatchId) {
       setSelectedMatchKey(selectedLeagueMatchId);
     }
   }, [selectedLeagueMatchId, tournament]);
@@ -1074,16 +1140,56 @@ export default function TournamentLiveViewPage() {
 
   useEffect(() => {
     const loadTournament = async () => {
+      let loadedTournament = null;
       try {
         const data = await fetchTournamentFromBackend(tournamentId);
-        const migrated = migrateTournamentData(data);
+        if (data) {
+          loadedTournament = data;
+        }
+      } catch (err) {
+        console.error('Error fetching tournament from backend, fallback to local storage:', err);
+      }
+
+      if (!loadedTournament) {
+        const session = getSession();
+        const tournamentsKey = session ? `tournaments_${session.id}` : 'tournaments';
+        const currentTournamentKey = session ? `currentTournament_${session.id}` : 'currentTournament';
+        
+        const savedList = localStorage.getItem(tournamentsKey);
+        if (savedList) {
+          try {
+            const list = JSON.parse(savedList);
+            const tourn = list.find((t: any) => t.id === tournamentId);
+            if (tourn) {
+              loadedTournament = tourn;
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        }
+
+        if (!loadedTournament) {
+          const savedCurrent = localStorage.getItem(currentTournamentKey);
+          if (savedCurrent) {
+            try {
+              const tourn = JSON.parse(savedCurrent);
+              if (tourn.id === tournamentId) {
+                loadedTournament = tourn;
+              }
+            } catch (e) {
+              console.error(e);
+            }
+          }
+        }
+      }
+
+      if (loadedTournament) {
+        const migrated = migrateTournamentData(loadedTournament);
         setTournament(migrated);
         
         const link = `${window.location.origin}/tournaments/${tournamentId}/live`;
         setShareLink(link);
         setQrCode(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(link)}`);
-      } catch (err) {
-        console.error('Error fetching tournament from backend:', err);
       }
     };
 
@@ -1191,6 +1297,11 @@ export default function TournamentLiveViewPage() {
   const getMatchLabel = (key: string | null) => {
     if (!key) return '';
     const parts = key.split('-');
+    if (key.startsWith('league-') || key.startsWith('m-') || key.startsWith('br-')) {
+      const matchesList = tournament.leagueMatches || tournament.matches || [];
+      const m = matchesList.find((x: any) => x.id === key);
+      return m?.name || 'Trận đấu';
+    }
     if (key.startsWith('g-')) {
       const gIdx = parseInt(parts[1], 10) || 0;
       const mIdx = parseInt(parts[2], 10) || 0;
@@ -1230,8 +1341,9 @@ export default function TournamentLiveViewPage() {
     let roundIndex = 0;
     let matchIndex = 0;
 
-    if (selectedMatchKey.startsWith('league-') || selectedMatchKey.startsWith('m-')) {
-      dbMatch = tournament.leagueMatches?.find((m: any) => m.id === selectedMatchKey);
+    if (selectedMatchKey.startsWith('league-') || selectedMatchKey.startsWith('m-') || selectedMatchKey.startsWith('br-')) {
+      const matchesList = tournament.leagueMatches || tournament.matches || [];
+      dbMatch = matchesList.find((m: any) => m.id === selectedMatchKey);
       if (!dbMatch) return null;
 
       const liveState = tournament.matchStates?.[selectedMatchKey];
@@ -1363,10 +1475,11 @@ export default function TournamentLiveViewPage() {
 
   const getTournamentWinnerName = () => {
     if (!tournament) return null;
-    if (tournament.format === 'league') {
-      const allFinished = (tournament.leagueMatches || []).length > 0 && tournament.leagueMatches.every((m: any) => m.isFinished);
+    if (tournament.format === 'league' || tournament.format === 'battle_royale') {
+      const matchesList = tournament.leagueMatches || tournament.matches || [];
+      const allFinished = matchesList.length > 0 && matchesList.every((m: any) => m.isFinished);
       if (!allFinished) return null;
-      const standings = calculateLeagueStandings(tournament.teams, tournament.leagueMatches, tournament.pointRules || {});
+      const standings = calculateLeagueStandings(tournament.teams, matchesList, tournament.pointRules || {});
       if (standings.length > 0) {
         return standings[0].teamName;
       }
@@ -1564,9 +1677,17 @@ export default function TournamentLiveViewPage() {
 
                       return (
                         <div key={team.id} className="p-5 rounded-2xl bg-[#0f1419] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-200 flex items-start gap-4">
-                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-sm tracking-tight ${avatarBg} border border-white/[0.06] flex-shrink-0`}>
-                            {initials}
-                          </div>
+                          {team.logo ? (
+                            <img
+                              src={team.logo}
+                              className="w-12 h-12 rounded-xl object-cover border border-white/[0.06] flex-shrink-0"
+                              alt={team.name}
+                            />
+                          ) : (
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-sm tracking-tight ${avatarBg} border border-white/[0.06] flex-shrink-0`}>
+                              {initials}
+                            </div>
+                          )}
                           <div className="min-w-0 space-y-2">
                             <h4 className="font-extrabold text-white text-base truncate">{team.name}</h4>
                             <div className="flex flex-wrap gap-1.5">
@@ -1615,18 +1736,10 @@ export default function TournamentLiveViewPage() {
                         <tr className="border-b border-white/[0.06] text-white/40">
                           <th className="py-2.5 px-2 text-center w-10">Hạng</th>
                           <th className="py-2.5 px-2">Đội tuyển</th>
-                          <th className="py-2.5 px-1 text-center">Trận</th>
-                          {tournament.format === 'battle_royale' ? (
+                          {tournament.format === 'battle_royale' && (
                             <>
-                              <th className="py-2.5 px-1 text-center font-bold text-white">Top 1</th>
-                              <th className="py-2.5 px-1 text-center font-bold text-white">Kills</th>
-                              <th className="py-2.5 px-1 text-center font-bold text-white">Hạng</th>
-                              <th className="py-2.5 px-1 text-center font-bold text-white">Kill</th>
-                            </>
-                          ) : (
-                            <>
-                              <th className="py-2.5 px-1 text-center">Top 1</th>
-                              <th className="py-2.5 px-1 text-center">Kills</th>
+                              <th className="py-2.5 px-1 text-center font-bold text-white">Điểm Hạng</th>
+                              <th className="py-2.5 px-1 text-center font-bold text-white">Điểm Kill</th>
                             </>
                           )}
                           <th className="py-2.5 px-2 text-center font-bold text-white">Tổng</th>
@@ -1654,8 +1767,19 @@ export default function TournamentLiveViewPage() {
                                   {medal}
                                 </span>
                               </td>
-                              <td className="py-2.5 px-2 font-bold text-white flex items-center gap-1.5 min-w-[80px] max-w-[140px] truncate">
-                                <span className="truncate">{row.teamName}</span>
+                              <td className="py-2.5 px-2 font-bold text-white flex items-center gap-2 min-w-[100px] max-w-[160px]">
+                                {row.teamLogo ? (
+                                  <img
+                                    src={row.teamLogo}
+                                    className="w-6 h-6 rounded-full object-cover border border-white/10 flex-shrink-0"
+                                    alt={row.teamName}
+                                  />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-green-500/20 to-emerald-500/30 text-[#22c55e] border border-white/[0.06] flex items-center justify-center font-bold text-[9px] flex-shrink-0">
+                                    {row.teamName.slice(0, 2).toUpperCase()}
+                                  </div>
+                                )}
+                                <span className="truncate flex-1">{row.teamName}</span>
                                 {row.rankChange > 0 && (
                                   <span className="text-green-500 text-[8px] flex items-center font-black">
                                     ▲{row.rankChange}
@@ -1667,18 +1791,10 @@ export default function TournamentLiveViewPage() {
                                   </span>
                                 )}
                               </td>
-                              <td className="py-2.5 px-1 text-center font-medium text-white/50">{row.matchesPlayed}</td>
-                              {tournament.format === 'battle_royale' ? (
+                              {tournament.format === 'battle_royale' && (
                                 <>
-                                  <td className="py-2.5 px-1 text-center text-green-500 font-bold">{row.wins}</td>
-                                  <td className="py-2.5 px-1 text-center font-medium text-white/50">{row.totalKills}</td>
                                   <td className="py-2.5 px-1 text-center font-medium text-blue-400">{row.placementPoints}</td>
                                   <td className="py-2.5 px-1 text-center font-medium text-red-400">{row.killPoints}</td>
-                                </>
-                              ) : (
-                                <>
-                                  <td className="py-2.5 px-1 text-center text-green-500 font-bold">{row.wins}</td>
-                                  <td className="py-2.5 px-1 text-center font-medium text-white/50">{row.totalKills}</td>
                                 </>
                               )}
                               <td className="py-2.5 px-2 text-center font-black text-[#22c55e] text-xs bg-[#22c55e]/5">
@@ -2160,6 +2276,52 @@ export default function TournamentLiveViewPage() {
                   />
                 </div>
 
+                <div className="space-y-2">
+                  <label className="text-xs font-black tracking-wider text-white/40 uppercase">Logo đội tuyển</label>
+                  <div className="flex items-center gap-4">
+                    <div className="flex-shrink-0">
+                      {regLogoPreview ? (
+                        <div className="relative w-14 h-14 rounded-full border border-white/[0.12] overflow-hidden group/logo">
+                          <img src={regLogoPreview} className="w-full h-full object-cover" alt="Preview logo" />
+                          <button
+                            type="button"
+                            onClick={handleRemoveRegLogo}
+                            className="absolute inset-0 bg-black/60 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center text-white text-[9px] font-bold transition-opacity"
+                          >
+                            Xóa
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-14 h-14 rounded-full bg-white/[0.02] border border-dashed border-white/[0.12] flex items-center justify-center text-white/20 text-[9px] text-center p-1.5 font-medium">
+                          Không logo
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex-1">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="reg-team-logo-upload"
+                        onChange={handleRegLogoChange}
+                        className="hidden"
+                        disabled={isRegLogoUploading}
+                      />
+                      <label
+                        htmlFor="reg-team-logo-upload"
+                        className={`inline-flex items-center justify-center px-3.5 py-2 rounded-lg border border-white/[0.08] hover:bg-white/[0.04] text-xs font-bold cursor-pointer transition-all ${
+                          isRegLogoUploading ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                      >
+                        {isRegLogoUploading ? 'Đang tải...' : 'Chọn logo'}
+                      </label>
+                      {regLogoUploadError && (
+                        <p className="text-[10px] text-red-500 mt-1 font-medium">{regLogoUploadError}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-black tracking-wider text-white/40 uppercase">Danh sách thành viên</label>
@@ -2309,7 +2471,7 @@ export default function TournamentLiveViewPage() {
       )}
 
       {/* Match Details Modal Overlay */}
-      {selectedMatchKey && selectedDetails && !selectedMatchKey.startsWith('league-') && !selectedMatchKey.startsWith('m-') && (
+      {selectedMatchKey && selectedDetails && !selectedMatchKey.startsWith('league-') && !selectedMatchKey.startsWith('m-') && !selectedMatchKey.startsWith('br-') && (
         <div className="fixed inset-0 z-50 bg-[#080b10]/85 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-[#0f1419] border border-white/[0.08] p-6 rounded-2xl w-full max-w-2xl shadow-2xl relative max-h-[90vh] overflow-y-auto animate-scale-in">
             
