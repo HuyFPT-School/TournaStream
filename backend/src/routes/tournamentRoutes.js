@@ -10,6 +10,8 @@ const {
   getAnnouncements,
   postAnnouncement,
   registerTeam,
+  blockChatUser,
+  unblockChatUser,
 } = require("../controllers/tournamentController");
 const { requireAuth } = require("../middlewares/auth");
 
@@ -25,6 +27,8 @@ tournamentRoutes.post("/:id/register-team", registerTeam); // Public registratio
 // Chat - open to everyone
 tournamentRoutes.get("/:id/chat", getChatMessages);
 tournamentRoutes.post("/:id/chat", postChatMessage);
+tournamentRoutes.post("/:id/chat/block", requireAuth, blockChatUser);
+tournamentRoutes.post("/:id/chat/unblock", requireAuth, unblockChatUser);
 
 // Announcements - read is open, post requires auth
 tournamentRoutes.get("/:id/announcements", getAnnouncements);

@@ -1,7 +1,7 @@
 const { Tournament } = require("../models/Tournament");
 const { ChatMessage } = require("../models/ChatMessage");
 const { Announcement } = require("../models/Announcement");
-const { triggerTournamentUpdate, triggerMatchSignaling, triggerChatMessage, triggerAnnouncement } = require("../services/pusherService");
+const { triggerTournamentUpdate, triggerMatchSignaling, triggerChatMessage, triggerAnnouncement, triggerChatModeration } = require("../services/pusherService");
 
 async function upsertTournament(req, res) {
   try {
@@ -117,7 +117,7 @@ async function getChatMessages(req, res) {
 async function postChatMessage(req, res) {
   try {
     const { id } = req.params;
-    const { userName, message } = req.body;
+    const { userName, message, userId } = req.body;
 
     if (!userName || !message) {
       return res.status(400).json({ message: "userName and message are required" });
@@ -126,10 +126,19 @@ async function postChatMessage(req, res) {
       return res.status(400).json({ message: "Message too long (max 500 chars)" });
     }
 
+    // Check if user is blocked
+    const tournament = await Tournament.findOne({ id });
+    if (tournament && tournament.blockedChatUserIds && userId) {
+      if (tournament.blockedChatUserIds.includes(userId)) {
+        return res.status(403).json({ message: "Bạn đã bị chặn chat trong giải đấu này" });
+      }
+    }
+
     const chatMsg = await ChatMessage.create({
       tournamentId: id,
       userName: userName.trim().substring(0, 50),
       message: message.trim(),
+      userId: userId || "",
     });
 
     try {
@@ -261,6 +270,101 @@ async function registerTeam(req, res) {
   }
 }
 
+async function blockChatUser(req, res) {
+  try {
+    const { id } = req.params;
+    const { userId, userName } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ message: "userId is required" });
+    }
+
+    const tournament = await Tournament.findOne({ id });
+    if (!tournament) {
+      return res.status(404).json({ message: "Tournament not found" });
+    }
+
+    const blockedList = tournament.blockedChatUserIds || [];
+    const blockedNames = tournament.blockedChatUserNames || [];
+
+    if (!blockedList.includes(userId)) {
+      blockedList.push(userId);
+      blockedNames.push(userName || "Người dùng ẩn danh");
+    }
+
+    tournament.blockedChatUserIds = blockedList;
+    tournament.blockedChatUserNames = blockedNames;
+    tournament.updatedAt = new Date();
+    await tournament.save();
+
+    // Delete all chat messages from this user in this tournament
+    await ChatMessage.deleteMany({ tournamentId: id, userId });
+
+    // Trigger Pusher update for chat moderation
+    try {
+      await triggerChatModeration(id, {
+        action: "block",
+        userId,
+        userName,
+      });
+      await triggerTournamentUpdate(id, tournament);
+    } catch (err) {
+      console.error("Failed to trigger Pusher chat moderation:", err);
+    }
+
+    return res.status(200).json({ success: true, tournament });
+  } catch (error) {
+    console.error("Error blocking chat user:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+}
+
+async function unblockChatUser(req, res) {
+  try {
+    const { id } = req.params;
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ message: "userId is required" });
+    }
+
+    const tournament = await Tournament.findOne({ id });
+    if (!tournament) {
+      return res.status(404).json({ message: "Tournament not found" });
+    }
+
+    let blockedList = tournament.blockedChatUserIds || [];
+    let blockedNames = tournament.blockedChatUserNames || [];
+
+    const index = blockedList.indexOf(userId);
+    if (index > -1) {
+      blockedList.splice(index, 1);
+      blockedNames.splice(index, 1);
+    }
+
+    tournament.blockedChatUserIds = blockedList;
+    tournament.blockedChatUserNames = blockedNames;
+    tournament.updatedAt = new Date();
+    await tournament.save();
+
+    // Trigger Pusher update for chat moderation
+    try {
+      await triggerChatModeration(id, {
+        action: "unblock",
+        userId,
+      });
+      await triggerTournamentUpdate(id, tournament);
+    } catch (err) {
+      console.error("Failed to trigger Pusher chat moderation:", err);
+    }
+
+    return res.status(200).json({ success: true, tournament });
+  } catch (error) {
+    console.error("Error unblocking chat user:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+}
+
 module.exports = {
   upsertTournament,
   getTournament,
@@ -272,4 +376,6 @@ module.exports = {
   getAnnouncements,
   postAnnouncement,
   registerTeam,
+  blockChatUser,
+  unblockChatUser,
 };

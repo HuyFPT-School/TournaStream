@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { fetchTournamentFromBackend, syncTournamentToBackend } from '@/app/lib/tournaments';
 import { getSession, getApiBaseUrl, getAccessToken } from '@/app/lib/authStorage';
 import { getPusherClient } from '@/app/lib/pusher';
@@ -1497,6 +1497,11 @@ export default function TournamentDetailPage() {
   const [announcementType, setAnnouncementType] = useState<'info' | 'warning' | 'update'>('info');
   const [announcementPosting, setAnnouncementPosting] = useState(false);
 
+  // Chat moderation states
+  const [adminChatMessages, setAdminChatMessages] = useState<any[]>([]);
+  const [adminChatLoading, setAdminChatLoading] = useState(false);
+  const [chatModerationSubmitting, setChatModerationSubmitting] = useState<string | null>(null);
+
   const session = getSession();
   const tournamentsKey = session ? `tournaments_${session.id}` : 'tournaments';
   const currentTournamentKey = session ? `currentTournament_${session.id}` : 'currentTournament';
@@ -1557,6 +1562,83 @@ export default function TournamentDetailPage() {
       console.error('Error fetching announcements:', err);
     } finally {
       setAnnouncementsLoading(false);
+    }
+  };
+
+  const fetchAdminChatMessages = useCallback(async () => {
+    if (!tournamentId) return;
+    setAdminChatLoading(true);
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/tournaments/${tournamentId}/chat`);
+      if (res.ok) {
+        const data = await res.json();
+        setAdminChatMessages(data);
+      }
+    } catch (err) {
+      console.error('Error fetching admin chat:', err);
+    } finally {
+      setAdminChatLoading(false);
+    }
+  }, [tournamentId]);
+
+  const handleBlockUser = async (userId: string, userName: string) => {
+    if (!userId || !tournamentId) return;
+    if (!window.confirm(`Bạn có chắc chắn muốn chặn người dùng "${userName}" không? Tất cả tin nhắn của họ trong giải đấu này sẽ bị xóa.`)) return;
+
+    setChatModerationSubmitting(userId);
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/tournaments/${tournamentId}/chat/block`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getAccessToken()}`,
+        },
+        body: JSON.stringify({ userId, userName }),
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        if (result.tournament) {
+          setTournament(migrateTournamentData(result.tournament));
+        }
+        setAdminChatMessages(prev => prev.filter(m => m.userId !== userId));
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || 'Không thể chặn người dùng.');
+      }
+    } catch (err) {
+      console.error('Error blocking user:', err);
+    } finally {
+      setChatModerationSubmitting(null);
+    }
+  };
+
+  const handleUnblockUser = async (userId: string) => {
+    if (!userId || !tournamentId) return;
+    setChatModerationSubmitting(userId);
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/tournaments/${tournamentId}/chat/unblock`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getAccessToken()}`,
+        },
+        body: JSON.stringify({ userId }),
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        if (result.tournament) {
+          setTournament(migrateTournamentData(result.tournament));
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || 'Không thể bỏ chặn.');
+      }
+    } catch (err) {
+      console.error('Error unblocking user:', err);
+    } finally {
+      setChatModerationSubmitting(null);
     }
   };
 
@@ -1686,7 +1768,33 @@ export default function TournamentDetailPage() {
     loadTournament();
 
     fetchAnnouncements();
-  }, [tournamentId, currentTournamentKey, tournamentsKey]);
+    fetchAdminChatMessages();
+  }, [tournamentId, currentTournamentKey, tournamentsKey, fetchAdminChatMessages]);
+
+  useEffect(() => {
+    if (!tournamentId) return;
+    const pusher = getPusherClient();
+    if (!pusher) return;
+    const channel = pusher.subscribe(String(tournamentId));
+
+    const handleChatMsg = (data: any) => {
+      setAdminChatMessages(prev => [...prev.slice(-99), data]);
+    };
+
+    const handleChatModeration = (data: any) => {
+      if (data.action === 'block') {
+        setAdminChatMessages(prev => prev.filter((m: any) => m.userId !== data.userId));
+      }
+    };
+
+    channel.bind('chat_message', handleChatMsg);
+    channel.bind('chat_moderation', handleChatModeration);
+
+    return () => {
+      channel.unbind('chat_message', handleChatMsg);
+      channel.unbind('chat_moderation', handleChatModeration);
+    };
+  }, [tournamentId]);
 
   useEffect(() => {
     // If the user is the owner AND the tournament has already started (bracket seeded),
@@ -2282,6 +2390,40 @@ export default function TournamentDetailPage() {
       await syncTournamentToBackend(updatedTournament);
     } catch (err) {
       console.error('Error toggling registrationOpen:', err);
+    }
+  };
+
+  const handleLockTeams = async () => {
+    if (!tournament) return;
+    if (!window.confirm("Bạn có chắc chắn muốn chốt danh sách đội tham gia? Cổng đăng ký trực tuyến sẽ được đóng lại và danh sách đội sẽ được xác nhận chính thức.")) return;
+    
+    const updatedTournament = {
+      ...tournament,
+      registrationOpen: false,
+      teamsLocked: true,
+    };
+    setTournament(updatedTournament);
+    localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
+    try {
+      await syncTournamentToBackend(updatedTournament);
+    } catch (err) {
+      console.error('Error locking teams:', err);
+    }
+  };
+
+  const handleUnlockTeams = async () => {
+    if (!tournament) return;
+    const updatedTournament = {
+      ...tournament,
+      registrationOpen: true,
+      teamsLocked: false,
+    };
+    setTournament(updatedTournament);
+    localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
+    try {
+      await syncTournamentToBackend(updatedTournament);
+    } catch (err) {
+      console.error('Error unlocking teams:', err);
     }
   };
 
@@ -2913,28 +3055,60 @@ export default function TournamentDetailPage() {
           {!tournament.bracketSeeded && tournament.isPublicRegistration ? (
             <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
               {/* Registration Toggle Panel */}
-              <div className="flex items-center justify-between p-6 rounded-2xl bg-[#0f1419] border border-white/[0.06] shadow-xl">
+              <div className="flex flex-col md:flex-row md:items-center justify-between p-6 rounded-2xl bg-[#0f1419] border border-white/[0.06] shadow-xl gap-4">
                 <div className="space-y-1.5">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#22c55e]/10 border border-[#22c55e]/20 text-[#22c55e] text-[10px] font-black uppercase tracking-wider">
-                    <span className={`w-1.5 h-1.5 rounded-full ${tournament.registrationOpen ? 'bg-[#22c55e] animate-pulse' : 'bg-red-500'}`} />
-                    {tournament.registrationOpen ? 'Đang mở đăng ký trực tuyến' : 'Đã đóng đăng ký trực tuyến'}
-                  </span>
+                  {tournament.teamsLocked ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-black uppercase tracking-wider">
+                      🔒 Đã chốt đội tham gia
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#22c55e]/10 border border-[#22c55e]/20 text-[#22c55e] text-[10px] font-black uppercase tracking-wider">
+                      <span className={`w-1.5 h-1.5 rounded-full ${tournament.registrationOpen ? 'bg-[#22c55e] animate-pulse' : 'bg-red-500'}`} />
+                      {tournament.registrationOpen ? 'Đang mở đăng ký trực tuyến' : 'Đã đóng đăng ký trực tuyến'}
+                    </span>
+                  )}
                   <h2 className="text-xl font-black text-white">Quản lý Cổng Đăng ký</h2>
-                  <p className="text-xs text-white/50">Cho phép các đội tự đăng ký tên đội và thành viên ngoài trang Live</p>
+                  <p className="text-xs text-white/50">
+                    {tournament.teamsLocked 
+                      ? 'Danh sách đội tham gia đã được chốt chính thức. Không nhận thêm đăng ký mới.' 
+                      : 'Cho phép các đội tự đăng ký tên đội và thành viên ngoài trang Live'}
+                  </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleToggleRegistration}
-                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 focus:outline-none ${
-                    tournament.registrationOpen ? 'bg-[#22c55e]' : 'bg-white/[0.1]'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform duration-300 ${
-                      tournament.registrationOpen ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
+                
+                <div className="flex items-center gap-3 self-end md:self-center">
+                  {tournament.teamsLocked ? (
+                    <button
+                      type="button"
+                      onClick={handleUnlockTeams}
+                      className="px-4 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white text-xs font-black uppercase tracking-wider transition-all duration-200"
+                    >
+                      🔓 Mở lại cổng đăng ký
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleLockTeams}
+                        className="px-4 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-400 text-xs font-black uppercase tracking-wider transition-all duration-200"
+                      >
+                        🔒 Chốt đội tham gia
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleToggleRegistration}
+                        className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 focus:outline-none ${
+                          tournament.registrationOpen ? 'bg-[#22c55e]' : 'bg-white/[0.1]'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform duration-300 ${
+                            tournament.registrationOpen ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
 
               {/* Seeding & Kickoff Controls */}
@@ -3067,13 +3241,15 @@ export default function TournamentDetailPage() {
                                 <span className="text-[10px] text-white/40">Hạt giống #{idx + 1}</span>
                               </div>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveTeam(team.id)}
-                              className="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-[10px] font-black uppercase tracking-wider transition-all"
-                            >
-                              Loại bỏ
-                            </button>
+                            {!tournament.teamsLocked && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveTeam(team.id)}
+                                className="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-[10px] font-black uppercase tracking-wider transition-all"
+                              >
+                                Loại bỏ
+                              </button>
+                            )}
                           </div>
                           <div className="flex flex-wrap gap-1.5">
                             {team.members && team.members.length > 0 ? (
@@ -4152,6 +4328,102 @@ export default function TournamentDetailPage() {
                 </svg>
                 Làm mới
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ====== Chat Moderation Section (Owner only) ====== */}
+        {isOwner && (
+          <div className="mt-8 bg-[#0f1419] border border-white/[0.06] rounded-2xl p-8 max-w-2xl mx-auto shadow-2xl space-y-8">
+            <div>
+              <h3 className="text-sm font-black tracking-widest text-white/50 uppercase mb-6 pb-2 border-b border-white/[0.04] flex items-center justify-between">
+                <span>Quản lý Chat Trực tiếp</span>
+                <button
+                  type="button"
+                  onClick={fetchAdminChatMessages}
+                  className="px-2 py-1 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white/60 text-[10px] font-bold transition-all flex items-center gap-1 normal-case tracking-normal"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <polyline points="23 4 23 10 17 10" />
+                    <polyline points="1 20 1 14 7 14" />
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                  </svg>
+                  Làm mới
+                </button>
+              </h3>
+
+              {adminChatLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-[#22c55e] border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : adminChatMessages.length === 0 ? (
+                <div className="text-center py-8 bg-[#080b10]/40 rounded-xl border border-white/[0.04]">
+                  <p className="text-white/30 text-xs">Chưa có tin nhắn nào trong kênh chat.</p>
+                </div>
+              ) : (
+                <div className="space-y-3.5 max-h-96 overflow-y-auto pr-2">
+                  {adminChatMessages.map((msg: any, idx: number) => {
+                    const isUserBlocked = (tournament?.blockedChatUserIds || []).includes(msg.userId);
+
+                    return (
+                      <div key={msg._id || idx} className="p-3.5 rounded-xl bg-[#080b10] border border-white/[0.04] flex items-start justify-between gap-4">
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-xs text-[#22c55e]">{msg.userName}</span>
+                            {msg.userId && (
+                              <span className="text-[9px] text-white/20 font-mono font-normal">({msg.userId.substring(0, 10)}...)</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-white/70 leading-relaxed break-words">{msg.message}</p>
+                        </div>
+                        {msg.userId && !isUserBlocked && (
+                          <button
+                            type="button"
+                            disabled={chatModerationSubmitting === msg.userId}
+                            onClick={() => handleBlockUser(msg.userId, msg.userName)}
+                            className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-40"
+                          >
+                            🚫 Chặn
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h3 className="text-sm font-black tracking-widest text-white/50 uppercase mb-4 pb-2 border-b border-white/[0.04]">
+                Danh sách người bị chặn
+              </h3>
+              {(!tournament?.blockedChatUserIds || tournament.blockedChatUserIds.length === 0) ? (
+                <div className="text-center py-4 bg-[#080b10]/40 rounded-xl border border-white/[0.04]">
+                  <p className="text-white/30 text-xs">Chưa chặn người dùng nào.</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                  {tournament.blockedChatUserIds.map((userId: string, idx: number) => {
+                    const name = tournament.blockedChatUserNames?.[idx] || 'Người dùng ẩn danh';
+                    return (
+                      <div key={userId} className="px-4 py-2.5 rounded-xl bg-[#080b10] border border-white/[0.04] flex items-center justify-between gap-4">
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold text-white block truncate">{name}</span>
+                          <span className="text-[9px] text-white/30 font-mono font-normal block truncate">{userId}</span>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={chatModerationSubmitting === userId}
+                          onClick={() => handleUnblockUser(userId)}
+                          className="px-2.5 py-1 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white/70 hover:text-white text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-40"
+                        >
+                          🔓 Bỏ chặn
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}

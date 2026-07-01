@@ -46,11 +46,7 @@ export default function MembersPage() {
       return;
     }
 
-    if (data.format === 'league') {
-      router.push('/tournaments/create/finalize');
-    } else {
-      router.push('/tournaments/create/bracket');
-    }
+    router.push('/tournaments/create/finalize');
   };
 
   return (
@@ -101,11 +97,19 @@ export default function MembersPage() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
             <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          <button className="text-[#22c55e] whitespace-nowrap">Thành viên</button>
+          <button className="text-[#22c55e] whitespace-nowrap font-semibold">Thành viên</button>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
             <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          <span className="text-white/40 whitespace-nowrap">Sắp xếp & Tạo</span>
+          <span className="text-white/40 whitespace-nowrap">Quản lý đội</span>
+          {data.sport !== 'battle_royale' && data.format !== 'league' && (
+            <>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
+                <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              <span className="text-white/40 whitespace-nowrap">Sắp xếp & Tạo đội</span>
+            </>
+          )}
         </div>
 
         {/* Header */}

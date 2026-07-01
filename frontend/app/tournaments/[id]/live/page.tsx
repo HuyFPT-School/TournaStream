@@ -12,6 +12,7 @@ interface ChatMsg {
   tournamentId: string;
   userName: string;
   message: string;
+  userId?: string;
   createdAt: string;
 }
 
@@ -620,6 +621,8 @@ export default function TournamentLiveViewPage() {
   const [chatSending, setChatSending] = useState(false);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const [unreadChat, setUnreadChat] = useState(0);
+  const [chatUserId, setChatUserId] = useState('');
+  const [isChatBlocked, setIsChatBlocked] = useState(false);
 
   // Announcements state
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
@@ -858,15 +861,31 @@ export default function TournamentLiveViewPage() {
     const handleAnnouncement = (data: AnnouncementItem) => {
       setAnnouncements(prev => [data, ...prev].slice(0, 20));
     };
+    const handleChatModeration = (data: any) => {
+      if (data.action === 'block') {
+        if (chatUserId && data.userId === chatUserId) {
+          setIsChatBlocked(true);
+          localStorage.setItem(`ts_chat_blocked_${tournamentId}`, '1');
+        }
+        setChatMessages(prev => prev.filter((m: any) => m.userId !== data.userId));
+      } else if (data.action === 'unblock') {
+        if (chatUserId && data.userId === chatUserId) {
+          setIsChatBlocked(false);
+          localStorage.removeItem(`ts_chat_blocked_${tournamentId}`);
+        }
+      }
+    };
 
     channel.bind('chat_message', handleChatMsg);
     channel.bind('new_announcement', handleAnnouncement);
+    channel.bind('chat_moderation', handleChatModeration);
 
     return () => {
       channel.unbind('chat_message', handleChatMsg);
       channel.unbind('new_announcement', handleAnnouncement);
+      channel.unbind('chat_moderation', handleChatModeration);
     };
-  }, [tournamentId]);
+  }, [tournamentId, chatUserId]);
 
   useEffect(() => {
     if (showChatPanel) {
@@ -880,8 +899,30 @@ export default function TournamentLiveViewPage() {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ts_chat_username');
       if (saved) setChatUserName(saved);
+
+      let userId = localStorage.getItem('ts_chat_user_id');
+      if (!userId) {
+        userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+        localStorage.setItem('ts_chat_user_id', userId);
+      }
+      setChatUserId(userId);
+
+      const blocked = localStorage.getItem(`ts_chat_blocked_${tournamentId}`);
+      if (blocked) setIsChatBlocked(true);
     }
-  }, []);
+  }, [tournamentId]);
+
+  useEffect(() => {
+    if (tournament && chatUserId) {
+      const isBlocked = (tournament.blockedChatUserIds || []).includes(chatUserId);
+      setIsChatBlocked(isBlocked);
+      if (isBlocked) {
+        localStorage.setItem(`ts_chat_blocked_${tournamentId}`, '1');
+      } else {
+        localStorage.removeItem(`ts_chat_blocked_${tournamentId}`);
+      }
+    }
+  }, [tournament, chatUserId, tournamentId]);
 
   const handleSendChat = async () => {
     if (!chatInput.trim()) return;
@@ -889,15 +930,35 @@ export default function TournamentLiveViewPage() {
       setShowNamePrompt(true);
       return;
     }
+    if (isChatBlocked) {
+      alert("Tài khoản của bạn đã bị chặn chat trong giải đấu này.");
+      return;
+    }
     setChatSending(true);
     try {
-      await fetch(`${getApiBaseUrl()}/tournaments/${tournamentId}/chat`, {
+      const res = await fetch(`${getApiBaseUrl()}/tournaments/${tournamentId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userName: chatUserName.trim(), message: chatInput.trim() }),
+        body: JSON.stringify({ 
+          userName: chatUserName.trim(), 
+          message: chatInput.trim(),
+          userId: chatUserId
+        }),
       });
-      setChatInput('');
-    } catch (err) { console.error('Error sending chat:', err); }
+      
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.message || 'Không thể gửi tin nhắn.');
+        if (res.status === 403) {
+          setIsChatBlocked(true);
+          localStorage.setItem(`ts_chat_blocked_${tournamentId}`, '1');
+        }
+      } else {
+        setChatInput('');
+      }
+    } catch (err) { 
+      console.error('Error sending chat:', err); 
+    }
     setChatSending(false);
   };
 
@@ -1447,19 +1508,27 @@ export default function TournamentLiveViewPage() {
               <div className="p-8 rounded-2xl bg-[#0f1419] border border-white/[0.06] flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl relative overflow-hidden">
                 {/* Decorative background glow */}
                 <div className="absolute top-0 right-0 w-64 h-64 bg-[#22c55e]/5 rounded-full blur-3xl pointer-events-none" />
-                
                 <div className="space-y-2 text-center md:text-left relative z-10">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#22c55e]/10 border border-[#22c55e]/20 text-[#22c55e] text-[10px] font-black uppercase tracking-wider">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
-                    Đăng ký trực tuyến đang mở
-                  </span>
-                  <h2 className="text-2xl font-black text-white">Hãy đăng ký đội tham gia ngay!</h2>
+                  {tournament.teamsLocked ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-black uppercase tracking-wider">
+                      🔒 Đã chốt danh sách đội
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#22c55e]/10 border border-[#22c55e]/20 text-[#22c55e] text-[10px] font-black uppercase tracking-wider">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
+                      Đăng ký trực tuyến đang mở
+                    </span>
+                  )}
+                  <h2 className="text-2xl font-black text-white">
+                    {tournament.teamsLocked ? 'Danh sách đội tham gia đã chốt' : 'Đăng ký đội đang mở'}
+                  </h2>
                   <p className="text-xs text-white/50">
-                    Số lượng đội hiện tại: <span className="text-white font-bold">{(tournament.teams || []).length} / {tournament.maxTeams || 8}</span>
+                    {tournament.teamsLocked ? 'Số lượng đội chính thức: ' : 'Số lượng đội hiện tại: '}
+                    <span className="text-white font-bold">{(tournament.teams || []).length} / {tournament.maxTeams || 8}</span>
                   </p>
                 </div>
 
-                {tournament.registrationOpen && (tournament.teams || []).length < (tournament.maxTeams || 8) ? (
+                {tournament.registrationOpen && !tournament.teamsLocked && (tournament.teams || []).length < (tournament.maxTeams || 8) ? (
                   <button
                     onClick={() => setShowRegModal(true)}
                     className="relative z-10 px-6 py-3.5 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-[#080b10] font-black uppercase text-xs tracking-wider transition-all duration-200 shadow-lg shadow-[#22c55e]/10 hover:shadow-[#22c55e]/20 hover:-translate-y-0.5 active:translate-y-0"
@@ -1468,7 +1537,7 @@ export default function TournamentLiveViewPage() {
                   </button>
                 ) : (
                   <span className="px-5 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white/40 text-xs font-bold uppercase tracking-wider">
-                    Đã đóng đăng ký
+                    {tournament.teamsLocked ? 'Đã chốt danh sách' : 'Đã đóng đăng ký'}
                   </span>
                 )}
               </div>
@@ -2502,23 +2571,31 @@ export default function TournamentLiveViewPage() {
                 </p>
               )}
               <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && !chatSending && handleSendChat()}
-                  placeholder="Nhập tin nhắn..."
-                  className="flex-1 px-3 py-2 rounded-lg bg-[#080b10] border border-white/[0.08] text-white text-xs focus:outline-none focus:border-[#22c55e]/50"
-                  maxLength={500}
-                  disabled={chatSending}
-                />
-                <button
-                  onClick={handleSendChat}
-                  disabled={chatSending || !chatInput.trim()}
-                  className="px-4 py-2 rounded-lg bg-[#22c55e] text-[#080b10] text-xs font-black hover:bg-[#16a34a] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                </button>
+                {isChatBlocked ? (
+                  <div className="flex-1 text-center py-2.5 bg-red-500/10 border border-red-500/20 rounded-lg text-xs text-red-400 font-semibold select-none">
+                    🔒 Tài khoản của bạn đã bị chặn chat
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && !chatSending && handleSendChat()}
+                      placeholder="Nhập tin nhắn..."
+                      className="flex-1 px-3 py-2 rounded-lg bg-[#080b10] border border-white/[0.08] text-white text-xs focus:outline-none focus:border-[#22c55e]/50"
+                      maxLength={500}
+                      disabled={chatSending}
+                    />
+                    <button
+                      onClick={handleSendChat}
+                      disabled={chatSending || !chatInput.trim()}
+                      className="px-4 py-2 rounded-lg bg-[#22c55e] text-[#080b10] text-xs font-black hover:bg-[#16a34a] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           )}
