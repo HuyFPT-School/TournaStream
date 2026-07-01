@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { fetchTournamentFromBackend, syncTournamentToBackend } from '@/app/lib/tournaments';
 import { getSession, getApiBaseUrl, getAccessToken } from '@/app/lib/authStorage';
 import { getPusherClient } from '@/app/lib/pusher';
@@ -634,8 +634,8 @@ function BracketMatchCard({ a, b, sa, sb, done, isLive, winner, onClick }: Brack
     <div
       onClick={onClick}
       className={`w-[160px] rounded-xl border overflow-hidden text-[12px] shadow-lg transition-all duration-300 cursor-pointer ${isLive
-          ? 'border-[#22c55e] bg-[#22c55e]/[0.05] shadow-[0_0_15px_rgba(34,197,94,0.15)] scale-[1.03] hover:scale-[1.05]'
-          : 'border-white/[0.08] bg-[#0f1419] hover:border-white/[0.15] hover:scale-[1.02]'
+        ? 'border-[#22c55e] bg-[#22c55e]/[0.05] shadow-[0_0_15px_rgba(34,197,94,0.15)] scale-[1.03] hover:scale-[1.05]'
+        : 'border-white/[0.08] bg-[#0f1419] hover:border-white/[0.15] hover:scale-[1.02]'
         }`}
     >
       {/* Team A */}
@@ -1494,6 +1494,11 @@ export default function TournamentDetailPage() {
   const [announcementType, setAnnouncementType] = useState<'info' | 'warning' | 'update'>('info');
   const [announcementPosting, setAnnouncementPosting] = useState(false);
 
+  // Chat moderation states
+  const [adminChatMessages, setAdminChatMessages] = useState<any[]>([]);
+  const [adminChatLoading, setAdminChatLoading] = useState(false);
+  const [chatModerationSubmitting, setChatModerationSubmitting] = useState<string | null>(null);
+
   const session = getSession();
   const tournamentsKey = session ? `tournaments_${session.id}` : 'tournaments';
   const currentTournamentKey = session ? `currentTournament_${session.id}` : 'currentTournament';
@@ -1554,6 +1559,83 @@ export default function TournamentDetailPage() {
       console.error('Error fetching announcements:', err);
     } finally {
       setAnnouncementsLoading(false);
+    }
+  };
+
+  const fetchAdminChatMessages = useCallback(async () => {
+    if (!tournamentId) return;
+    setAdminChatLoading(true);
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/tournaments/${tournamentId}/chat`);
+      if (res.ok) {
+        const data = await res.json();
+        setAdminChatMessages(data);
+      }
+    } catch (err) {
+      console.error('Error fetching admin chat:', err);
+    } finally {
+      setAdminChatLoading(false);
+    }
+  }, [tournamentId]);
+
+  const handleBlockUser = async (userId: string, userName: string) => {
+    if (!userId || !tournamentId) return;
+    if (!window.confirm(`Bạn có chắc chắn muốn chặn người dùng "${userName}" không? Tất cả tin nhắn của họ trong giải đấu này sẽ bị xóa.`)) return;
+
+    setChatModerationSubmitting(userId);
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/tournaments/${tournamentId}/chat/block`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getAccessToken()}`,
+        },
+        body: JSON.stringify({ userId, userName }),
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        if (result.tournament) {
+          setTournament(migrateTournamentData(result.tournament));
+        }
+        setAdminChatMessages(prev => prev.filter(m => m.userId !== userId));
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || 'Không thể chặn người dùng.');
+      }
+    } catch (err) {
+      console.error('Error blocking user:', err);
+    } finally {
+      setChatModerationSubmitting(null);
+    }
+  };
+
+  const handleUnblockUser = async (userId: string) => {
+    if (!userId || !tournamentId) return;
+    setChatModerationSubmitting(userId);
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/tournaments/${tournamentId}/chat/unblock`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getAccessToken()}`,
+        },
+        body: JSON.stringify({ userId }),
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        if (result.tournament) {
+          setTournament(migrateTournamentData(result.tournament));
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || 'Không thể bỏ chặn.');
+      }
+    } catch (err) {
+      console.error('Error unblocking user:', err);
+    } finally {
+      setChatModerationSubmitting(null);
     }
   };
 
@@ -1683,7 +1765,33 @@ export default function TournamentDetailPage() {
     loadTournament();
 
     fetchAnnouncements();
-  }, [tournamentId, currentTournamentKey, tournamentsKey]);
+    fetchAdminChatMessages();
+  }, [tournamentId, currentTournamentKey, tournamentsKey, fetchAdminChatMessages]);
+
+  useEffect(() => {
+    if (!tournamentId) return;
+    const pusher = getPusherClient();
+    if (!pusher) return;
+    const channel = pusher.subscribe(String(tournamentId));
+
+    const handleChatMsg = (data: any) => {
+      setAdminChatMessages(prev => [...prev.slice(-99), data]);
+    };
+
+    const handleChatModeration = (data: any) => {
+      if (data.action === 'block') {
+        setAdminChatMessages(prev => prev.filter((m: any) => m.userId !== data.userId));
+      }
+    };
+
+    channel.bind('chat_message', handleChatMsg);
+    channel.bind('chat_moderation', handleChatModeration);
+
+    return () => {
+      channel.unbind('chat_message', handleChatMsg);
+      channel.unbind('chat_moderation', handleChatModeration);
+    };
+  }, [tournamentId]);
 
   useEffect(() => {
     // If the user is the owner AND the tournament has already started (bracket seeded),
@@ -2279,6 +2387,40 @@ export default function TournamentDetailPage() {
       await syncTournamentToBackend(updatedTournament);
     } catch (err) {
       console.error('Error toggling registrationOpen:', err);
+    }
+  };
+
+  const handleLockTeams = async () => {
+    if (!tournament) return;
+    if (!window.confirm("Bạn có chắc chắn muốn chốt danh sách đội tham gia? Cổng đăng ký trực tuyến sẽ được đóng lại và danh sách đội sẽ được xác nhận chính thức.")) return;
+
+    const updatedTournament = {
+      ...tournament,
+      registrationOpen: false,
+      teamsLocked: true,
+    };
+    setTournament(updatedTournament);
+    localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
+    try {
+      await syncTournamentToBackend(updatedTournament);
+    } catch (err) {
+      console.error('Error locking teams:', err);
+    }
+  };
+
+  const handleUnlockTeams = async () => {
+    if (!tournament) return;
+    const updatedTournament = {
+      ...tournament,
+      registrationOpen: true,
+      teamsLocked: false,
+    };
+    setTournament(updatedTournament);
+    localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
+    try {
+      await syncTournamentToBackend(updatedTournament);
+    } catch (err) {
+      console.error('Error unlocking teams:', err);
     }
   };
 
@@ -2910,14 +3052,24 @@ export default function TournamentDetailPage() {
           {!tournament.bracketSeeded ? (
             <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
               {/* Registration Toggle Panel */}
-              <div className="flex items-center justify-between p-6 rounded-2xl bg-[#0f1419] border border-white/[0.06] shadow-xl">
+              <div className="flex flex-col md:flex-row md:items-center justify-between p-6 rounded-2xl bg-[#0f1419] border border-white/[0.06] shadow-xl gap-4">
                 <div className="space-y-1.5">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#22c55e]/10 border border-[#22c55e]/20 text-[#22c55e] text-[10px] font-black uppercase tracking-wider">
-                    <span className={`w-1.5 h-1.5 rounded-full ${tournament.registrationOpen ? 'bg-[#22c55e] animate-pulse' : 'bg-red-500'}`} />
-                    {tournament.registrationOpen ? 'Đang mở đăng ký trực tuyến' : 'Đã đóng đăng ký trực tuyến'}
-                  </span>
+                  {tournament.teamsLocked ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-black uppercase tracking-wider">
+                      🔒 Đã chốt đội tham gia
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#22c55e]/10 border border-[#22c55e]/20 text-[#22c55e] text-[10px] font-black uppercase tracking-wider">
+                      <span className={`w-1.5 h-1.5 rounded-full ${tournament.registrationOpen ? 'bg-[#22c55e] animate-pulse' : 'bg-red-500'}`} />
+                      {tournament.registrationOpen ? 'Đang mở đăng ký trực tuyến' : 'Đã đóng đăng ký trực tuyến'}
+                    </span>
+                  )}
                   <h2 className="text-xl font-black text-white">Quản lý Cổng Đăng ký</h2>
-                  <p className="text-xs text-white/50">Cho phép các đội tự đăng ký tên đội và thành viên ngoài trang Live</p>
+                  <p className="text-xs text-white/50">
+                    {tournament.teamsLocked
+                      ? 'Danh sách đội tham gia đã được chốt chính thức. Không nhận thêm đăng ký mới.'
+                      : 'Cho phép các đội tự đăng ký tên đội và thành viên ngoài trang Live'}
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -3070,13 +3222,15 @@ export default function TournamentDetailPage() {
                                 <span className="text-[10px] text-white/40">Hạt giống #{idx + 1}</span>
                               </div>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveTeam(team.id)}
-                              className="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-[10px] font-black uppercase tracking-wider transition-all"
-                            >
-                              Loại bỏ
-                            </button>
+                            {!tournament.teamsLocked && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveTeam(team.id)}
+                                className="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-[10px] font-black uppercase tracking-wider transition-all"
+                              >
+                                Loại bỏ
+                              </button>
+                            )}
                           </div>
                           <div className="flex flex-wrap gap-1.5">
                             {team.members && team.members.length > 0 ? (
@@ -3251,10 +3405,10 @@ export default function TournamentDetailPage() {
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-black text-white uppercase tracking-wider">Trạng thái trận đấu</span>
                             <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${isFinished
-                                ? 'bg-red-500/20 text-red-400 border border-red-500/50'
-                                : isRunning
-                                  ? 'bg-[#22c55e]/20 text-green-400 border border-[#22c55e]/40 shadow-[0_0_10px_rgba(34,197,94,0.1)]'
-                                  : 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
+                              ? 'bg-red-500/20 text-red-400 border border-red-500/50'
+                              : isRunning
+                                ? 'bg-[#22c55e]/20 text-green-400 border border-[#22c55e]/40 shadow-[0_0_10px_rgba(34,197,94,0.1)]'
+                                : 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
                               }`}>
                               <div className={`w-1.5 h-1.5 rounded-full ${isFinished ? 'bg-red-400' : isRunning ? 'bg-[#22c55e] animate-pulse' : 'bg-blue-400'
                                 }`} />
@@ -3273,8 +3427,8 @@ export default function TournamentDetailPage() {
                                   type="button"
                                   onClick={() => handleToggleLeagueMatchRunning(selectedLeagueMatchId)}
                                   className={`flex-1 py-2 px-4 rounded-lg font-bold text-xs uppercase tracking-wider transition-all duration-200 border shadow-md ${isRunning
-                                      ? 'bg-yellow-500/20 hover:bg-yellow-500/30 border-yellow-500/50 text-yellow-400'
-                                      : 'bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border-[#22c55e]/50 text-green-400'
+                                    ? 'bg-yellow-500/20 hover:bg-yellow-500/30 border-yellow-500/50 text-yellow-400'
+                                    : 'bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border-[#22c55e]/50 text-green-400'
                                     }`}
                                 >
                                   {isRunning ? '⏸ Tạm dừng trận đấu' : '▶ Bắt đầu trận đấu'}
@@ -3352,8 +3506,8 @@ export default function TournamentDetailPage() {
                             type="button"
                             onClick={() => handleLeagueStreamTypeChange('youtube')}
                             className={`py-2 px-3 rounded-lg border font-bold text-xs transition-all ${leagueStreamType === 'youtube'
-                                ? 'border-red-500 bg-red-500/10 text-red-400'
-                                : 'border-white/[0.06] bg-white/[0.02] text-white/60 hover:text-white'
+                              ? 'border-red-500 bg-red-500/10 text-red-400'
+                              : 'border-white/[0.06] bg-white/[0.02] text-white/60 hover:text-white'
                               }`}
                           >
                             YouTube URL
@@ -3362,8 +3516,8 @@ export default function TournamentDetailPage() {
                             type="button"
                             onClick={() => handleLeagueStreamTypeChange('twitch')}
                             className={`py-2 px-3 rounded-lg border font-bold text-xs transition-all ${leagueStreamType === 'twitch'
-                                ? 'border-[#a855f7] bg-[#a855f7]/10 text-[#a855f7]'
-                                : 'border-white/[0.06] bg-white/[0.02] text-white/60 hover:text-white'
+                              ? 'border-[#a855f7] bg-[#a855f7]/10 text-[#a855f7]'
+                              : 'border-white/[0.06] bg-white/[0.02] text-white/60 hover:text-white'
                               }`}
                           >
                             Twitch URL
@@ -3372,8 +3526,8 @@ export default function TournamentDetailPage() {
                             type="button"
                             onClick={() => handleLeagueStreamTypeChange('webcam')}
                             className={`py-2 px-3 rounded-lg border font-bold text-xs transition-all ${leagueStreamType === 'webcam'
-                                ? 'border-[#22c55e] bg-[#22c55e]/10 text-green-400 font-extrabold'
-                                : 'border-white/[0.06] bg-white/[0.02] text-white/60 hover:text-white'
+                              ? 'border-[#22c55e] bg-[#22c55e]/10 text-green-400 font-extrabold'
+                              : 'border-white/[0.06] bg-white/[0.02] text-white/60 hover:text-white'
                               }`}
                           >
                             🎥 Webcam trực tiếp
@@ -3627,8 +3781,8 @@ export default function TournamentDetailPage() {
                   <button
                     onClick={handleProceedToKnockout}
                     className={`px-8 py-3 rounded-xl font-black text-sm transition-all duration-200 active:scale-95 flex items-center gap-2 ${areAllGroupMatchesFinished()
-                        ? 'bg-[#22c55e] text-black hover:bg-[#16a34a] shadow-[0_0_20px_rgba(34,197,94,0.25)]'
-                        : 'bg-white/5 border border-white/10 text-white/30 cursor-not-allowed'
+                      ? 'bg-[#22c55e] text-black hover:bg-[#16a34a] shadow-[0_0_20px_rgba(34,197,94,0.25)]'
+                      : 'bg-white/5 border border-white/10 text-white/30 cursor-not-allowed'
                       }`}
                     disabled={!areAllGroupMatchesFinished()}
                   >
@@ -3646,8 +3800,8 @@ export default function TournamentDetailPage() {
                     key={tab}
                     onClick={() => setActiveDeTab(tab)}
                     className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider uppercase transition-all duration-200 whitespace-nowrap ${activeDeTab === tab
-                        ? 'bg-[#22c55e]/10 border border-[#22c55e]/30 text-[#22c55e] shadow-[0_0_15px_rgba(34,197,94,0.1)]'
-                        : 'text-white/50 border border-transparent hover:text-white/80'
+                      ? 'bg-[#22c55e]/10 border border-[#22c55e]/30 text-[#22c55e] shadow-[0_0_15px_rgba(34,197,94,0.1)]'
+                      : 'text-white/50 border border-transparent hover:text-white/80'
                       }`}
                   >
                     {tab === 'upper' ? 'Nhánh Thắng (Upper)' : tab === 'lower' ? 'Nhánh Thua (Lower)' : 'Chung Kết Tổng (Grand)'}
@@ -3799,8 +3953,8 @@ export default function TournamentDetailPage() {
                         type="button"
                         onClick={() => handleMatchCardClick(mKey)}
                         className={`px-4 py-2.5 rounded-xl border text-xs font-black tracking-tight transition-all duration-200 flex items-center gap-2 ${isSelected
-                            ? "bg-[#22c55e]/10 border-[#22c55e]/30 text-[#22c55e] shadow-[0_0_15px_rgba(34,197,94,0.1)]"
-                            : "bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05] text-white/60 hover:text-white"
+                          ? "bg-[#22c55e]/10 border-[#22c55e]/30 text-[#22c55e] shadow-[0_0_15px_rgba(34,197,94,0.1)]"
+                          : "bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05] text-white/60 hover:text-white"
                           }`}
                       >
                         <span className={`w-2 h-2 rounded-full ${statusColor}`} />
@@ -3819,23 +3973,23 @@ export default function TournamentDetailPage() {
             <div className="flex items-center justify-between mb-8 pb-4 border-b border-white/[0.04]">
               <div className="flex items-center gap-2">
                 <span className={`w-2.5 h-2.5 rounded-full ${matchState.isFinished
-                    ? 'bg-white/30'
-                    : matchState.isRunning
-                      ? 'bg-[#22c55e] animate-pulse'
-                      : 'bg-blue-500 animate-pulse'
+                  ? 'bg-white/30'
+                  : matchState.isRunning
+                    ? 'bg-[#22c55e] animate-pulse'
+                    : 'bg-blue-500 animate-pulse'
                   }`} />
                 <h3 className={`text-sm font-black tracking-widest uppercase ${matchState.isFinished
-                    ? 'text-white/40'
-                    : matchState.isRunning
-                      ? 'text-[#22c55e]'
-                      : 'text-blue-400'
+                  ? 'text-white/40'
+                  : matchState.isRunning
+                    ? 'text-[#22c55e]'
+                    : 'text-blue-400'
                   }`}>
                   {matchState.isFinished ? 'Đã kết thúc' : matchState.isRunning ? 'Đang thi đấu' : 'Sẵn sàng'}
                 </h3>
               </div>
               <div className={`px-3 py-1.5 rounded-lg border text-[10px] font-black tracking-wider uppercase flex items-center gap-1.5 ${matchState.isFinished
-                  ? 'bg-white/[0.02] border-white/10 text-white/40'
-                  : 'bg-red-500/10 border border-red-500/20 text-red-500'
+                ? 'bg-white/[0.02] border-white/10 text-white/40'
+                : 'bg-red-500/10 border border-red-500/20 text-red-500'
                 }`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${matchState.isFinished ? 'bg-white/20' : 'bg-red-500 animate-pulse'}`} />
                 Trận đấu
@@ -4073,12 +4227,12 @@ export default function TournamentDetailPage() {
                         type="button"
                         onClick={() => setAnnouncementType(type)}
                         className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-200 border ${announcementType === type
-                            ? type === 'info'
-                              ? 'bg-blue-500/20 border-blue-500/30 text-blue-400'
-                              : type === 'warning'
-                                ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400'
-                                : 'bg-[#22c55e]/20 border-[#22c55e]/30 text-[#22c55e]'
-                            : 'bg-white/[0.03] border-white/[0.06] text-white/30 hover:bg-white/[0.06]'
+                          ? type === 'info'
+                            ? 'bg-blue-500/20 border-blue-500/30 text-blue-400'
+                            : type === 'warning'
+                              ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400'
+                              : 'bg-[#22c55e]/20 border-[#22c55e]/30 text-[#22c55e]'
+                          : 'bg-white/[0.03] border-white/[0.06] text-white/30 hover:bg-white/[0.06]'
                           }`}
                       >
                         {type === 'info' ? 'Thông tin' : type === 'warning' ? 'Cảnh báo' : 'Cập nhật'}
@@ -4131,10 +4285,10 @@ export default function TournamentDetailPage() {
                     <div className="flex items-start justify-between gap-3 mb-2">
                       <h4 className="text-sm font-bold text-white">{ann.title}</h4>
                       <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${ann.type === 'warning'
-                          ? 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/20'
-                          : ann.type === 'update'
-                            ? 'bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/20'
-                            : 'bg-blue-500/15 text-blue-400 border border-blue-500/20'
+                        ? 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/20'
+                        : ann.type === 'update'
+                          ? 'bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/20'
+                          : 'bg-blue-500/15 text-blue-400 border border-blue-500/20'
                         }`}>
                         {ann.type === 'warning' ? 'Cảnh báo' : ann.type === 'update' ? 'Cập nhật' : 'Thông tin'}
                       </span>
@@ -4164,6 +4318,102 @@ export default function TournamentDetailPage() {
                 </svg>
                 Làm mới
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ====== Chat Moderation Section (Owner only) ====== */}
+        {isOwner && (
+          <div className="mt-8 bg-[#0f1419] border border-white/[0.06] rounded-2xl p-8 max-w-2xl mx-auto shadow-2xl space-y-8">
+            <div>
+              <h3 className="text-sm font-black tracking-widest text-white/50 uppercase mb-6 pb-2 border-b border-white/[0.04] flex items-center justify-between">
+                <span>Quản lý Chat Trực tiếp</span>
+                <button
+                  type="button"
+                  onClick={fetchAdminChatMessages}
+                  className="px-2 py-1 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white/60 text-[10px] font-bold transition-all flex items-center gap-1 normal-case tracking-normal"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <polyline points="23 4 23 10 17 10" />
+                    <polyline points="1 20 1 14 7 14" />
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                  </svg>
+                  Làm mới
+                </button>
+              </h3>
+
+              {adminChatLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-[#22c55e] border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : adminChatMessages.length === 0 ? (
+                <div className="text-center py-8 bg-[#080b10]/40 rounded-xl border border-white/[0.04]">
+                  <p className="text-white/30 text-xs">Chưa có tin nhắn nào trong kênh chat.</p>
+                </div>
+              ) : (
+                <div className="space-y-3.5 max-h-96 overflow-y-auto pr-2">
+                  {adminChatMessages.map((msg: any, idx: number) => {
+                    const isUserBlocked = (tournament?.blockedChatUserIds || []).includes(msg.userId);
+
+                    return (
+                      <div key={msg._id || idx} className="p-3.5 rounded-xl bg-[#080b10] border border-white/[0.04] flex items-start justify-between gap-4">
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-xs text-[#22c55e]">{msg.userName}</span>
+                            {msg.userId && (
+                              <span className="text-[9px] text-white/20 font-mono font-normal">({msg.userId.substring(0, 10)}...)</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-white/70 leading-relaxed break-words">{msg.message}</p>
+                        </div>
+                        {msg.userId && !isUserBlocked && (
+                          <button
+                            type="button"
+                            disabled={chatModerationSubmitting === msg.userId}
+                            onClick={() => handleBlockUser(msg.userId, msg.userName)}
+                            className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-40"
+                          >
+                            🚫 Chặn
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h3 className="text-sm font-black tracking-widest text-white/50 uppercase mb-4 pb-2 border-b border-white/[0.04]">
+                Danh sách người bị chặn
+              </h3>
+              {(!tournament?.blockedChatUserIds || tournament.blockedChatUserIds.length === 0) ? (
+                <div className="text-center py-4 bg-[#080b10]/40 rounded-xl border border-white/[0.04]">
+                  <p className="text-white/30 text-xs">Chưa chặn người dùng nào.</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                  {tournament.blockedChatUserIds.map((userId: string, idx: number) => {
+                    const name = tournament.blockedChatUserNames?.[idx] || 'Người dùng ẩn danh';
+                    return (
+                      <div key={userId} className="px-4 py-2.5 rounded-xl bg-[#080b10] border border-white/[0.04] flex items-center justify-between gap-4">
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold text-white block truncate">{name}</span>
+                          <span className="text-[9px] text-white/30 font-mono font-normal block truncate">{userId}</span>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={chatModerationSubmitting === userId}
+                          onClick={() => handleUnblockUser(userId)}
+                          className="px-2.5 py-1 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white/70 hover:text-white text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-40"
+                        >
+                          🔓 Bỏ chặn
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}

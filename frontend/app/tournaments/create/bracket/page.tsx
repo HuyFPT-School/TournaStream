@@ -4,12 +4,155 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTournament } from '@/app/contexts/TournamentContext';
 import { useState, useEffect } from 'react';
+import { syncTournamentToBackend } from '@/app/lib/tournaments';
+import { getSession } from '@/app/lib/authStorage';
+
+type TeamRef = { id?: string; name?: string };
+
+function buildInitialBracket(teams: TeamRef[]) {
+  const roundOne = [] as Array<{
+    teamA?: TeamRef;
+    teamB?: TeamRef;
+    scoreA: number | null;
+    scoreB: number | null;
+    isFinished: boolean;
+  }>;
+
+  for (let i = 0; i < teams.length; i += 2) {
+    roundOne.push({
+      teamA: teams[i],
+      teamB: teams[i + 1],
+      scoreA: null,
+      scoreB: null,
+      isFinished: false,
+    });
+  }
+
+  return {
+    rounds: [roundOne],
+    currentRound: 0,
+    currentMatch: 0,
+    isFinished: false,
+  };
+}
+
+function buildRoundRobinMatches(groupTeams: TeamRef[], groupIdx: number) {
+  const list = [...groupTeams];
+  const matches: any[] = [];
+  const n = list.length;
+  if (n < 2) return [];
+
+  const hasBye = n % 2 !== 0;
+  if (hasBye) {
+    list.push({ id: 'bye', name: 'BYE' });
+  }
+  const numTeams = list.length;
+  const roundsCount = numTeams - 1;
+  const matchesPerRound = numTeams / 2;
+
+  let matchCounter = 0;
+  for (let round = 0; round < roundsCount; round++) {
+    for (let i = 0; i < matchesPerRound; i++) {
+      const teamA = list[i];
+      const teamB = list[numTeams - 1 - i];
+
+      if (teamA.id !== 'bye' && teamB.id !== 'bye') {
+        matches.push({
+          id: `g-${groupIdx}-${matchCounter++}`,
+          teamA,
+          teamB,
+          scoreA: null,
+          scoreB: null,
+          isFinished: false,
+          roundIndex: round
+        });
+      }
+    }
+    const rotated = [list[0], list[numTeams - 1], ...list.slice(1, numTeams - 1)];
+    for (let idx = 0; idx < numTeams; idx++) {
+      list[idx] = rotated[idx];
+    }
+  }
+  return matches;
+}
+
+function buildDoubleEliminationBracket(teams: TeamRef[]) {
+  const n = teams.length;
+  const numUpperRounds = Math.ceil(Math.log2(n));
+
+  const upperRounds: any[][] = [];
+  const u0Matches: any[] = [];
+  for (let i = 0; i < n; i += 2) {
+    u0Matches.push({
+      teamA: teams[i],
+      teamB: teams[i + 1],
+      scoreA: null,
+      scoreB: null,
+      isFinished: false,
+    });
+  }
+  upperRounds.push(u0Matches);
+
+  for (let r = 1; r < numUpperRounds; r++) {
+    const matchesInRound = n / Math.pow(2, r + 1);
+    const roundMatches: any[] = [];
+    for (let m = 0; m < matchesInRound; m++) {
+      roundMatches.push({
+        teamA: { id: '', name: '?' },
+        teamB: { id: '', name: '?' },
+        scoreA: null,
+        scoreB: null,
+        isFinished: false,
+      });
+    }
+    upperRounds.push(roundMatches);
+  }
+
+  const lowerRounds: any[][] = [];
+  const totalLowerRounds = 2 * numUpperRounds - 2;
+  for (let r = 0; r < totalLowerRounds; r++) {
+    const k = Math.floor(r / 2);
+    const matchesInRound = n / Math.pow(2, k + 2);
+    const roundMatches: any[] = [];
+    for (let m = 0; m < matchesInRound; m++) {
+      roundMatches.push({
+        teamA: { id: '', name: '?' },
+        teamB: { id: '', name: '?' },
+        scoreA: null,
+        scoreB: null,
+        isFinished: false,
+      });
+    }
+    lowerRounds.push(roundMatches);
+  }
+
+  const grandFinal = [
+    {
+      teamA: { id: '', name: '?' },
+      teamB: { id: '', name: '?' },
+      scoreA: null,
+      scoreB: null,
+      isFinished: false,
+    }
+  ];
+
+  return {
+    upperRounds,
+    lowerRounds,
+    grandFinal,
+    currentRound: 0,
+    currentMatch: 0,
+    isFinished: false,
+    activeMatches: []
+  };
+}
 
 export default function BracketPage() {
   const router = useRouter();
-  const { data, loadTournamentData } = useTournament();
+  const { data, loadTournamentData, resetTournament } = useTournament();
   const [orderedTeams, setOrderedTeams] = useState(data.teams);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (data.format === 'league' || data.format === 'battle_royale') {
@@ -71,13 +214,82 @@ export default function BracketPage() {
     return groups;
   };
 
-  const handleCreate = () => {
-    loadTournamentData({
-      ...data,
-      teams: orderedTeams,
-      bracketSeeded: true,
-    });
-    router.push('/tournaments/create/finalize');
+  const handleCreate = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
+    try {
+      const tournamentId = 'tourn_' + Date.now();
+
+      let bracket = null;
+      let groups: any[] | null = null;
+      let stage = null;
+
+      if (data.format === 'round_robin') {
+        const groupsCount = data.groupsCount || 1;
+        groups = Array.from({ length: groupsCount }, (_, gIdx) => ({
+          name: `Bảng ${String.fromCharCode(65 + gIdx)}`,
+          teams: [] as TeamRef[],
+          matches: [] as any[]
+        }));
+        orderedTeams.forEach((team, idx) => {
+          const gIdx = idx % groupsCount;
+          groups![gIdx].teams.push(team);
+        });
+
+        groups!.forEach((group, gIdx) => {
+          group.matches = buildRoundRobinMatches(group.teams, gIdx);
+        });
+        stage = 'group';
+      } else if (data.format === 'double_elimination') {
+        bracket = buildDoubleEliminationBracket(orderedTeams);
+      } else {
+        bracket = buildInitialBracket(orderedTeams);
+      }
+
+      const mockTournament = {
+        id: tournamentId,
+        ...data,
+        teams: orderedTeams,
+        orderedTeams: orderedTeams,
+        bracketSeeded: true,
+        bracket,
+        groups,
+        stage: stage || 'bracket',
+        createdAt: new Date().toISOString(),
+      };
+
+      try {
+        await syncTournamentToBackend(mockTournament);
+      } catch (err) {
+        console.error('Error syncing tournament to backend:', err);
+      }
+
+      const session = getSession();
+      const tournamentsKey = session ? `tournaments_${session.id}` : 'tournaments';
+      const currentTournamentKey = session ? `currentTournament_${session.id}` : 'currentTournament';
+      const draftKey = session ? `tournamentDraft_${session.id}` : 'tournamentDraft';
+
+      const savedList = localStorage.getItem(tournamentsKey);
+      const list = savedList ? JSON.parse(savedList) : [];
+      const index = list.findIndex((t: any) => t.id === mockTournament.id);
+      if (index > -1) {
+        list[index] = mockTournament;
+      } else {
+        list.push(mockTournament);
+      }
+      localStorage.setItem(tournamentsKey, JSON.stringify(list));
+      localStorage.setItem(currentTournamentKey, JSON.stringify(mockTournament));
+      localStorage.removeItem(draftKey);
+      resetTournament();
+      
+      router.push(`/tournaments/${mockTournament.id}`);
+    } catch (error) {
+      console.error('Error starting tournament:', error);
+      alert('Đã xảy ra lỗi khi tạo giải đấu.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -132,7 +344,11 @@ export default function BracketPage() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
             <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          <button className="text-[#22c55e] whitespace-nowrap">Sắp xếp & Tạo</button>
+          <button className="text-white/40 hover:text-white transition-colors whitespace-nowrap" onClick={() => router.push('/tournaments/create/finalize')}>Quản lý đội</button>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
+            <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <span className="text-[#22c55e] whitespace-nowrap font-semibold">Sắp xếp & Tạo đội</span>
         </div>
 
         {/* Header */}
@@ -283,16 +499,17 @@ export default function BracketPage() {
         {/* CTA Buttons */}
         <div className="flex gap-4">
           <Link
-            href="/tournaments/create/members"
+            href="/tournaments/create/finalize"
             className="flex-1 px-6 py-3 rounded-lg border border-white/[0.06] text-white font-semibold hover:bg-white/[0.05] transition-all duration-200 text-center"
           >
             Quay lại
           </Link>
           <button
             onClick={handleCreate}
-            className="flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200"
+            disabled={isSubmitting}
+            className="flex-1 px-6 py-3 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            Tạo giải đấu & Khởi tạo
+            {isSubmitting ? 'Đang tạo...' : 'Bắt đầu Giải đấu'}
           </button>
         </div>
       </section>

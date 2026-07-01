@@ -54,6 +54,7 @@ module.exports = {
   triggerMatchSignaling,
   triggerChatMessage,
   triggerAnnouncement,
+  triggerChatModeration,
 };
 
 async function triggerChatMessage(tournamentId, messageData) {
@@ -75,5 +76,16 @@ async function triggerAnnouncement(tournamentId, announcementData) {
     await pusher.trigger(String(tournamentId), "new_announcement", announcementData);
   } catch (error) {
     console.error(`Error triggering Pusher announcement for tournament ${tournamentId}:`, error);
+  }
+}
+
+async function triggerChatModeration(tournamentId, moderationData) {
+  const pusher = getPusher();
+  if (!pusher) return;
+
+  try {
+    await pusher.trigger(String(tournamentId), "chat_moderation", moderationData);
+  } catch (error) {
+    console.error(`Error triggering Pusher chat moderation for tournament ${tournamentId}:`, error);
   }
 }

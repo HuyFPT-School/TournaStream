@@ -40,17 +40,15 @@ export default function MembersPage() {
   const handleContinue = () => {
     // Check if all teams have at least 1 member
     const allTeamsHaveMembers = data.teams.every(t => t.members.length > 0);
-    
+
     if (!allTeamsHaveMembers) {
       alert('Vui lòng thêm ít nhất 1 thành viên cho mỗi đội');
       return;
     }
 
-    if (data.format === 'league' || data.format === 'battle_royale') {
-      router.push('/tournaments/create/finalize');
-    } else {
-      router.push('/tournaments/create/bracket');
-    }
+
+    router.push('/tournaments/create/finalize');
+
   };
 
   return (
@@ -101,13 +99,21 @@ export default function MembersPage() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
             <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          <button className="text-[#22c55e] whitespace-nowrap">Thành viên</button>
+          <button className="text-[#22c55e] whitespace-nowrap font-semibold">Thành viên</button>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
             <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          <span className="text-white/40 whitespace-nowrap">
-            {data.format === 'league' || data.format === 'battle_royale' ? 'Tạo giải đấu' : 'Sắp xếp & Tạo'}
-          </span>
+
+          <span className="text-white/40 whitespace-nowrap">Quản lý đội</span>
+          {data.sport !== 'battle_royale' && data.format !== 'league' && (
+            <>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
+                <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              <span className="text-white/40 whitespace-nowrap">Sắp xếp & Tạo đội</span>
+            </>
+          )}
+
         </div>
 
         {/* Header */}
@@ -127,11 +133,10 @@ export default function MembersPage() {
                   <button
                     key={team.id}
                     onClick={() => setSelectedTeamId(team.id)}
-                    className={`w-full p-3 rounded-lg text-left transition-all duration-200 border ${
-                      selectedTeamId === team.id
-                        ? 'border-[#22c55e] bg-[#1a1f2e]'
-                        : 'border-white/[0.06] bg-[#0f1419] hover:border-white/[0.12]'
-                    }`}
+                    className={`w-full p-3 rounded-lg text-left transition-all duration-200 border ${selectedTeamId === team.id
+                      ? 'border-[#22c55e] bg-[#1a1f2e]'
+                      : 'border-white/[0.06] bg-[#0f1419] hover:border-white/[0.12]'
+                      }`}
                   >
                     <div className="font-semibold">{team.name}</div>
                     <div className="text-sm text-white/50">{team.members.length} thành viên</div>
@@ -183,7 +188,7 @@ export default function MembersPage() {
                             />
                           ) : (
                             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-white/10 to-white/5 border border-white/[0.06] flex items-center justify-center flex-shrink-0">
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/40"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/40"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
@@ -206,7 +211,7 @@ export default function MembersPage() {
                               </>
                             )}
                           </div>
-                          
+
                           {/* Actions */}
                           <div className="flex items-center gap-1.5 flex-shrink-0">
                             {isEditing ? (

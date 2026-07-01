@@ -111,7 +111,7 @@ export default function TeamsPage() {
     const len = data.teams.length;
     const format = data.format || 'single_elimination';
     const groupsCount = data.groupsCount || 1;
- 
+
     if (format === 'single_elimination') {
       return len >= 2 && isPowerOfTwo(len);
     }
@@ -126,7 +126,7 @@ export default function TeamsPage() {
     }
     return false;
   };
- 
+
   const handleContinue = () => {
     if (isPublicReg) {
       loadTournamentData({
@@ -134,10 +134,14 @@ export default function TeamsPage() {
         isPublicRegistration: true,
         registrationOpen: true,
         maxTeams: maxTeams,
-        teams: [],
+        teams: data.teams,
         bracketSeeded: false,
       });
-      router.push('/tournaments/create/finalize');
+      if (data.teams.length > 0) {
+        router.push('/tournaments/create/members');
+      } else {
+        router.push('/tournaments/create/finalize');
+      }
       return;
     }
 
@@ -209,9 +213,17 @@ export default function TeamsPage() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
             <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          <span className="text-white/40 whitespace-nowrap">
-            {data.format === 'league' || data.format === 'battle_royale' ? 'Tạo giải đấu' : 'Sắp xếp & Tạo'}
-          </span>
+
+          <span className="text-white/40 whitespace-nowrap">Quản lý đội</span>
+          {data.sport !== 'battle_royale' && data.format !== 'league' && (
+            <>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
+                <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              <span className="text-white/40 whitespace-nowrap">Sắp xếp & Tạo đội</span>
+            </>
+          )}
+
         </div>
 
         {/* Header */}
@@ -231,201 +243,130 @@ export default function TeamsPage() {
             onClick={() => {
               setIsPublicReg(!isPublicReg);
             }}
-            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 focus:outline-none ${
-              isPublicReg ? 'bg-[#22c55e]' : 'bg-white/[0.1]'
-            }`}
+            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 focus:outline-none ${isPublicReg ? 'bg-[#22c55e]' : 'bg-white/[0.1]'
+              }`}
           >
             <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform duration-300 ${
-                isPublicReg ? 'translate-x-6' : 'translate-x-1'
-              }`}
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform duration-300 ${isPublicReg ? 'translate-x-6' : 'translate-x-1'
+                }`}
             />
           </button>
         </div>
 
-        {isPublicReg ? (
-          <div className="p-8 rounded-2xl border border-dashed border-white/[0.12] bg-[#0b0f15] text-center mb-8 shadow-xl">
-            <div className="w-12 h-12 rounded-full bg-[#22c55e]/15 text-[#22c55e] flex items-center justify-center mx-auto mb-4">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        {isPublicReg && (
+          <div className="p-4 rounded-xl border border-white/[0.06] bg-[#0b0f15] mb-6 flex items-start gap-3 shadow-lg">
+            <div className="w-8 h-8 rounded-full bg-[#22c55e]/15 text-[#22c55e] flex items-center justify-center flex-shrink-0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                 <circle cx="9" cy="7" r="4" />
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
             </div>
-            <h3 className="font-semibold text-white mb-2">Chế độ Tự đăng ký đang được kích hoạt</h3>
-            <p className="text-sm text-white/50 max-w-md mx-auto leading-relaxed">
-              Bạn không cần nhập thủ công các đội nữa. Sau khi hoàn tất tạo giải đấu, hệ thống sẽ cung cấp link Live. Bạn chỉ cần chia sẻ link đó để các đội trưởng tự điền Tên Đội và danh sách Thành Viên.
-            </p>
+            <div className="flex-1">
+              <h4 className="font-bold text-xs text-white">Chế độ tự đăng ký đang bật</h4>
+              <p className="text-[11px] text-white/50 leading-relaxed mt-0.5">
+                Người tham gia có thể đăng ký trực tuyến qua trang Live. Tuy nhiên, bạn vẫn có thể thêm trước các đội đặc cách hoặc đội hạt giống thủ công dưới đây.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Teams Grid */}
+        <div className="space-y-3 mb-8">
+          {data.teams.map((team, idx) => (
+            <div
+              key={team.id}
+              className="flex items-center justify-between p-4 rounded-lg bg-[#0f1419] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-200 group"
+            >
+              <div className="flex items-center gap-4 flex-1 min-w-0">
+                <div className="text-white/40 font-semibold flex-shrink-0">{idx + 1}</div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold truncate">{team.name}</h3>
+                  <p className="text-sm text-white/50">{team.members.length} thành viên</p>
+                </div>
+              </div>
+              <button
+                onClick={() => removeTeam(team.id)}
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-2 text-red-500 hover:bg-red-500/10 rounded-lg"
+              >
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path
+                    d="M15 5L5 15M5 5L15 15"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Add Team Form */}
+        {showForm ? (
+          <div className="p-4 rounded-lg bg-[#0f1419] border border-white/[0.06] mb-8">
+            <label className="block text-sm font-semibold mb-2">Tên đội</label>
+            <input
+              type="text"
+              value={teamName}
+              onChange={(e) => {
+                setTeamName(e.target.value);
+                if (errors.teamName) setErrors({ ...errors, teamName: '' });
+              }}
+              placeholder="VD: Team A, FC Barcelona..."
+              className={`w-full px-4 py-3 rounded-lg bg-[#080b10] border transition-all duration-200 text-white placeholder-white/30 focus:outline-none mb-3 ${errors.teamName ? 'border-red-500' : 'border-white/[0.06] focus:border-[#22c55e]'
+                }`}
+              autoFocus
+            />
+            {errors.teamName && <p className="text-red-500 text-sm mb-3">{errors.teamName}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowForm(false);
+                  setTeamName('');
+                  setErrors({});
+                }}
+                className="flex-1 px-4 py-2 rounded-lg border border-white/[0.06] text-white font-semibold hover:bg-white/[0.05] transition-all duration-200"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleAddTeam}
+                className="flex-1 px-4 py-2 rounded-lg bg-[#22c55e] text-[#080b10] font-semibold hover:bg-[#16a34a] transition-all duration-200"
+              >
+                Thêm đội
+              </button>
+            </div>
           </div>
         ) : (
-          <>
-            {/* Teams Grid */}
-            <div className="space-y-3 mb-8">
-              {data.teams.map((team, idx) => {
-                const initials = team.name.slice(0, 2).toUpperCase();
-                return (
-                  <div
-                    key={team.id}
-                    className="flex items-center justify-between p-4 rounded-lg bg-[#0f1419] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-200 group"
-                  >
-                    <div className="flex items-center gap-4 flex-1 min-w-0">
-                      <div className="text-white/40 font-semibold flex-shrink-0 w-6 text-center">{idx + 1}</div>
-                      {team.logo ? (
-                        <img
-                          src={team.logo}
-                          className="w-10 h-10 rounded-full object-cover border border-white/[0.08] flex-shrink-0"
-                          alt={team.name}
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-500/20 to-emerald-500/30 text-[#22c55e] border border-white/[0.06] flex items-center justify-center font-bold text-xs flex-shrink-0">
-                          {initials}
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold truncate text-white">{team.name}</h3>
-                        <p className="text-xs text-white/40">{team.members.length} thành viên</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => removeTeam(team.id)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-2 text-red-500 hover:bg-red-500/10 rounded-lg flex-shrink-0"
-                    >
-                      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                        <path
-                          d="M15 5L5 15M5 5L15 15"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                );
-              })}
+
+          <button
+            onClick={() => setShowForm(true)}
+            disabled={data.teams.length >= maxTeams}
+            className="w-full px-4 py-3 rounded-lg border-2 border-dashed border-white/[0.06] text-white font-semibold hover:border-white/[0.12] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed mb-8"
+          >
+            + Thêm đội
+          </button>
+        )}
+
+        {/* Invalid team count warning */}
+        {!isPublicReg && !isValidTeamCount() && data.teams.length > 0 && (
+          <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-sm mb-6 flex items-start gap-2.5">
+            <span className="text-base">⚠️</span>
+            <div>
+              <div className="font-semibold mb-0.5">Số lượng đội không hợp lệ</div>
+              {data.format === 'round_robin'
+                ? `Thể thức vòng bảng với ${data.groupsCount} bảng yêu cầu tối thiểu ${(data.groupsCount || 1) * 2} đội (tối thiểu 2 đội mỗi bảng). Hiện tại có ${data.teams.length} đội.`
+                : data.format === 'double_elimination'
+                  ? `Thể thức nhánh thắng - thua yêu cầu số lượng đội là lũy thừa của 2 và tối thiểu 4 đội (4, 8, 16 hoặc 32 đội). Hiện tại có ${data.teams.length} đội.`
+                  : (data.format === 'league' || data.format === 'battle_royale')
+                    ? `Thể thức Giải đấu Sinh tồn / League yêu cầu tối thiểu 2 đội. Hiện tại có ${data.teams.length} đội.`
+                    : `Thể thức loại trực tiếp yêu cầu số lượng đội phải là lũy thừa của 2 (2, 4, 8, 16 hoặc 32 đội). Hiện tại có ${data.teams.length} đội.`
+              }
             </div>
+          </div>
 
-            {/* Add Team Form */}
-            {showForm ? (
-              <div className="p-5 rounded-xl bg-[#0f1419] border border-white/[0.06] mb-8 space-y-5">
-                <div>
-                  <label className="block text-xs font-black tracking-wider text-white/40 uppercase mb-2">Tên đội tuyển</label>
-                  <input
-                    type="text"
-                    value={teamName}
-                    onChange={(e) => {
-                      setTeamName(e.target.value);
-                      if (errors.teamName) setErrors({ ...errors, teamName: '' });
-                    }}
-                    placeholder="VD: Team A, FC Barcelona..."
-                    className={`w-full px-4 py-3 rounded-lg bg-[#080b10] border transition-all duration-200 text-white placeholder-white/30 focus:outline-none mb-1 text-sm ${
-                      errors.teamName ? 'border-red-500' : 'border-white/[0.06] focus:border-[#22c55e]'
-                    }`}
-                    autoFocus
-                  />
-                  {errors.teamName && <p className="text-red-500 text-xs mt-1 font-medium">{errors.teamName}</p>}
-                </div>
-
-                {/* Team Logo Upload */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-black tracking-wider text-white/40 uppercase">Logo đội tuyển</label>
-                  <div className="flex items-center gap-4">
-                    <div className="flex-shrink-0">
-                      {logoPreview ? (
-                        <div className="relative w-16 h-16 rounded-full border border-white/[0.12] overflow-hidden group/logo">
-                          <img src={logoPreview} className="w-full h-full object-cover" alt="Preview logo" />
-                          <button
-                            type="button"
-                            onClick={handleRemoveLogo}
-                            className="absolute inset-0 bg-black/60 opacity-0 group-hover/logo:opacity-100 flex items-center justify-center text-white text-[10px] font-bold transition-opacity"
-                          >
-                            Xóa
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="w-16 h-16 rounded-full bg-white/[0.02] border border-dashed border-white/[0.12] flex items-center justify-center text-white/20 text-[10px] text-center p-2 font-medium">
-                          Chưa có logo
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="flex-1">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        id="team-logo-upload"
-                        onChange={handleLogoChange}
-                        className="hidden"
-                        disabled={isUploading}
-                      />
-                      <label
-                        htmlFor="team-logo-upload"
-                        className={`inline-flex items-center justify-center px-4 py-2.5 rounded-lg border border-white/[0.08] hover:bg-white/[0.04] text-xs font-bold cursor-pointer transition-all ${
-                          isUploading ? 'opacity-50 cursor-not-allowed' : ''
-                        }`}
-                      >
-                        {isUploading ? 'Đang tải lên...' : 'Chọn logo'}
-                      </label>
-                      {uploadError && (
-                        <p className="text-xs text-red-500 mt-1.5 font-medium">{uploadError}</p>
-                      )}
-                      <p className="text-[10px] text-white/40 mt-1.5">Kích thước tối đa 5MB</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={() => {
-                      setShowForm(false);
-                      setTeamName('');
-                      setTeamLogo('');
-                      setLogoPreview(null);
-                      setUploadError(null);
-                      setErrors({});
-                    }}
-                    className="flex-1 px-4 py-2.5 rounded-lg border border-white/[0.06] text-white text-xs font-bold hover:bg-white/[0.05] transition-all duration-200"
-                    disabled={isUploading}
-                  >
-                    Hủy
-                  </button>
-                  <button
-                    onClick={handleAddTeam}
-                    className="flex-1 px-4 py-2.5 rounded-lg bg-[#22c55e] text-[#080b10] text-xs font-black hover:bg-[#16a34a] transition-all duration-200 disabled:opacity-40"
-                    disabled={isUploading || !teamName.trim()}
-                  >
-                    Thêm đội
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowForm(true)}
-                disabled={data.teams.length >= maxTeams}
-                className="w-full px-4 py-3 rounded-lg border-2 border-dashed border-white/[0.06] text-white font-semibold hover:border-white/[0.12] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed mb-8"
-              >
-                + Thêm đội
-              </button>
-            )}
-
-            {/* Invalid team count warning */}
-            {!isValidTeamCount() && data.teams.length > 0 && (
-              <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-sm mb-6 flex items-start gap-2.5">
-                <span className="text-base">⚠️</span>
-                <div>
-                  <div className="font-semibold mb-0.5">Số lượng đội không hợp lệ</div>
-                  {data.format === 'round_robin'
-                    ? `Thể thức vòng bảng với ${data.groupsCount} bảng yêu cầu tối thiểu ${(data.groupsCount || 1) * 2} đội (tối thiểu 2 đội mỗi bảng). Hiện tại có ${data.teams.length} đội.`
-                    : data.format === 'double_elimination'
-                      ? `Thể thức nhánh thắng - thua yêu cầu số lượng đội là lũy thừa của 2 và tối thiểu 4 đội (4, 8, 16 hoặc 32 đội). Hiện tại có ${data.teams.length} đội.`
-                      : (data.format === 'league' || data.format === 'battle_royale')
-                        ? `Thể thức Giải đấu Sinh tồn / League yêu cầu tối thiểu 2 đội. Hiện tại có ${data.teams.length} đội.`
-                        : `Thể thức loại trực tiếp yêu cầu số lượng đội phải là lũy thừa của 2 (2, 4, 8, 16 hoặc 32 đội). Hiện tại có ${data.teams.length} đội.`
-                  }
-                </div>
-              </div>
-            )}
-          </>
         )}
 
         {/* CTA Buttons */}

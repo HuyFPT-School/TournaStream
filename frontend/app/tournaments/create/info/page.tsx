@@ -146,9 +146,17 @@ export default function TournamentInfoPage() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
             <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          <span className="text-white/40 whitespace-nowrap">
-            {sport === 'battle_royale' || format === 'league' ? 'Tạo giải đấu' : 'Sắp xếp & Tạo'}
-          </span>
+
+          <span className="text-white/40 whitespace-nowrap">Quản lý đội</span>
+          {sport !== 'battle_royale' && format !== 'league' && (
+            <>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
+                <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              <span className="text-white/40 whitespace-nowrap">Sắp xếp & Tạo đội</span>
+            </>
+          )}
+
         </div>
 
         {/* Header */}
@@ -170,9 +178,8 @@ export default function TournamentInfoPage() {
                 if (errors.name) setErrors({ ...errors, name: '' });
               }}
               placeholder="VD: Giải đấu Liên Quân Mobile Pro Cup 2026"
-              className={`w-full px-4 py-3 rounded-lg bg-[#0f1419] border transition-all duration-200 text-white placeholder-white/30 focus:outline-none ${
-                errors.name ? 'border-red-500' : 'border-white/[0.06] focus:border-[#22c55e]'
-              }`}
+              className={`w-full px-4 py-3 rounded-lg bg-[#0f1419] border transition-all duration-200 text-white placeholder-white/30 focus:outline-none ${errors.name ? 'border-red-500' : 'border-white/[0.06] focus:border-[#22c55e]'
+                }`}
             />
             {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
           </div>
@@ -193,11 +200,10 @@ export default function TournamentInfoPage() {
                     }
                     if (errors.sport) setErrors({ ...errors, sport: '' });
                   }}
-                  className={`p-4 rounded-lg border transition-all duration-200 text-center flex flex-col items-center justify-center ${
-                    sport === s.id
-                      ? 'border-[#22c55e] bg-[#1a1f2e]'
-                      : 'border-white/[0.06] bg-[#0f1419] hover:border-white/[0.12]'
-                  }`}
+                  className={`p-4 rounded-lg border transition-all duration-200 text-center flex flex-col items-center justify-center ${sport === s.id
+                    ? 'border-[#22c55e] bg-[#1a1f2e]'
+                    : 'border-white/[0.06] bg-[#0f1419] hover:border-white/[0.12]'
+                    }`}
                 >
                   <div className="text-3xl mb-2">{s.icon}</div>
                   <div className="text-xs font-semibold">{s.name}</div>
@@ -216,11 +222,10 @@ export default function TournamentInfoPage() {
                   <button
                     key={f.id}
                     onClick={() => setFormat(f.id as any)}
-                    className={`p-4 rounded-lg border transition-all duration-200 text-left flex flex-col justify-between h-full ${
-                      format === f.id
-                        ? 'border-[#22c55e] bg-[#1a1f2e]'
-                        : 'border-white/[0.06] bg-[#0f1419] hover:border-white/[0.12]'
-                    }`}
+                    className={`p-4 rounded-lg border transition-all duration-200 text-left flex flex-col justify-between h-full ${format === f.id
+                      ? 'border-[#22c55e] bg-[#1a1f2e]'
+                      : 'border-white/[0.06] bg-[#0f1419] hover:border-white/[0.12]'
+                      }`}
                   >
                     <div>
                       <div className="text-2xl mb-2">{f.icon}</div>
@@ -245,11 +250,10 @@ export default function TournamentInfoPage() {
                       <button
                         key={num}
                         onClick={() => setGroupsCount(num)}
-                        className={`flex-1 py-2 px-3 rounded-lg border text-xs font-semibold transition-all duration-200 ${
-                          groupsCount === num
-                            ? 'border-[#22c55e] bg-[#1a1f2e] text-[#22c55e]'
-                            : 'border-white/[0.06] bg-[#080b10] hover:border-white/[0.12]'
-                        }`}
+                        className={`flex-1 py-2 px-3 rounded-lg border text-xs font-semibold transition-all duration-200 ${groupsCount === num
+                          ? 'border-[#22c55e] bg-[#1a1f2e] text-[#22c55e]'
+                          : 'border-white/[0.06] bg-[#080b10] hover:border-white/[0.12]'
+                          }`}
                       >
                         {num} Bảng
                       </button>
@@ -263,11 +267,10 @@ export default function TournamentInfoPage() {
                       <button
                         key={num}
                         onClick={() => setAdvancingCount(num)}
-                        className={`flex-1 py-2 px-3 rounded-lg border text-xs font-semibold transition-all duration-200 ${
-                          advancingCount === num
-                            ? 'border-[#22c55e] bg-[#1a1f2e] text-[#22c55e]'
-                            : 'border-white/[0.06] bg-[#080b10] hover:border-white/[0.12]'
-                        }`}
+                        className={`flex-1 py-2 px-3 rounded-lg border text-xs font-semibold transition-all duration-200 ${advancingCount === num
+                          ? 'border-[#22c55e] bg-[#1a1f2e] text-[#22c55e]'
+                          : 'border-white/[0.06] bg-[#080b10] hover:border-white/[0.12]'
+                          }`}
                       >
                         Top {num} Đội
                       </button>
@@ -315,7 +318,7 @@ export default function TournamentInfoPage() {
                   <span className="text-[11px] text-white/40 font-medium">Trận (Tối đa 50)</span>
                 </div>
               </div>
-              
+
               <div className="border-t border-white/[0.06] pt-4">
                 <label className="block text-xs text-white/60 mb-3 font-medium">Cấu hình Điểm Hạng (Placement Points)</label>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
