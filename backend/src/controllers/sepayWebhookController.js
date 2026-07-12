@@ -111,33 +111,6 @@ async function handleSepayWebhook(req, res) {
     const txn = await transactions.findOne({ checkoutCode: orderCode });
     const txnAmountMatches = txn ? txn.amount === amount : false;
 
-    const orders = mongoose.connection.collection("orders");
-    const order = await orders.findOne({
-      $or: [{ code: orderCode }, { orderCode }, { orderId: orderCode }],
-    });
-
-    const amountFields = ["amount", "totalAmount", "price", "totalPrice"];
-    const orderAmountField = amountFields.find(
-      (field) => order && typeof order[field] === "number",
-    );
-    const orderAmount = orderAmountField ? order[orderAmountField] : null;
-    const amountMatches = orderAmount === null ? (txn ? txnAmountMatches : true) : (orderAmount === amount);
-
-    if (order) {
-      await orders.updateOne(
-        {
-          $or: [{ code: orderCode }, { orderCode }, { orderId: orderCode }],
-        },
-        {
-          $set: {
-            status: amountMatches ? "paid" : "amount_mismatch",
-            paidAt: amountMatches ? new Date() : null,
-            sepayReference: payload.referenceCode || String(sepayId),
-          },
-        },
-      );
-    }
-
     if (txn) {
       await transactions.updateOne(
         { checkoutCode: orderCode },
@@ -145,15 +118,14 @@ async function handleSepayWebhook(req, res) {
           $set: {
             status: txnAmountMatches ? "paid" : "amount_mismatch",
             sepayReference: payload.referenceCode || String(sepayId),
-            matchedOrderAmount: orderAmount,
             paidAt: txnAmountMatches ? new Date() : null,
           },
         },
       );
     }
 
-    payment.status = (order || txn)
-      ? ((order ? amountMatches : true) && (txn ? txnAmountMatches : true))
+    payment.status = txn
+      ? txnAmountMatches
         ? "matched"
         : "amount_mismatch"
       : "unmatched";

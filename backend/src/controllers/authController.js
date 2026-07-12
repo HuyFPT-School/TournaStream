@@ -74,7 +74,15 @@ async function register(req, res) {
     const link = `${env.clientUrl}/verify-email?token=${verifyToken}&email=${encodeURIComponent(
       normalizedEmail,
     )}`;
-    await sendVerificationEmail({ to: normalizedEmail, link });
+    try {
+      await sendVerificationEmail({ to: normalizedEmail, link });
+    } catch (emailErr) {
+      console.error("Failed to send verification email:", emailErr);
+      return res.status(500).json({
+        message: "Không thể gửi email xác thực. Vui lòng kiểm tra lại cấu hình SMTP trong file .env (MAILER_USER và MAILER_PASSWORD) hoặc đặt SKIP_EMAIL_VERIFICATION=true để bỏ qua xác thực email.",
+        details: emailErr.message,
+      });
+    }
   }
 
   await user.save();
@@ -203,7 +211,15 @@ async function forgotPassword(req, res) {
     const link = `${env.clientUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(
       normalizedEmail,
     )}`;
-    await sendResetPasswordEmail({ to: normalizedEmail, link });
+    try {
+      await sendResetPasswordEmail({ to: normalizedEmail, link });
+    } catch (emailErr) {
+      console.error("Failed to send reset password email:", emailErr);
+      return res.status(500).json({
+        message: "Không thể gửi email khôi phục mật khẩu. Vui lòng kiểm tra lại cấu hình SMTP trong file .env (MAILER_USER và MAILER_PASSWORD).",
+        details: emailErr.message,
+      });
+    }
   }
 
   res.json({ message: "If the email exists, reset instructions were sent." });

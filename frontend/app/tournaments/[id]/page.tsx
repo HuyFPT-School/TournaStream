@@ -1203,10 +1203,12 @@ export default function TournamentDetailPage() {
   const sendLeagueSignalingMessage = async (payload: any) => {
     try {
       const baseUrl = getApiBaseUrl();
+      const token = getAccessToken();
       await fetch(`${baseUrl}/tournaments/${tournamentId}/signaling`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify(payload)
       });
@@ -1676,7 +1678,8 @@ export default function TournamentDetailPage() {
     if (savedList) {
       try {
         const list = JSON.parse(savedList);
-        if (list.some((t: any) => t.id === tournamentId)) {
+        const tourn = list.find((t: any) => t.id === tournamentId);
+        if (tourn && session && tourn.userId && String(tourn.userId) === String(session.id)) {
           isOwnerUser = true;
           setIsOwner(true);
         }
@@ -1744,6 +1747,13 @@ export default function TournamentDetailPage() {
       if (loadedTournament) {
         loadedTournament = migrateTournamentData(loadedTournament);
         setTournament(loadedTournament);
+
+        // Verify owner status from loaded tournament
+        if (session && loadedTournament.userId && String(loadedTournament.userId) === String(session.id)) {
+          setIsOwner(true);
+        } else {
+          setIsOwner(false);
+        }
 
         const rIdx = loadedTournament.bracket?.currentRound ?? 0;
         let mIdx = loadedTournament.bracket?.activeMatches?.[0] ?? loadedTournament.bracket?.currentMatch ?? 0;

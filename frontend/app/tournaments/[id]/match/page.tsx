@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import { syncTournamentToBackend, fetchTournamentFromBackend } from '@/app/lib/tournaments';
-import { getSession, getApiBaseUrl } from '@/app/lib/authStorage';
+import { getSession, getApiBaseUrl, getAccessToken } from '@/app/lib/authStorage';
 import { getPusherClient } from '@/app/lib/pusher';
 
 interface MatchState {
@@ -376,10 +376,12 @@ export default function LiveMatchPage() {
   const sendSignalingMessage = async (payload: any) => {
     try {
       const baseUrl = getApiBaseUrl();
+      const token = getAccessToken();
       await fetch(`${baseUrl}/tournaments/${tournamentId}/signaling`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify(payload)
       });
