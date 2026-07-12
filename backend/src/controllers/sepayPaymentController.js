@@ -82,7 +82,9 @@ async function createSepayCheckout(req, res) {
     .trim()
     .toUpperCase();
 
-  const existing = await Transaction.findOne({ checkoutCode });
+  const userId = req.user ? req.user.id : null;
+
+  const existing = await Transaction.findOne({ checkoutCode, userId });
   if (existing) {
     return res.status(200).json({
       checkoutCode: existing.checkoutCode,
@@ -94,8 +96,6 @@ async function createSepayCheckout(req, res) {
       status: existing.status,
     });
   }
-
-  const userId = req.user ? req.user.id : null;
   const qrPayload = buildQrPayload({ checkoutCode, amount: plan.amount });
   const qrImageUrl = buildQrImageUrl(qrPayload);
 

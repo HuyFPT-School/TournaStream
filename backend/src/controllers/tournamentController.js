@@ -13,6 +13,32 @@ async function upsertTournament(req, res) {
     const { id } = data;
     const userId = req.user ? req.user.id : null; // Safe check for auth
     
+    // Find if tournament exists to verify ownership
+    const existing = await Tournament.findOne({ id });
+    if (existing) {
+      if (existing.userId && String(existing.userId) !== String(userId)) {
+        return res.status(403).json({ message: "Forbidden: You do not own this tournament" });
+      }
+    } else {
+      // Creating a new tournament: check packages and transaction limits
+      if (data.packageId === "free") {
+        const existingCount = await Tournament.countDocuments({ userId });
+        if (existingCount > 0) {
+          return res.status(400).json({ message: "Gói dùng thử chỉ áp dụng cho giải đấu đầu tiên của bạn." });
+        }
+      } else if (data.packageId === "basic" || data.packageId === "pro") {
+        const planKey = data.packageId === "pro" ? "premium" : data.packageId;
+        const { Transaction } = require("../models/Transaction");
+        const paidCount = await Transaction.countDocuments({ userId, planKey, status: "paid" });
+        const tournCount = await Tournament.countDocuments({ userId, packageId: data.packageId });
+        if (tournCount >= paidCount) {
+          return res.status(402).json({
+            message: `Bạn chưa thanh toán hoặc đã sử dụng hết lượt tạo cho gói ${data.packageName || data.packageId}. Vui lòng thanh toán trước khi tiếp tục.`,
+          });
+        }
+      }
+    }
+
     // Find and update, or insert if doesn't exist
     const tournament = await Tournament.findOneAndUpdate(
       { id },
@@ -90,6 +116,30 @@ async function postSignaling(req, res) {
     const { id } = req.params;
     const signalingData = req.body;
 
+    const tournament = await Tournament.findOne({ id });
+    if (!tournament) {
+      return res.status(404).json({ message: "Tournament not found" });
+    }
+
+    const isReferee = signalingData && signalingData.sender === "referee";
+    if (isReferee) {
+      const authHeader = req.headers.authorization || "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+      if (!token) {
+        return res.status(401).json({ message: "Missing token" });
+      }
+      try {
+        const jwt = require("jsonwebtoken");
+        const { env } = require("../config/env");
+        const payload = jwt.verify(token, env.jwtAccessSecret);
+        if (String(tournament.userId) !== String(payload.sub)) {
+          return res.status(403).json({ message: "Forbidden: Only the tournament owner can send referee signaling" });
+        }
+      } catch (err) {
+        return res.status(401).json({ message: "Invalid token" });
+      }
+    }
+
     await triggerMatchSignaling(id, signalingData);
     return res.status(200).json({ success: true });
   } catch (error) {
@@ -126,10 +176,28 @@ async function postChatMessage(req, res) {
       return res.status(400).json({ message: "Message too long (max 500 chars)" });
     }
 
+    let verifiedUserId = userId || "";
+
+    // Optional auth verification to secure userId
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+    if (token) {
+      try {
+        const jwt = require("jsonwebtoken");
+        const { env } = require("../config/env");
+        const payload = jwt.verify(token, env.jwtAccessSecret);
+        if (payload && payload.sub) {
+          verifiedUserId = payload.sub;
+        }
+      } catch (err) {
+        console.warn("Failed to verify optional chat auth token:", err.message);
+      }
+    }
+
     // Check if user is blocked
     const tournament = await Tournament.findOne({ id });
-    if (tournament && tournament.blockedChatUserIds && userId) {
-      if (tournament.blockedChatUserIds.includes(userId)) {
+    if (tournament && tournament.blockedChatUserIds && verifiedUserId) {
+      if (tournament.blockedChatUserIds.includes(verifiedUserId)) {
         return res.status(403).json({ message: "Bạn đã bị chặn chat trong giải đấu này" });
       }
     }
@@ -138,7 +206,7 @@ async function postChatMessage(req, res) {
       tournamentId: id,
       userName: userName.trim().substring(0, 50),
       message: message.trim(),
-      userId: userId || "",
+      userId: verifiedUserId || "",
     });
 
     try {
@@ -177,6 +245,16 @@ async function postAnnouncement(req, res) {
 
     if (!title || !content) {
       return res.status(400).json({ message: "title and content are required" });
+    }
+
+    const tournament = await Tournament.findOne({ id });
+    if (!tournament) {
+      return res.status(404).json({ message: "Tournament not found" });
+    }
+
+    const userId = req.user ? req.user.id : null;
+    if (!userId || String(tournament.userId) !== String(userId)) {
+      return res.status(403).json({ message: "Forbidden: You are not the owner of this tournament" });
     }
 
     const announcement = await Announcement.create({
@@ -284,6 +362,11 @@ async function blockChatUser(req, res) {
       return res.status(404).json({ message: "Tournament not found" });
     }
 
+    const requestUserId = req.user ? req.user.id : null;
+    if (!requestUserId || String(tournament.userId) !== String(requestUserId)) {
+      return res.status(403).json({ message: "Forbidden: You are not the owner of this tournament" });
+    }
+
     const blockedList = tournament.blockedChatUserIds || [];
     const blockedNames = tournament.blockedChatUserNames || [];
 
@@ -331,6 +414,11 @@ async function unblockChatUser(req, res) {
     const tournament = await Tournament.findOne({ id });
     if (!tournament) {
       return res.status(404).json({ message: "Tournament not found" });
+    }
+
+    const requestUserId = req.user ? req.user.id : null;
+    if (!requestUserId || String(tournament.userId) !== String(requestUserId)) {
+      return res.status(403).json({ message: "Forbidden: You are not the owner of this tournament" });
     }
 
     let blockedList = tournament.blockedChatUserIds || [];

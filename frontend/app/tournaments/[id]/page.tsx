@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { fetchTournamentFromBackend, syncTournamentToBackend } from '@/app/lib/tournaments';
+import { useTournament } from '@/app/contexts/TournamentContext';
 import { getSession, getApiBaseUrl, getAccessToken } from '@/app/lib/authStorage';
 import { getPusherClient } from '@/app/lib/pusher';
 
@@ -840,6 +841,7 @@ function migrateTournamentData(t: any): any {
 export default function TournamentDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { loadTournamentData } = useTournament();
   const tournamentId = params.id as string;
   const [tournament, setTournament] = useState<any>(null);
   const [shareLink, setShareLink] = useState<string>('');
@@ -1201,10 +1203,12 @@ export default function TournamentDetailPage() {
   const sendLeagueSignalingMessage = async (payload: any) => {
     try {
       const baseUrl = getApiBaseUrl();
+      const token = getAccessToken();
       await fetch(`${baseUrl}/tournaments/${tournamentId}/signaling`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify(payload)
       });
@@ -1674,7 +1678,8 @@ export default function TournamentDetailPage() {
     if (savedList) {
       try {
         const list = JSON.parse(savedList);
-        if (list.some((t: any) => t.id === tournamentId)) {
+        const tourn = list.find((t: any) => t.id === tournamentId);
+        if (tourn && session && tourn.userId && String(tourn.userId) === String(session.id)) {
           isOwnerUser = true;
           setIsOwner(true);
         }
@@ -1742,6 +1747,13 @@ export default function TournamentDetailPage() {
       if (loadedTournament) {
         loadedTournament = migrateTournamentData(loadedTournament);
         setTournament(loadedTournament);
+
+        // Verify owner status from loaded tournament
+        if (session && loadedTournament.userId && String(loadedTournament.userId) === String(session.id)) {
+          setIsOwner(true);
+        } else {
+          setIsOwner(false);
+        }
 
         const rIdx = loadedTournament.bracket?.currentRound ?? 0;
         let mIdx = loadedTournament.bracket?.activeMatches?.[0] ?? loadedTournament.bracket?.currentMatch ?? 0;
@@ -2426,7 +2438,7 @@ export default function TournamentDetailPage() {
 
   const handleRemoveTeam = async (teamId: string) => {
     if (!tournament) return;
-    if (!window.confirm('Bạn có chắc chắn muốn loại bỏ đội này khỏi giải đấu?')) return;
+    if (!window.confirm('Bạn có chắc chắn muốn xóa đội này khỏi giải đấu?')) return;
     const updatedTeams = (tournament.teams || []).filter((t: any) => t.id !== teamId);
     const updatedTournament = {
       ...tournament,
@@ -2949,6 +2961,34 @@ export default function TournamentDetailPage() {
     }
   };
 
+  const handleNavigateToDraftStep = (stepPath: string) => {
+    if (!tournament) return;
+    const draftData = {
+      packageId: tournament.packageId || 'free',
+      packageName: tournament.packageName || 'Dùng thử',
+      packagePrice: tournament.packagePrice || 0,
+      name: tournament.name || '',
+      sport: tournament.sport || '',
+      matchDuration: tournament.matchDuration || 45,
+      allowExtraTime: tournament.allowExtraTime || false,
+      format: tournament.format,
+      groupsCount: tournament.groupsCount || 1,
+      advancingCount: tournament.advancingCount || 2,
+      matchesCount: tournament.matchesCount || 5,
+      leagueMatchesCount: tournament.leagueMatchesCount || 5,
+      pointRules: tournament.pointRules || {},
+      teams: tournament.teams || [],
+      isPublicRegistration: tournament.isPublicRegistration ?? true,
+      registrationOpen: tournament.registrationOpen ?? true,
+      maxTeams: tournament.maxTeams || 8,
+      bracketSeeded: tournament.bracketSeeded || false,
+      shuffled: tournament.shuffled || false,
+      id: tournament.id,
+    };
+    loadTournamentData(draftData);
+    router.push(stepPath);
+  };
+
   return (
     <main className="min-h-screen bg-[#080b10] text-white font-sans">
       {/* Noise overlay */}
@@ -3051,6 +3091,67 @@ export default function TournamentDetailPage() {
         <div className="w-full">
           {!tournament.bracketSeeded ? (
             <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
+              {/* Breadcrumb for Edit Return */}
+              {isOwner && (
+                <div className="flex items-center gap-2 mb-8 text-sm text-white/60 overflow-x-auto pb-2 justify-center">
+                  <button
+                    onClick={() => handleNavigateToDraftStep('/tournaments/create')}
+                    className="text-white/40 hover:text-white transition-colors whitespace-nowrap"
+                  >
+                    Gói dịch vụ
+                  </button>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-white/20">
+                    <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                  <button
+                    onClick={() => handleNavigateToDraftStep('/tournaments/create/info')}
+                    className="text-white/40 hover:text-white transition-colors whitespace-nowrap"
+                  >
+                    Thông tin
+                  </button>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-white/20">
+                    <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                  <button
+                    onClick={() => handleNavigateToDraftStep('/tournaments/create/teams')}
+                    className="text-white/40 hover:text-white transition-colors whitespace-nowrap"
+                  >
+                    Danh sách đội
+                  </button>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-white/20">
+                    <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                  <button
+                    onClick={() => handleNavigateToDraftStep('/tournaments/create/members')}
+                    className="text-white/40 hover:text-white transition-colors whitespace-nowrap"
+                  >
+                    Thành viên
+                  </button>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-white/20">
+                    <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                  <button
+                    onClick={() => handleNavigateToDraftStep('/tournaments/create/finalize')}
+                    className="text-[#22c55e] whitespace-nowrap font-semibold"
+                  >
+                    Quản lý đội
+                  </button>
+                  {tournament.sport !== 'battle_royale' && tournament.format !== 'league' && (
+                    <>
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-white/20">
+                        <path d="M6 2L10 8L6 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                      <button
+                        onClick={() => handleNavigateToDraftStep('/tournaments/create/bracket')}
+                        className="text-white/40 hover:text-white transition-colors whitespace-nowrap"
+                      >
+                        Sắp xếp & Tạo đội
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
               {/* Registration Toggle Panel */}
               <div className="flex flex-col md:flex-row md:items-center justify-between p-6 rounded-2xl bg-[#0f1419] border border-white/[0.06] shadow-xl gap-4">
                 <div className="space-y-1.5">
@@ -3228,7 +3329,7 @@ export default function TournamentDetailPage() {
                                 onClick={() => handleRemoveTeam(team.id)}
                                 className="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-[10px] font-black uppercase tracking-wider transition-all"
                               >
-                                Loại bỏ
+                                Xóa
                               </button>
                             )}
                           </div>
