@@ -294,8 +294,10 @@ export default function FinalizeCreatePage() {
       try {
         // Sync to backend first so spectator page can load it instantly
         await syncTournamentToBackend(tournament);
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error syncing tournament to backend:', err);
+        alert(err.message || 'Không thể đồng bộ giải đấu lên hệ thống. Vui lòng kiểm tra lại kết nối hoặc gói dịch vụ của bạn.');
+        return;
       }
 
       const session = getSession();
