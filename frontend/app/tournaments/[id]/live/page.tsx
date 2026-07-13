@@ -1962,7 +1962,7 @@ export default function TournamentLiveViewPage() {
                                     <div className="flex gap-4 font-mono text-[10px]">
                                       {tournament.format !== 'battle_royale' && <span>{res.kills} Kills</span>}
                                       <span className="text-[#22c55e] font-bold">
-                                        +{tournament.format === 'battle_royale' ? (res.pts || 0) : (res.totalPoints || 0)} Pts
+                                        +{res.totalPoints !== undefined ? res.totalPoints : (res.pts || 0)} điểm
                                       </span>
                                     </div>
                                   </div>
