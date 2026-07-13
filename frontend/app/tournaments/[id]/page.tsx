@@ -2576,9 +2576,9 @@ export default function TournamentDetailPage() {
     try {
       await syncTournamentToBackend(updatedTournament);
       alert('Giải đấu đã khởi tranh và tạo sơ đồ thi đấu thành công!');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error starting tournament:', err);
-      alert('Lỗi kết nối mạng khi tạo sơ đồ thi đấu.');
+      alert(err.message || 'Lỗi kết nối mạng khi tạo sơ đồ thi đấu.');
     }
   };
 

@@ -64,6 +64,12 @@ export async function syncTournamentToBackend(tournamentData: any) {
   });
 }
 
+export async function deleteTournamentFromBackend(id: string) {
+  return requestJson<any>(`/tournaments/${id}`, {
+    method: "DELETE",
+  });
+}
+
 export async function fetchTournamentFromBackend(id: string) {
   return requestJson<any>(`/tournaments/${id}?t=${Date.now()}`, {
     method: "GET",

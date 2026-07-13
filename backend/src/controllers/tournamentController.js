@@ -453,6 +453,31 @@ async function unblockChatUser(req, res) {
   }
 }
 
+async function deleteTournament(req, res) {
+  try {
+    const { id } = req.params;
+    const userId = req.user ? req.user.id : null;
+
+    const tournament = await Tournament.findOne({ id });
+    if (!tournament) {
+      return res.status(404).json({ message: "Không tìm thấy giải đấu" });
+    }
+
+    if (!userId || String(tournament.userId) !== String(userId)) {
+      return res.status(403).json({ message: "Bạn không có quyền xóa giải đấu này" });
+    }
+
+    await Tournament.deleteOne({ id });
+    await ChatMessage.deleteMany({ tournamentId: id });
+    await Announcement.deleteMany({ tournamentId: id });
+
+    return res.status(200).json({ success: true, message: "Đã xóa giải đấu thành công" });
+  } catch (error) {
+    console.error("Error deleting tournament:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+}
+
 module.exports = {
   upsertTournament,
   getTournament,
@@ -466,4 +491,5 @@ module.exports = {
   registerTeam,
   blockChatUser,
   unblockChatUser,
+  deleteTournament,
 };

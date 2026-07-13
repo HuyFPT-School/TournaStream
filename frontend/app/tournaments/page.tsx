@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getSession, logoutUser, SessionUser } from "@/app/lib/authStorage";
 import { useTournament } from "@/app/contexts/TournamentContext";
-import { fetchUserTournamentsFromBackend } from "@/app/lib/tournaments";
+import { fetchUserTournamentsFromBackend, deleteTournamentFromBackend } from "@/app/lib/tournaments";
 
 interface Tournament {
   id: string;
@@ -19,6 +19,52 @@ export default function MyTournamentsPage() {
   const [tournaments, setTournaments] = useState<any[]>([]);
   const [draftTournament, setDraftTournament] = useState<any | null>(null);
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
+
+  const handleDeleteTournament = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!window.confirm("Bạn có chắc chắn muốn xóa giải đấu này không? Hành động này không thể hoàn tác.")) {
+      return;
+    }
+    try {
+      await deleteTournamentFromBackend(id);
+      // Remove from state
+      setTournaments((prev) => prev.filter((t) => t.id !== id));
+      // Remove from localStorage
+      const session = getSession();
+      if (session) {
+        const tournamentsKey = `tournaments_${session.id}`;
+        const saved = localStorage.getItem(tournamentsKey);
+        if (saved) {
+          try {
+            const list = JSON.parse(saved);
+            const filtered = list.filter((t: any) => t.id !== id);
+            localStorage.setItem(tournamentsKey, JSON.stringify(filtered));
+          } catch (err) {
+            console.error(err);
+          }
+        }
+      }
+      alert("Đã xóa giải đấu thành công.");
+    } catch (err: any) {
+      console.error("Error deleting tournament:", err);
+      alert(err.message || "Không thể xóa giải đấu. Vui lòng thử lại.");
+    }
+  };
+
+  const handleDeleteDraft = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!window.confirm("Bạn có chắc chắn muốn xóa bản nháp giải đấu này không?")) {
+      return;
+    }
+    const session = getSession();
+    if (session) {
+      const draftKey = `tournamentDraft_${session.id}`;
+      localStorage.removeItem(draftKey);
+      setDraftTournament(null);
+    }
+  };
 
   useEffect(() => {
     const session = getSession();
@@ -223,9 +269,22 @@ export default function MyTournamentsPage() {
             {draftTournament && (
               <div
                 onClick={() => handleDraftClick(draftTournament)}
-                className="cursor-pointer group rounded-2xl border border-[#eab308]/20 bg-[#eab308]/[0.02] p-6 hover:border-[#eab308]/50 hover:bg-[#eab308]/[0.05] transition-all duration-300 hover:-translate-y-1"
+                className="cursor-pointer group relative rounded-2xl border border-[#eab308]/20 bg-[#eab308]/[0.02] p-6 hover:border-[#eab308]/50 hover:bg-[#eab308]/[0.05] transition-all duration-300 hover:-translate-y-1"
               >
-                <h3 className="text-lg font-bold mb-2 text-white/90 truncate">
+                {/* Delete button */}
+                <button
+                  onClick={handleDeleteDraft}
+                  className="absolute top-4 right-4 text-white/30 hover:text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg transition-all duration-200 z-10"
+                  title="Xóa bản nháp"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                  </svg>
+                </button>
+                <h3 className="text-lg font-bold mb-2 text-white/90 truncate pr-8">
                   {draftTournament.name || "Bản nháp giải đấu chưa đặt tên"}
                 </h3>
                 <p className="text-sm text-white/50 mb-4">
@@ -243,9 +302,22 @@ export default function MyTournamentsPage() {
               <Link
                 key={tournament.id}
                 href={`/tournaments/${tournament.id}`}
-                className="group rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6 hover:border-[#22c55e]/30 hover:bg-[#22c55e]/[0.04] transition-all duration-300 hover:-translate-y-1"
+                className="group relative rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6 hover:border-[#22c55e]/30 hover:bg-[#22c55e]/[0.04] transition-all duration-300 hover:-translate-y-1"
               >
-                <h3 className="text-lg font-bold mb-2 text-white/90 truncate">
+                {/* Delete button */}
+                <button
+                  onClick={(e) => handleDeleteTournament(e, tournament.id)}
+                  className="absolute top-4 right-4 text-white/30 hover:text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg transition-all duration-200 z-10"
+                  title="Xóa giải đấu"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                  </svg>
+                </button>
+                <h3 className="text-lg font-bold mb-2 text-white/90 truncate pr-8">
                   {tournament.name}
                 </h3>
                 <p className="text-sm text-white/50 mb-4">
