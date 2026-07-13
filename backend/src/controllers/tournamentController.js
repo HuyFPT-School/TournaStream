@@ -2,6 +2,7 @@ const { Tournament } = require("../models/Tournament");
 const { ChatMessage } = require("../models/ChatMessage");
 const { Announcement } = require("../models/Announcement");
 const { triggerTournamentUpdate, triggerMatchSignaling, triggerChatMessage, triggerAnnouncement, triggerChatModeration } = require("../services/pusherService");
+const { env } = require("../config/env");
 
 async function upsertTournament(req, res) {
   try {
@@ -22,9 +23,11 @@ async function upsertTournament(req, res) {
     } else {
       // Creating a new tournament: check packages and transaction limits
       if (data.packageId === "free") {
-        const existingCount = await Tournament.countDocuments({ userId });
-        if (existingCount > 0) {
-          return res.status(400).json({ message: "Gói dùng thử chỉ áp dụng cho giải đấu đầu tiên của bạn." });
+        if (!env.disableFreeLimit) {
+          const existingCount = await Tournament.countDocuments({ userId });
+          if (existingCount > 0) {
+            return res.status(400).json({ message: "Gói dùng thử chỉ áp dụng cho giải đấu đầu tiên của bạn." });
+          }
         }
       } else if (data.packageId === "basic" || data.packageId === "pro") {
         const planKey = data.packageId === "pro" ? "premium" : data.packageId;

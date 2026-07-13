@@ -29,6 +29,7 @@ const env = {
   pusherKey: process.env.PUSHER_KEY || "",
   pusherSecret: process.env.PUSHER_SECRET || "",
   pusherCluster: process.env.PUSHER_CLUSTER || "ap1",
+  disableFreeLimit: toBool(process.env.DISABLE_FREE_LIMIT, false),
 };
 
 module.exports = { env };
