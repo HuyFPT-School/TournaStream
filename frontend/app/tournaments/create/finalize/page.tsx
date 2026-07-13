@@ -164,7 +164,7 @@ export default function FinalizeCreatePage() {
     if (tournament) return; // Prevent regenerating ID and details if already set
 
     // Generate a mock tournament ID
-    const tournamentId = data.id || 'tourn_' + Date.now();
+    const tournamentId = 'tourn_' + Date.now();
 
     if (data.isPublicRegistration) {
       const mockTournament = {

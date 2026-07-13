@@ -48,7 +48,6 @@ export interface TournamentData {
   // Bracket
   bracketSeeded: boolean;
   shuffled: boolean;
-  id?: string;
 }
 
 interface TournamentContextType {
