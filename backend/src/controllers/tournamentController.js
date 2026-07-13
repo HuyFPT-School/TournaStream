@@ -283,7 +283,7 @@ async function postAnnouncement(req, res) {
 async function registerTeam(req, res) {
   try {
     const { id } = req.params;
-    const { teamName, members } = req.body;
+    const { teamName, members, logo } = req.body;
 
     if (!teamName || !teamName.trim()) {
       return res.status(400).json({ message: "Tên đội không được để trống" });
@@ -319,6 +319,7 @@ async function registerTeam(req, res) {
     const newTeam = {
       id: `team_${Date.now()}`,
       name: teamName.trim(),
+      logo: logo || null,
       members: (members || []).map((m, idx) => ({
         id: `member_${Date.now()}_${idx}`,
         name: m.name ? m.name.trim() : `Thành viên ${idx + 1}`,

@@ -30,7 +30,7 @@ function verifySignature(req) {
 
 function extractOrderCode(payload) {
   const direct = payload.code || "";
-  if (direct) return String(direct).trim();
+  if (direct) return String(direct).toUpperCase().trim();
 
   const content = payload.content || payload.transferDesc || "";
   const match = String(content).toUpperCase().match(/TS\d+/);
