@@ -219,7 +219,7 @@ export default function BracketPage() {
     setIsSubmitting(true);
 
     try {
-      const tournamentId = 'tourn_' + Date.now();
+      const tournamentId = data.id || 'tourn_' + Date.now();
 
       let bracket = null;
       let groups: any[] | null = null;
