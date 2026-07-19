@@ -67,6 +67,8 @@ function buildQrImageUrl(qrPayload) {
   )}`;
 }
 
+const TRANSACTION_EXPIRATION_MS = 15 * 60 * 1000; // 15 minutes
+
 async function createSepayCheckout(req, res) {
   const { planKey, checkoutCode: requestedCode, couponCode } = req.body || {};
   const normalizedPlanKey = String(planKey || "")
@@ -113,15 +115,22 @@ async function createSepayCheckout(req, res) {
 
   const existing = await Transaction.findOne({ checkoutCode, userId });
   if (existing) {
-    return res.status(200).json({
-      checkoutCode: existing.checkoutCode,
-      planKey: existing.planKey,
-      planName: existing.planName,
-      amount: existing.amount,
-      qrPayload: existing.qrPayload,
-      qrImageUrl: existing.qrImageUrl,
-      status: existing.status,
-    });
+    const age = Date.now() - new Date(existing.createdAt).getTime();
+    if (existing.status === "pending" && age > TRANSACTION_EXPIRATION_MS) {
+      existing.status = "expired";
+      await existing.save();
+    } else {
+      return res.status(200).json({
+        checkoutCode: existing.checkoutCode,
+        planKey: existing.planKey,
+        planName: existing.planName,
+        amount: existing.amount,
+        qrPayload: existing.qrPayload,
+        qrImageUrl: existing.qrImageUrl,
+        status: existing.status,
+        createdAt: existing.createdAt,
+      });
+    }
   }
 
   const isFree = finalAmount === 0;
@@ -168,6 +177,7 @@ async function createSepayCheckout(req, res) {
     qrPayload: transaction.qrPayload,
     qrImageUrl: transaction.qrImageUrl,
     status: transaction.status,
+    createdAt: transaction.createdAt,
   });
 }
 
@@ -180,16 +190,54 @@ async function getSepayTransactionStatus(req, res) {
 
     const transaction = await Transaction.findOne({
       checkoutCode: String(checkoutCode).toUpperCase().trim(),
-    }).lean();
+    });
 
     if (!transaction) {
       return res.status(404).json({ message: "Transaction not found" });
+    }
+
+    if (transaction.status === "pending" && transaction.createdAt) {
+      const age = Date.now() - new Date(transaction.createdAt).getTime();
+      if (age > TRANSACTION_EXPIRATION_MS) {
+        transaction.status = "expired";
+        await transaction.save();
+      }
     }
 
     return res.status(200).json({
       checkoutCode: transaction.checkoutCode,
       status: transaction.status,
       paidAt: transaction.paidAt || null,
+      createdAt: transaction.createdAt,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+}
+
+async function cancelSepayCheckout(req, res) {
+  try {
+    const { checkoutCode } = req.body || {};
+    if (!checkoutCode) {
+      return res.status(400).json({ message: "Checkout code is required" });
+    }
+
+    const transaction = await Transaction.findOne({
+      checkoutCode: String(checkoutCode).toUpperCase().trim(),
+    });
+
+    if (!transaction) {
+      return res.status(404).json({ message: "Transaction not found" });
+    }
+
+    if (transaction.status === "pending") {
+      transaction.status = "cancelled";
+      await transaction.save();
+    }
+
+    return res.status(200).json({
+      checkoutCode: transaction.checkoutCode,
+      status: transaction.status,
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -252,4 +300,4 @@ async function validateCouponCode(req, res) {
   }
 }
 
-module.exports = { createSepayCheckout, getSepayTransactionStatus, validateCouponCode };
+module.exports = { createSepayCheckout, getSepayTransactionStatus, cancelSepayCheckout, validateCouponCode };

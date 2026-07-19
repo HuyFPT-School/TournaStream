@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTournament } from '@/app/contexts/TournamentContext';
 import { useState, useEffect, useMemo } from 'react';
-import { createSePayCheckout, getSePayTransactionStatus } from '@/app/lib/sepay';
+import { createSePayCheckout, getSePayTransactionStatus, cancelSePayCheckout } from '@/app/lib/sepay';
 import { getSession, getAccessToken, getApiBaseUrl } from '@/app/lib/authStorage';
 import { fetchUserTournamentsFromBackend } from '@/app/lib/tournaments';
 
@@ -66,6 +66,7 @@ export default function PackageSelectionPage() {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [hasCreatedBefore, setHasCreatedBefore] = useState<boolean>(false);
+  const [timeLeftSeconds, setTimeLeftSeconds] = useState<number | null>(null);
 
   // Coupon states
   const [couponCodeInput, setCouponCodeInput] = useState('');
@@ -158,9 +159,14 @@ export default function PackageSelectionPage() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        setActiveCheckout(parsed);
-        const planId = parsed.planKey === 'premium' ? 'pro' : parsed.planKey;
-        setSelectedPackage(planId);
+        const age = parsed.createdAt ? Date.now() - new Date(parsed.createdAt).getTime() : 0;
+        if (age > 15 * 60 * 1000) {
+          localStorage.removeItem(pendingCheckoutKey);
+        } else {
+          setActiveCheckout(parsed);
+          const planId = parsed.planKey === 'premium' ? 'pro' : parsed.planKey;
+          setSelectedPackage(planId);
+        }
       } catch (e) {
         console.error('Error parsing pendingCheckout:', e);
       }
@@ -170,13 +176,29 @@ export default function PackageSelectionPage() {
   useEffect(() => {
     if (!activeCheckout || paymentSuccess) return;
 
-    const interval = setInterval(async () => {
+    const createdAtTime = activeCheckout.createdAt ? new Date(activeCheckout.createdAt).getTime() : Date.now();
+    const expiresAt = createdAtTime + 15 * 60 * 1000;
+
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+      setTimeLeftSeconds(remaining);
+      if (remaining <= 0) {
+        setActiveCheckout(null);
+        localStorage.removeItem(pendingCheckoutKey);
+        setErrorMessage('Mã thanh toán đã hết hạn (quá 15 phút). Vui lòng thử lại.');
+      }
+    };
+    updateCountdown();
+    const timerInterval = setInterval(updateCountdown, 1000);
+
+    const statusInterval = setInterval(async () => {
       try {
         const res = await getSePayTransactionStatus(activeCheckout.checkoutCode);
         if (res.status === 'paid') {
           setPaymentSuccess(true);
           localStorage.removeItem(pendingCheckoutKey);
-          clearInterval(interval);
+          clearInterval(statusInterval);
+          clearInterval(timerInterval);
           setTimeout(() => {
             const planId = activeCheckout.planKey === 'premium' ? 'pro' : activeCheckout.planKey;
             const pkg = packages.find(p => p.id === planId);
@@ -185,19 +207,38 @@ export default function PackageSelectionPage() {
               router.push('/tournaments/create/info');
             }
           }, 2000);
+        } else if (res.status === 'expired' || res.status === 'cancelled') {
+          setActiveCheckout(null);
+          localStorage.removeItem(pendingCheckoutKey);
+          clearInterval(statusInterval);
+          clearInterval(timerInterval);
+          setErrorMessage(
+            res.status === 'expired'
+              ? 'Mã thanh toán đã hết hạn (quá 15 phút). Vui lòng thử lại.'
+              : 'Giao dịch đã được hủy thành công.'
+          );
         }
       } catch (err) {
         console.error('Error polling transaction status:', err);
       }
     }, 3000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(statusInterval);
+      clearInterval(timerInterval);
+    };
   }, [activeCheckout, paymentSuccess, router, setPackage, pendingCheckoutKey]);
 
-  const handleCancelCheckout = () => {
-    if (!paymentSuccess) {
+  const handleCancelCheckout = async () => {
+    if (!paymentSuccess && activeCheckout) {
+      const codeToCancel = activeCheckout.checkoutCode;
       setActiveCheckout(null);
       localStorage.removeItem(pendingCheckoutKey);
+      try {
+        await cancelSePayCheckout(codeToCancel);
+      } catch (err) {
+        console.error('Error cancelling checkout on backend:', err);
+      }
     }
   };
 
@@ -349,8 +390,11 @@ export default function PackageSelectionPage() {
                   </div>
                   <p className="text-sm text-white/60">{pkg.description}</p>
                   {pkg.id === 'free' && hasCreatedBefore && (
-                    <p className="text-xs text-red-400 font-bold mt-2 flex items-center gap-1">
-                      ⚠️ Bạn đã dùng gói này rồi
+                    <p className="text-xs text-red-400 font-bold mt-2 flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      Bạn đã dùng gói này rồi
                     </p>
                   )}
                 </div>
@@ -388,8 +432,11 @@ export default function PackageSelectionPage() {
         </div>
 
         {/* Note */}
-        <div className="bg-[#0f1419] border border-white/[0.06] rounded-lg p-4 mb-8 text-sm text-white/60">
-          📌 Miễn phí cho giải đấu đầu tiên! Tối đa 8 đội, đầy đủ tính năng.
+        <div className="bg-[#0f1419] border border-white/[0.06] rounded-lg p-4 mb-8 text-sm text-white/60 flex items-center gap-2">
+          <svg className="w-4 h-4 text-[#22c55e] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>Miễn phí cho giải đấu đầu tiên! Tối đa 8 đội, đầy đủ tính năng.</span>
         </div>
 
         {/* Coupon Input Block */}
@@ -591,6 +638,14 @@ export default function PackageSelectionPage() {
                           {activeCheckout.amount.toLocaleString('vi-VN')} đ
                         </span>
                       </div>
+                      {timeLeftSeconds !== null && (
+                        <div className="text-right">
+                          <span className="text-[10px] text-amber-400 uppercase tracking-wider block font-bold">Hết hạn sau</span>
+                          <span className="text-lg font-mono font-black text-amber-400 block mt-0.5">
+                            {Math.floor(timeLeftSeconds / 60)}:{(timeLeftSeconds % 60).toString().padStart(2, '0')}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -601,6 +656,17 @@ export default function PackageSelectionPage() {
                       Đang chờ hệ thống ghi nhận thanh toán...
                     </span>
                   </div>
+
+                  {/* Cancel Button */}
+                  <button
+                    onClick={handleCancelCheckout}
+                    className="w-full py-2.5 rounded-xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Hủy giao dịch này & chọn lại gói
+                  </button>
                 </div>
               )}
             </div>

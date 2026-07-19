@@ -4,6 +4,13 @@ const { Tournament } = require("../models/Tournament");
 
 async function getAdminStats(req, res) {
   try {
+    // 0. Auto-expire pending transactions older than 15 minutes
+    const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
+    await Transaction.updateMany(
+      { status: "pending", createdAt: { $lt: fifteenMinsAgo } },
+      { $set: { status: "expired" } }
+    );
+
     // 1. User stats
     const totalUsers = await User.countDocuments({});
     

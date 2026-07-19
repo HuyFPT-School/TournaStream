@@ -78,10 +78,20 @@ export async function createSePayCheckout(input: {
 }
 
 export async function getSePayTransactionStatus(checkoutCode: string) {
-  return requestJson<{ checkoutCode: string; status: string; paidAt: string | null }>(
+  return requestJson<{ checkoutCode: string; status: string; paidAt: string | null; createdAt?: string }>(
     `/payments/sepay/status/${checkoutCode}`,
     {
       method: "GET",
+    }
+  );
+}
+
+export async function cancelSePayCheckout(checkoutCode: string) {
+  return requestJson<{ checkoutCode: string; status: string }>(
+    "/payments/sepay/cancel",
+    {
+      method: "POST",
+      body: JSON.stringify({ checkoutCode }),
     }
   );
 }

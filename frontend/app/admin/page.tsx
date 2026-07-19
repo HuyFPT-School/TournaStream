@@ -325,7 +325,11 @@ export default function AdminDashboardPage() {
     return (
       <main className="min-h-screen bg-[#080b10] text-white font-sans flex items-center justify-center p-6">
         <div className="text-center max-w-md bg-red-500/10 border border-red-500/20 rounded-2xl p-8">
-          <div className="text-4xl mb-4">⚠️</div>
+          <div className="flex justify-center mb-4 text-amber-400">
+            <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
           <h2 className="text-xl font-bold text-white mb-2">Đã xảy ra lỗi</h2>
           <p className="text-white/60 mb-6">{error || 'Không tải được số liệu admin.'}</p>
           <Link href="/tournaments" className="px-6 py-2.5 rounded-lg bg-white/10 hover:bg-white/20 transition-all font-semibold">
@@ -537,11 +541,21 @@ export default function AdminDashboardPage() {
                             <span className={`inline-flex px-2 py-0.5 text-xs font-bold rounded-full ${
                               tx.status === 'paid'
                                 ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                               : tx.status === 'pending'
+                                : tx.status === 'pending'
                                 ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
+                                : tx.status === 'expired'
+                                ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
                                 : 'bg-red-500/10 text-red-400 border border-red-500/20'
                             }`}>
-                              {tx.status === 'paid' ? 'Đã thu' : tx.status === 'pending' ? 'Chờ thanh toán' : tx.status}
+                              {tx.status === 'paid'
+                                ? 'Đã thu'
+                                : tx.status === 'pending'
+                                ? 'Chờ thanh toán'
+                                : tx.status === 'expired'
+                                ? 'Hết hạn'
+                                : tx.status === 'cancelled'
+                                ? 'Đã hủy'
+                                : tx.status}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-xs text-white/50">{formatDate(tx.createdAt)}</td>
@@ -734,9 +748,19 @@ export default function AdminDashboardPage() {
                               ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                               : tx.status === 'pending'
                               ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
+                              : tx.status === 'expired'
+                              ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
                               : 'bg-red-500/10 text-red-400 border border-red-500/20'
                           }`}>
-                            {tx.status === 'paid' ? 'Đã thu' : tx.status === 'pending' ? 'Chờ thanh toán' : tx.status}
+                            {tx.status === 'paid'
+                              ? 'Đã thu'
+                              : tx.status === 'pending'
+                              ? 'Chờ thanh toán'
+                              : tx.status === 'expired'
+                              ? 'Hết hạn'
+                              : tx.status === 'cancelled'
+                              ? 'Đã hủy'
+                              : tx.status}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-xs text-white/60 truncate max-w-[200px]" title={tx.note}>
