@@ -132,7 +132,66 @@ async function getUserDetails(req, res) {
   }
 }
 
+async function getCoupons(req, res) {
+  try {
+    const { Coupon } = require("../models/Coupon");
+    const coupons = await Coupon.find({}).sort({ createdAt: -1 }).lean();
+    return res.status(200).json(coupons);
+  } catch (error) {
+    console.error("Error fetching coupons:", error);
+    return res.status(500).json({ message: "Server error fetching coupons" });
+  }
+}
+
+async function createCoupon(req, res) {
+  try {
+    const { Coupon } = require("../models/Coupon");
+    const { code, discountType, discountValue, maxUses, expiryDate } = req.body || {};
+    if (!code || !discountType || discountValue === undefined) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const normalizedCode = String(code).trim().toUpperCase();
+    const existing = await Coupon.findOne({ code: normalizedCode });
+    if (existing) {
+      return res.status(409).json({ message: "Mã giảm giá đã tồn tại" });
+    }
+
+    const coupon = await Coupon.create({
+      code: normalizedCode,
+      discountType,
+      discountValue: Number(discountValue),
+      maxUses: maxUses ? Number(maxUses) : null,
+      expiryDate: expiryDate ? new Date(expiryDate) : null,
+      isActive: true,
+    });
+
+    return res.status(201).json(coupon);
+  } catch (error) {
+    console.error("Error creating coupon:", error);
+    return res.status(500).json({ message: "Server error creating coupon" });
+  }
+}
+
+async function deleteCoupon(req, res) {
+  try {
+    const { Coupon } = require("../models/Coupon");
+    const { id } = req.params;
+    const result = await Coupon.findByIdAndDelete(id);
+    if (!result) {
+      return res.status(404).json({ message: "Coupon not found" });
+    }
+    return res.status(200).json({ success: true, message: "Deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting coupon:", error);
+    return res.status(500).json({ message: "Server error deleting coupon" });
+  }
+}
+
 module.exports = {
   getAdminStats,
-  getUserDetails
+  getUserDetails,
+  getCoupons,
+  createCoupon,
+  deleteCoupon
 };

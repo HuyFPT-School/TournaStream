@@ -68,7 +68,7 @@ function buildQrImageUrl(qrPayload) {
 }
 
 async function createSepayCheckout(req, res) {
-  const { planKey, checkoutCode: requestedCode } = req.body || {};
+  const { planKey, checkoutCode: requestedCode, couponCode } = req.body || {};
   const normalizedPlanKey = String(planKey || "")
     .trim()
     .toLowerCase();
@@ -84,6 +84,33 @@ async function createSepayCheckout(req, res) {
 
   const userId = req.user ? req.user.id : null;
 
+  // Compute amount based on coupon
+  let finalAmount = plan.amount;
+  let appliedCoupon = null;
+
+  if (couponCode) {
+    const { Coupon } = require("../models/Coupon");
+    const normalizedCode = String(couponCode).trim().toUpperCase();
+    const coupon = await Coupon.findOne({ code: normalizedCode });
+
+    if (coupon) {
+      const isValid = coupon.isActive &&
+        (coupon.maxUses === null || coupon.uses < coupon.maxUses) &&
+        (coupon.expiryDate === null || new Date() <= new Date(coupon.expiryDate));
+
+      if (isValid) {
+        let discount = 0;
+        if (coupon.discountType === "percentage") {
+          discount = Math.round(plan.amount * (coupon.discountValue / 100));
+        } else if (coupon.discountType === "fixed") {
+          discount = coupon.discountValue;
+        }
+        finalAmount = Math.max(0, plan.amount - discount);
+        appliedCoupon = coupon;
+      }
+    }
+  }
+
   const existing = await Transaction.findOne({ checkoutCode, userId });
   if (existing) {
     return res.status(200).json({
@@ -96,26 +123,42 @@ async function createSepayCheckout(req, res) {
       status: existing.status,
     });
   }
-  const qrPayload = buildQrPayload({ checkoutCode, amount: plan.amount });
-  const qrImageUrl = buildQrImageUrl(qrPayload);
+
+  const isFree = finalAmount === 0;
+
+  const qrPayload = isFree ? "" : buildQrPayload({ checkoutCode, amount: finalAmount });
+  const qrImageUrl = isFree ? "" : buildQrImageUrl(qrPayload);
 
   const transaction = await Transaction.create({
     checkoutCode,
     userId,
     planKey: normalizedPlanKey,
-    planName: plan.planName,
-    amount: plan.amount,
+    planName: plan.planName + (appliedCoupon ? ` (Mã: ${appliedCoupon.code})` : ""),
+    amount: finalAmount,
     currency: "VND",
-    status: "pending",
+    status: isFree ? "paid" : "pending",
     qrPayload,
     qrImageUrl,
     note: `Thanh toan goi ${plan.planName}`,
+    paidAt: isFree ? new Date() : null,
     raw: {
       source: "pricing-page",
       planKey: normalizedPlanKey,
       planName: plan.planName,
+      couponCode: appliedCoupon ? appliedCoupon.code : null,
     },
   });
+
+  if (appliedCoupon) {
+    appliedCoupon.uses += 1;
+    await appliedCoupon.save();
+
+    const { User } = require("../models/User");
+    await User.updateOne(
+      { "referralCoupons.code": appliedCoupon.code },
+      { $set: { "referralCoupons.$.isUsed": true } }
+    );
+  }
 
   return res.status(201).json({
     checkoutCode: transaction.checkoutCode,
@@ -153,4 +196,60 @@ async function getSepayTransactionStatus(req, res) {
   }
 }
 
-module.exports = { createSepayCheckout, getSepayTransactionStatus };
+async function validateCouponCode(req, res) {
+  try {
+    const { Coupon } = require("../models/Coupon");
+    const { code, planKey } = req.body || {};
+    if (!code || !planKey) {
+      return res.status(400).json({ message: "Vui lòng nhập mã giảm giá và gói dịch vụ" });
+    }
+
+    const normalizedCode = String(code).trim().toUpperCase();
+    const coupon = await Coupon.findOne({ code: normalizedCode });
+
+    if (!coupon) {
+      return res.status(404).json({ message: "Mã giảm giá không tồn tại" });
+    }
+
+    if (!coupon.isActive) {
+      return res.status(400).json({ message: "Mã giảm giá đã bị vô hiệu hóa" });
+    }
+
+    if (coupon.maxUses !== null && coupon.uses >= coupon.maxUses) {
+      return res.status(400).json({ message: "Mã giảm giá đã hết lượt sử dụng" });
+    }
+
+    if (coupon.expiryDate !== null && new Date() > new Date(coupon.expiryDate)) {
+      return res.status(400).json({ message: "Mã giảm giá đã hết hạn sử dụng" });
+    }
+
+    // Compute expected discount and final amount
+    const plan = PRICING_PLANS[String(planKey).toLowerCase()];
+    if (!plan) {
+      return res.status(400).json({ message: "Gói dịch vụ không hợp lệ" });
+    }
+
+    let discount = 0;
+    if (coupon.discountType === "percentage") {
+      discount = Math.round(plan.amount * (coupon.discountValue / 100));
+    } else if (coupon.discountType === "fixed") {
+      discount = coupon.discountValue;
+    }
+    const finalAmount = Math.max(0, plan.amount - discount);
+
+    return res.status(200).json({
+      valid: true,
+      code: coupon.code,
+      discountType: coupon.discountType,
+      discountValue: coupon.discountValue,
+      originalAmount: plan.amount,
+      discountAmount: discount,
+      finalAmount: finalAmount,
+    });
+  } catch (error) {
+    console.error("Error validating coupon:", error);
+    return res.status(500).json({ message: "Server error validating coupon" });
+  }
+}
+
+module.exports = { createSepayCheckout, getSepayTransactionStatus, validateCouponCode };

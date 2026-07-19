@@ -122,6 +122,48 @@ async function handleSepayWebhook(req, res) {
           },
         },
       );
+
+      if (txnAmountMatches && txn.userId) {
+        try {
+          const { User } = require("../models/User");
+          const user = await User.findById(txn.userId);
+          if (user && user.referredBy) {
+            const { Transaction } = require("../models/Transaction");
+            const paidTxnCount = await Transaction.countDocuments({
+              userId: user._id,
+              status: "paid",
+              checkoutCode: { $ne: orderCode }
+            });
+
+            if (paidTxnCount === 0) {
+              const referrer = await User.findById(user.referredBy);
+              if (referrer) {
+                const { Coupon } = require("../models/Coupon");
+                const rewardCode = `REF-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+                
+                await Coupon.create({
+                  code: rewardCode,
+                  discountType: "percentage",
+                  discountValue: 20, // 20% discount coupon
+                  maxUses: 1,
+                  isActive: true,
+                });
+
+                referrer.referralCoupons.push({
+                  code: rewardCode,
+                  discountValue: 20,
+                  referredEmail: user.email,
+                  isUsed: false,
+                });
+                await referrer.save();
+                console.log(`Referral reward generated for referrer ${referrer.email} due to purchase by ${user.email}: ${rewardCode}`);
+              }
+            }
+          }
+        } catch (referralErr) {
+          console.error("Error processing referral reward in webhook:", referralErr);
+        }
+      }
     }
 
     payment.status = txn

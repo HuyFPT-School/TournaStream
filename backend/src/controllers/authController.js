@@ -34,7 +34,7 @@ function clearRefreshCookie(res) {
 }
 
 async function register(req, res) {
-  const { fullName, email, password } = req.body || {};
+  const { fullName, email, password, ref } = req.body || {};
   const normalizedEmail = (email || "").trim().toLowerCase();
 
   if (!validateFullName(fullName)) {
@@ -57,12 +57,32 @@ async function register(req, res) {
     ? "admin"
     : "user";
 
+  let referredBy = null;
+  if (ref) {
+    const referrer = await User.findOne({ referralCode: String(ref).trim().toUpperCase() });
+    if (referrer) {
+      referredBy = referrer._id;
+    }
+  }
+
+  let referralCode = "";
+  let isUnique = false;
+  while (!isUnique) {
+    referralCode = "REF_" + Math.random().toString(36).substring(2, 8).toUpperCase();
+    const existingCode = await User.findOne({ referralCode });
+    if (!existingCode) {
+      isUnique = true;
+    }
+  }
+
   const user = new User({
     fullName: fullName.trim(),
     email: normalizedEmail,
     passwordHash,
     isVerified: env.skipEmailVerification || role === "admin",
     role,
+    referralCode,
+    referredBy,
   });
 
   if (!user.isVerified) {
@@ -305,15 +325,33 @@ async function verifyEmail(req, res) {
 }
 
 async function getMe(req, res) {
-  const user = await User.findById(req.user.id).select("fullName email role");
+  const user = await User.findById(req.user.id).select("fullName email role referralCode referralCoupons");
   if (!user) {
     return res.status(404).json({ message: "User not found" });
   }
+
+  // If old user has no referralCode, generate and save it on the fly
+  if (!user.referralCode) {
+    let code = "";
+    let isUnique = false;
+    while (!isUnique) {
+      code = "REF_" + Math.random().toString(36).substring(2, 8).toUpperCase();
+      const existing = await User.findOne({ referralCode: code });
+      if (!existing) {
+        isUnique = true;
+      }
+    }
+    user.referralCode = code;
+    await user.save();
+  }
+
   res.json({
     id: user._id.toString(),
     fullName: user.fullName,
     email: user.email,
     role: user.role,
+    referralCode: user.referralCode,
+    referralCoupons: user.referralCoupons || [],
   });
 }
 

@@ -14,6 +14,18 @@ const userSchema = new mongoose.Schema(
     resetTokenExpiresAt: { type: Date, default: null },
     refreshTokenHash: { type: String, default: null },
     refreshTokenExpiresAt: { type: Date, default: null },
+    // Referral Fields
+    referralCode: { type: String, unique: true, sparse: true },
+    referredBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    referralCoupons: [
+      {
+        code: String,
+        discountValue: Number,
+        referredEmail: String,
+        isUsed: { type: Boolean, default: false },
+        createdAt: { type: Date, default: Date.now }
+      }
+    ],
   },
   { timestamps: true },
 );
