@@ -85,13 +85,114 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
-  // Tab control: 'overview' | 'users' | 'transactions' | 'feedbacks'
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'transactions' | 'feedbacks'>('overview');
+  // Tab control: 'overview' | 'users' | 'transactions' | 'feedbacks' | 'coupons'
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'transactions' | 'feedbacks' | 'coupons'>('overview');
   
   // Search filters
   const [userSearch, setUserSearch] = useState('');
   const [transactionSearch, setTransactionSearch] = useState('');
   const [feedbackSearch, setFeedbackSearch] = useState('');
+
+  // Coupon states
+  const [coupons, setCoupons] = useState<any[]>([]);
+  const [loadingCoupons, setLoadingCoupons] = useState(false);
+  const [newCoupon, setNewCoupon] = useState({
+    code: '',
+    discountType: 'percentage',
+    discountValue: 0,
+    maxUses: '',
+    expiryDate: '',
+  });
+
+  const loadCoupons = async () => {
+    setLoadingCoupons(true);
+    try {
+      const token = getAccessToken();
+      const response = await fetch(`${getApiBaseUrl()}/admin/coupons`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch coupons');
+      }
+      const data = await response.json();
+      setCoupons(data);
+    } catch (err: any) {
+      console.error(err);
+      alert('Không thể tải danh sách mã giảm giá');
+    } finally {
+      setLoadingCoupons(false);
+    }
+  };
+
+  const handleCreateCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCoupon.code || !newCoupon.discountValue) {
+      alert('Vui lòng nhập mã và giá trị giảm giá');
+      return;
+    }
+    try {
+      const token = getAccessToken();
+      const response = await fetch(`${getApiBaseUrl()}/admin/coupons`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          code: newCoupon.code,
+          discountType: newCoupon.discountType,
+          discountValue: Number(newCoupon.discountValue),
+          maxUses: newCoupon.maxUses ? Number(newCoupon.maxUses) : null,
+          expiryDate: newCoupon.expiryDate || null,
+        })
+      });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.message || 'Failed to create coupon');
+      }
+      alert('Tạo mã giảm giá thành công!');
+      setNewCoupon({
+        code: '',
+        discountType: 'percentage',
+        discountValue: 0,
+        maxUses: '',
+        expiryDate: '',
+      });
+      loadCoupons();
+    } catch (err: any) {
+      alert(err.message || 'Có lỗi xảy ra khi tạo mã giảm giá');
+    }
+  };
+
+  const handleDeleteCoupon = async (id: string) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa mã giảm giá này không?')) {
+      return;
+    }
+    try {
+      const token = getAccessToken();
+      const response = await fetch(`${getApiBaseUrl()}/admin/coupons/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete coupon');
+      }
+      alert('Xóa thành công!');
+      loadCoupons();
+    } catch (err: any) {
+      alert(err.message || 'Không thể xóa mã giảm giá');
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'coupons') {
+      loadCoupons();
+    }
+  }, [activeTab]);
 
   // User details modal states
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -325,6 +426,16 @@ export default function AdminDashboardPage() {
               }`}
             >
               Đánh giá ({stats.feedbacksList?.length || 0})
+            </button>
+            <button
+              onClick={() => setActiveTab('coupons')}
+              className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
+                activeTab === 'coupons'
+                  ? 'bg-[#22c55e] text-[#080b10]'
+                  : 'text-white/60 hover:text-white'
+              }`}
+            >
+              Mã giảm giá
             </button>
           </div>
         </div>
@@ -723,6 +834,137 @@ export default function AdminDashboardPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+        {/* TAB 5: COUPONS MANAGEMENT */}
+        {activeTab === 'coupons' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Create Coupon Form */}
+            <div className="lg:col-span-1 bg-[#0f1419] border border-white/[0.06] rounded-2xl p-6 shadow-xl space-y-6">
+              <h2 className="text-lg font-black text-white">Tạo mã giảm giá mới</h2>
+              <form onSubmit={handleCreateCoupon} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-white/55 uppercase tracking-wider mb-2">Mã code</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ví dụ: GIOITHIEU50"
+                    value={newCoupon.code}
+                    onChange={(e) => setNewCoupon({ ...newCoupon, code: e.target.value.toUpperCase() })}
+                    className="w-full px-4 py-2.5 rounded-lg bg-white/[0.03] border border-white/10 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#22c55e] transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-white/55 uppercase tracking-wider mb-2">Loại giảm giá</label>
+                  <select
+                    value={newCoupon.discountType}
+                    onChange={(e) => setNewCoupon({ ...newCoupon, discountType: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-lg bg-[#0f1419] border border-white/10 text-white text-sm focus:outline-none focus:border-[#22c55e] transition-colors"
+                  >
+                    <option value="percentage">Phần trăm (%)</option>
+                    <option value="fixed">Số tiền cố định (đ)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-white/55 uppercase tracking-wider mb-2">Giá trị giảm</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    placeholder={newCoupon.discountType === 'percentage' ? 'Ví dụ: 50' : 'Ví dụ: 20000'}
+                    value={newCoupon.discountValue || ''}
+                    onChange={(e) => setNewCoupon({ ...newCoupon, discountValue: Number(e.target.value) })}
+                    className="w-full px-4 py-2.5 rounded-lg bg-white/[0.03] border border-white/10 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#22c55e] transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-white/55 uppercase tracking-wider mb-2">Giới hạn số lần dùng (để trống nếu không giới hạn)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="Ví dụ: 100"
+                    value={newCoupon.maxUses}
+                    onChange={(e) => setNewCoupon({ ...newCoupon, maxUses: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-lg bg-white/[0.03] border border-white/10 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#22c55e] transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-white/55 uppercase tracking-wider mb-2">Ngày hết hạn (để trống nếu không hết hạn)</label>
+                  <input
+                    type="date"
+                    value={newCoupon.expiryDate}
+                    onChange={(e) => setNewCoupon({ ...newCoupon, expiryDate: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-lg bg-white/[0.03] border border-white/10 text-white text-sm focus:outline-none focus:border-[#22c55e] transition-colors"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full py-3 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-[#080b10] font-black text-xs uppercase tracking-wider transition-all duration-200"
+                >
+                  Tạo mã giảm giá
+                </button>
+              </form>
+            </div>
+
+            {/* List Coupons */}
+            <div className="lg:col-span-2 space-y-4">
+              <h2 className="text-xl font-bold tracking-tight text-white">Danh sách mã giảm giá</h2>
+              <div className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-white/[0.02] backdrop-blur-md">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-white/[0.08] text-white/40 font-semibold text-xs uppercase tracking-wider">
+                      <th className="px-6 py-4">Mã Code</th>
+                      <th className="px-6 py-4">Loại</th>
+                      <th className="px-6 py-4">Giá trị</th>
+                      <th className="px-6 py-4 text-center">Đã dùng</th>
+                      <th className="px-6 py-4 text-center">Giới hạn</th>
+                      <th className="px-6 py-4">Ngày hết hạn</th>
+                      <th className="px-6 py-4 text-center">Hành động</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {loadingCoupons ? (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-8 text-center text-white/40">Đang tải...</td>
+                      </tr>
+                    ) : coupons.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-8 text-center text-white/40">Chưa có mã giảm giá nào được tạo.</td>
+                      </tr>
+                    ) : (
+                      coupons.map((coupon) => (
+                        <tr key={coupon._id} className="hover:bg-white/[0.02] transition-colors">
+                          <td className="px-6 py-4 font-bold text-white tracking-wider">{coupon.code}</td>
+                          <td className="px-6 py-4 text-white/60">
+                            {coupon.discountType === 'percentage' ? 'Phần trăm (%)' : 'Cố định (đ)'}
+                          </td>
+                          <td className="px-6 py-4 font-semibold text-[#22c55e]">
+                            {coupon.discountType === 'percentage' 
+                              ? `${coupon.discountValue}%` 
+                              : `${coupon.discountValue.toLocaleString('vi-VN')} đ`}
+                          </td>
+                          <td className="px-6 py-4 text-center font-semibold text-white/80">{coupon.uses}</td>
+                          <td className="px-6 py-4 text-center text-white/60">
+                            {coupon.maxUses === null ? 'Không giới hạn' : coupon.maxUses}
+                          </td>
+                          <td className="px-6 py-4 text-xs text-white/50">
+                            {coupon.expiryDate ? new Date(coupon.expiryDate).toLocaleDateString('vi-VN') : 'Không hết hạn'}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <button
+                              onClick={() => handleDeleteCoupon(coupon._id)}
+                              className="px-2.5 py-1.5 rounded-lg border border-red-500/20 text-red-400 hover:bg-red-500/10 font-bold text-[10px] uppercase transition-all"
+                            >
+                              Xóa
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}

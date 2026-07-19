@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useTournament } from '@/app/contexts/TournamentContext';
 import { useState, useEffect, useMemo } from 'react';
 import { createSePayCheckout, getSePayTransactionStatus } from '@/app/lib/sepay';
-import { getSession } from '@/app/lib/authStorage';
+import { getSession, getAccessToken, getApiBaseUrl } from '@/app/lib/authStorage';
+import { fetchUserTournamentsFromBackend } from '@/app/lib/tournaments';
 
 interface Package {
   id: string;
@@ -64,12 +65,71 @@ export default function PackageSelectionPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [hasCreatedBefore, setHasCreatedBefore] = useState<boolean>(false);
+
+  // Coupon states
+  const [couponCodeInput, setCouponCodeInput] = useState('');
+  const [appliedCouponInfo, setAppliedCouponInfo] = useState<any>(null);
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
+
+  const handleApplyCoupon = async () => {
+    if (!couponCodeInput.trim()) return;
+    setIsValidatingCoupon(true);
+    setErrorMessage('');
+    try {
+      const token = getAccessToken();
+      const planKey = selectedPackage === 'pro' ? 'premium' : selectedPackage;
+      const response = await fetch(`${getApiBaseUrl()}/payments/coupon/validate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          code: couponCodeInput,
+          planKey
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.message || 'Mã giảm giá không hợp lệ');
+      }
+
+      const data = await response.json();
+      setAppliedCouponInfo(data);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Không thể kiểm tra mã giảm giá');
+      setAppliedCouponInfo(null);
+    } finally {
+      setIsValidatingCoupon(false);
+    }
+  };
+
+  // Reset coupon if package is changed
+  useEffect(() => {
+    setAppliedCouponInfo(null);
+    setCouponCodeInput('');
+  }, [selectedPackage]);
 
   useEffect(() => {
     const session = getSession();
     if (!session) {
       router.replace('/login');
+      return;
     }
+
+    const checkExistingTournaments = async () => {
+      try {
+        const list = await fetchUserTournamentsFromBackend();
+        if (list && list.length > 0) {
+          setHasCreatedBefore(true);
+        }
+      } catch (err) {
+        console.error('Error checking user tournaments:', err);
+      }
+    };
+    checkExistingTournaments();
   }, [router]);
 
   const session = getSession();
@@ -145,7 +205,11 @@ export default function PackageSelectionPage() {
     const pkg = packages.find(p => p.id === selectedPackage);
     if (!pkg) return;
 
-    if (pkg.price === 0) {
+    if (pkg.id === 'free') {
+      if (hasCreatedBefore) {
+        alert('Cảnh báo: Bạn đã sử dụng gói dùng thử trước đó. Gói dùng thử chỉ áp dụng cho giải đấu đầu tiên của bạn. Vui lòng chọn gói Cơ bản hoặc Cao cấp.');
+        return;
+      }
       setPackage(pkg.id, pkg.name, pkg.price);
       router.push('/tournaments/create/info');
       return;
@@ -155,10 +219,13 @@ export default function PackageSelectionPage() {
     setErrorMessage('');
     try {
       const planKey = pkg.id === 'pro' ? 'premium' : pkg.id;
-      const checkout = await createSePayCheckout({ planKey });
+      const checkout = await createSePayCheckout({
+        planKey,
+        couponCode: appliedCouponInfo ? appliedCouponInfo.code : undefined,
+      });
       setActiveCheckout(checkout);
       localStorage.setItem(pendingCheckoutKey, JSON.stringify(checkout));
-      setPaymentSuccess(false);
+      setPaymentSuccess(checkout.status === 'paid');
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Không tạo được thông tin thanh toán'
@@ -257,11 +324,18 @@ export default function PackageSelectionPage() {
               className={`relative rounded-2xl border transition-all duration-300 cursor-pointer group overflow-hidden ${selectedPackage === pkg.id
                 ? 'border-[#22c55e] bg-[#1a1f2e] shadow-lg shadow-[#22c55e]/20'
                 : 'border-white/[0.06] bg-[#0f1419] hover:border-white/[0.12]'
-                } ${pkg.highlighted ? 'md:scale-105 md:shadow-xl md:shadow-[#22c55e]/10' : ''}`}
+                } ${pkg.highlighted ? 'md:scale-105 md:shadow-xl md:shadow-[#22c55e]/10' : ''} ${
+                  pkg.id === 'free' && hasCreatedBefore ? 'opacity-85' : ''
+                }`}
             >
               {pkg.highlighted && (
                 <div className="absolute top-0 right-0 px-3 py-1 bg-[#22c55e] text-[#080b10] text-xs font-bold rounded-bl-xl">
                   Phổ biến
+                </div>
+              )}
+              {pkg.id === 'free' && hasCreatedBefore && (
+                <div className="absolute top-0 right-0 px-3 py-1 bg-red-600 text-white text-[10px] font-bold rounded-bl-xl shadow-md">
+                  Đã dùng thử
                 </div>
               )}
 
@@ -274,6 +348,11 @@ export default function PackageSelectionPage() {
                     <span className="text-lg font-normal text-white/60">đ</span>
                   </div>
                   <p className="text-sm text-white/60">{pkg.description}</p>
+                  {pkg.id === 'free' && hasCreatedBefore && (
+                    <p className="text-xs text-red-400 font-bold mt-2 flex items-center gap-1">
+                      ⚠️ Bạn đã dùng gói này rồi
+                    </p>
+                  )}
                 </div>
 
                 {/* Features */}
@@ -312,6 +391,58 @@ export default function PackageSelectionPage() {
         <div className="bg-[#0f1419] border border-white/[0.06] rounded-lg p-4 mb-8 text-sm text-white/60">
           📌 Miễn phí cho giải đấu đầu tiên! Tối đa 8 đội, đầy đủ tính năng.
         </div>
+
+        {/* Coupon Input Block */}
+        {selectedPackage !== 'free' && (
+          <div className="bg-[#0f1419] border border-white/[0.06] rounded-2xl p-6 mb-8 space-y-4 shadow-inner">
+            <h4 className="text-sm font-black text-white">Bạn có mã giảm giá (Coupon)?</h4>
+            <div className="flex gap-3">
+              <input
+                type="text"
+                placeholder="Nhập mã giảm giá..."
+                value={couponCodeInput}
+                onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())}
+                disabled={appliedCouponInfo !== null || isValidatingCoupon}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-white/[0.03] border border-white/10 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#22c55e] disabled:opacity-50 transition-colors"
+              />
+              {appliedCouponInfo ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAppliedCouponInfo(null);
+                    setCouponCodeInput('');
+                  }}
+                  className="px-5 py-2.5 rounded-lg border border-red-500/20 hover:bg-red-500/10 text-red-400 font-bold text-xs uppercase transition-all"
+                >
+                  Hủy áp dụng
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleApplyCoupon}
+                  disabled={!couponCodeInput.trim() || isValidatingCoupon}
+                  className="px-6 py-2.5 rounded-lg bg-[#22c55e] hover:bg-[#16a34a] disabled:bg-white/5 disabled:text-white/20 text-[#080b10] font-bold text-xs uppercase transition-all"
+                >
+                  {isValidatingCoupon ? 'Đang kiểm tra...' : 'Áp dụng'}
+                </button>
+              )}
+            </div>
+            {appliedCouponInfo && (
+              <div className="p-3.5 rounded-xl bg-[#22c55e]/10 border border-[#22c55e]/20 text-xs text-[#22c55e] flex items-center justify-between">
+                <span>
+                  ✓ Đã áp dụng mã <strong>{appliedCouponInfo.code}</strong> (Giảm{' '}
+                  {appliedCouponInfo.discountType === 'percentage'
+                    ? `${appliedCouponInfo.discountValue}%`
+                    : `${appliedCouponInfo.discountValue.toLocaleString('vi-VN')} đ`}
+                  )
+                </span>
+                <span className="font-bold">
+                  Còn lại: {appliedCouponInfo.finalAmount.toLocaleString('vi-VN')} đ
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {errorMessage && (
           <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-200">

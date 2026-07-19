@@ -69,6 +69,7 @@ async function requestJson<T>(path: string, options: RequestInit = {}): Promise<
 export async function createSePayCheckout(input: {
   planKey: string;
   checkoutCode?: string;
+  couponCode?: string;
 }) {
   return requestJson<SePayCheckoutResponse>("/payments/sepay/checkout", {
     method: "POST",

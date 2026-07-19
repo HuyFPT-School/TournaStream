@@ -346,10 +346,29 @@ function useBracketVisible() {
 }
 
 /* ── Features ── */
+const FEATURE_ICONS: Record<string, React.ReactNode> = {
+  trophy: (
+    <svg className="w-5 h-5 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v5m-3 0h6M4 7h16M4 7a3 3 0 003 3h10a3 3 0 003-3M4 7V4a1 1 0 011-1h14a1 1 0 011 1v3M4 7a4 4 0 004 4h8a4 4 0 004-4" />
+    </svg>
+  ),
+  tv: (
+    <svg className="w-5 h-5 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 21h8m-4-4v4" />
+    </svg>
+  ),
+  realtime: (
+    <svg className="w-5 h-5 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+    </svg>
+  )
+};
+
 const FEATURES = [
-  { emoji: "🏆", title: "Sinh bracket tự động",  desc: "Nhập đội, hệ thống tự tạo bảng đấu loại trực tiếp theo chuẩn quốc tế." },
-  { emoji: "📺", title: "Trình chiếu trên TV",    desc: "Link public read-only với font lớn, tối ưu cho màn hình chiếu hội trường." },
-  { emoji: "⚡", title: "Đồng bộ realtime",       desc: "Admin cập nhật → tất cả màn hình thay đổi ngay tức thì, không cần reload." },
+  { id: "trophy", title: "Sinh bracket tự động",  desc: "Nhập đội, hệ thống tự tạo bảng đấu loại trực tiếp theo chuẩn quốc tế." },
+  { id: "tv", title: "Trình chiếu trên TV",    desc: "Link public read-only với font lớn, tối ưu cho màn hình chiếu hội trường." },
+  { id: "realtime", title: "Đồng bộ realtime",       desc: "Admin cập nhật → tất cả màn hình thay đổi ngay tức thì, không cần reload." },
 ];
 
 /* ── Pricing tiers ── */
@@ -490,6 +509,7 @@ export default function HomePage() {
         <div className="flex items-center gap-3">
           <Link href="/features" className="text-sm text-white/50 hover:text-white transition-colors px-3 py-1.5">Tính năng</Link>
           <Link href="/pricing" className="text-sm text-white/50 hover:text-white transition-colors px-3 py-1.5">Bảng giá</Link>
+          <Link href="/huong-dan" className="text-sm text-white/50 hover:text-white transition-colors px-3 py-1.5">Thể thức</Link>
           {sessionUser ? (
             <>
               <span className="text-sm text-white/40 hidden md:inline">
@@ -737,7 +757,7 @@ export default function HomePage() {
             key={f.title}
             className="group rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6 hover:border-[#22c55e]/30 hover:bg-[#22c55e]/[0.04] transition-all duration-300 hover:-translate-y-1"
           >
-            <div className="mb-4 w-10 h-10 flex items-center justify-center rounded-xl bg-[#22c55e]/15 text-xl">{f.emoji}</div>
+            <div className="mb-4 w-10 h-10 flex items-center justify-center rounded-xl bg-[#22c55e]/15 p-2.5">{FEATURE_ICONS[f.id]}</div>
             <h3 className="text-[15px] font-bold mb-2 text-white/90">{f.title}</h3>
             <p className="text-sm text-white/40 leading-relaxed">{f.desc}</p>
           </div>

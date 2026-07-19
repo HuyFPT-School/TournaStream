@@ -2878,10 +2878,11 @@ export default function TournamentDetailPage() {
 
   const getTournamentWinnerName = () => {
     if (!tournament) return null;
-    if (tournament.format === 'league') {
-      const allFinished = (tournament.leagueMatches || []).length > 0 && tournament.leagueMatches.every((m: any) => m.isFinished);
+    if (tournament.format === 'league' || tournament.format === 'battle_royale') {
+      const matchesList = tournament.leagueMatches || tournament.matches || [];
+      const allFinished = matchesList.length > 0 && matchesList.every((m: any) => m.isFinished);
       if (!allFinished) return null;
-      const standings = calculateLeagueStandings(tournament.teams, tournament.leagueMatches, tournament.pointRules || {});
+      const standings = calculateLeagueStandings(tournament.teams, matchesList, tournament.pointRules || {});
       if (standings.length > 0) {
         return standings[0].teamName;
       }
@@ -4155,17 +4156,7 @@ export default function TournamentDetailPage() {
                 </div>
               </div>
 
-              {tournament?.sport === 'fighting_sports' && !matchState.isFinished && (
-                <div className="flex items-center justify-center mb-6">
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleScoreChange('team2', 1); }}
-                    className="w-8 h-8 rounded-lg bg-[#22c55e]/10 border border-[#22c55e]/20 hover:bg-[#22c55e]/20 text-[#22c55e] flex items-center justify-center font-bold text-lg transition-colors"
-                  >
-                    +
-                  </button>
-                </div>
-              )}
+
 
 
 

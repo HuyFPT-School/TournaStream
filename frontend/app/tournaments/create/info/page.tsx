@@ -5,17 +5,60 @@ import { useRouter } from 'next/navigation';
 import { useTournament } from '@/app/contexts/TournamentContext';
 import { useState } from 'react';
 
+const SPORT_ICONS: Record<string, React.ReactNode> = {
+  moba: (
+    <svg className="w-8 h-8 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 3l-6 6m0 0V4m0 5h5M3 21l6-6m0 0v5m0-5H4M3 3l18 18" />
+    </svg>
+  ),
+  fps: (
+    <svg className="w-8 h-8 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="9" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18M3 12h18" />
+    </svg>
+  ),
+  fighting_sports: (
+    <svg className="w-8 h-8 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+      <rect x="2" y="6" width="20" height="12" rx="3" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 12h4M8 10v4m8-2h.01M19 12h.01" />
+    </svg>
+  ),
+  battle_royale: (
+    <svg className="w-8 h-8 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+    </svg>
+  ),
+};
+
+const FORMAT_ICONS: Record<string, React.ReactNode> = {
+  single_elimination: (
+    <svg className="w-6 h-6 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v5m-3 0h6M4 7h16M4 7a3 3 0 003 3h10a3 3 0 003-3M4 7V4a1 1 0 011-1h14a1 1 0 011 1v3M4 7a4 4 0 004 4h8a4 4 0 004-4" />
+    </svg>
+  ),
+  round_robin: (
+    <svg className="w-6 h-6 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+    </svg>
+  ),
+  double_elimination: (
+    <svg className="w-6 h-6 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 5v2m0 4v2m-7-5h3m-3 4h3m-6 2a9 9 0 1118 0v1.5a2.5 2.5 0 01-2.5 2.5h-13A2.5 2.5 0 013 14.5V13z" />
+    </svg>
+  ),
+};
+
 const sports = [
-  { id: 'moba', name: 'Game MOBA (Liên Quân, LOL, Tốc Chiến...)', icon: '⚔️' },
-  { id: 'fps', name: 'Game Bắn súng đối kháng (Valorant, CS, Đột Kích...)', icon: '🔫' },
-  { id: 'fighting_sports', name: 'Game Đối kháng / FIFA', icon: '🎮' },
-  { id: 'battle_royale', name: 'Game Sinh tồn (PUBG, Free Fire...)', icon: '🪂' },
+  { id: 'moba', name: 'Game MOBA (Liên Quân, LOL, Tốc Chiến...)' },
+  { id: 'fps', name: 'Game Bắn súng đối kháng (Valorant, CS, Đột Kích...)' },
+  { id: 'fighting_sports', name: 'Game Đối kháng / FIFA' },
+  { id: 'battle_royale', name: 'Game Sinh tồn (PUBG, Free Fire...)' },
 ];
 
 const formats = [
-  { id: 'single_elimination', name: 'Loại trực tiếp', desc: 'Thua 1 trận là bị loại ngay lập tức', icon: '🏆' },
-  { id: 'round_robin', name: 'Vòng bảng & Knockout', desc: 'Chia bảng đấu tính điểm và lấy đội đi tiếp đấu Knockout', icon: '⚽' },
-  { id: 'double_elimination', name: 'Nhánh thắng - Nhánh thua', desc: 'Esport chuyên nghiệp, thua 1 lần vẫn còn cơ hội sửa sai', icon: '🎮' },
+  { id: 'single_elimination', name: 'Loại trực tiếp', desc: 'Thua 1 trận là bị loại ngay lập tức' },
+  { id: 'round_robin', name: 'Vòng bảng & Knockout', desc: 'Chia bảng đấu tính điểm và lấy đội đi tiếp đấu Knockout' },
+  { id: 'double_elimination', name: 'Nhánh thắng - Nhánh thua', desc: 'Esport chuyên nghiệp, thua 1 lần vẫn còn cơ hội sửa sai' },
 ];
 
 export default function TournamentInfoPage() {
@@ -45,6 +88,7 @@ export default function TournamentInfoPage() {
     "12": 1
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showManualModal, setShowManualModal] = useState(false);
 
   const updatePointRule = (rankKey: string, val: number) => {
     setPointRules(prev => {
@@ -160,9 +204,21 @@ export default function TournamentInfoPage() {
         </div>
 
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-black mb-1">Tên giải đấu</h1>
-          <p className="text-white/60">Điền thông tin cơ bản cho giải đấu Esports của bạn</p>
+        <div className="mb-8 flex items-end justify-between">
+          <div>
+            <h1 className="text-3xl font-black mb-1">Tên giải đấu</h1>
+            <p className="text-white/60">Điền thông tin cơ bản cho giải đấu Esports của bạn</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowManualModal(true)}
+            className="px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] text-[#22c55e] hover:text-[#22c55e] font-bold text-xs flex items-center gap-1.5 transition-all"
+          >
+            <svg className="w-3.5 h-3.5 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+            Hướng dẫn thể thức
+          </button>
         </div>
 
         {/* Form */}
@@ -205,7 +261,7 @@ export default function TournamentInfoPage() {
                     : 'border-white/[0.06] bg-[#0f1419] hover:border-white/[0.12]'
                     }`}
                 >
-                  <div className="text-3xl mb-2">{s.icon}</div>
+                  <div className="w-12 h-12 mb-2 flex items-center justify-center text-[#22c55e]">{SPORT_ICONS[s.id]}</div>
                   <div className="text-xs font-semibold">{s.name}</div>
                 </button>
               ))}
@@ -228,7 +284,7 @@ export default function TournamentInfoPage() {
                       }`}
                   >
                     <div>
-                      <div className="text-2xl mb-2">{f.icon}</div>
+                    <div className="w-8 h-8 mb-2 flex items-center justify-center text-[#22c55e]">{FORMAT_ICONS[f.id]}</div>
                       <div className="text-sm font-semibold mb-1">{f.name}</div>
                       <div className="text-[11px] text-white/50 leading-relaxed">{f.desc}</div>
                     </div>
@@ -371,6 +427,112 @@ export default function TournamentInfoPage() {
           </button>
         </div>
       </section>
+
+      {showManualModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            onClick={() => setShowManualModal(false)}
+          />
+          <div className="relative z-10 w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#0c1118] p-6 shadow-2xl space-y-6">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <h3 className="text-lg font-black text-white flex items-center gap-2">
+                <svg className="w-5 h-5 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                Hướng dẫn các thể thức thi đấu
+              </h3>
+              <button
+                onClick={() => setShowManualModal(false)}
+                className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5 hover:text-white transition-all"
+              >
+                Đóng
+              </button>
+            </div>
+
+            <div className="space-y-6 text-sm text-white/80 leading-relaxed overflow-y-auto pr-2 max-h-[60vh]">
+              {/* Thể thức 1 */}
+              <div className="space-y-2">
+                <h4 className="font-bold text-[#22c55e] flex items-center gap-2 text-base">
+                  <svg className="w-5 h-5 text-[#22c55e] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v5m-3 0h6M4 7h16M4 7a3 3 0 003 3h10a3 3 0 003-3M4 7V4a1 1 0 011-1h14a1 1 0 011 1v3M4 7a4 4 0 004 4h8a4 4 0 004-4" />
+                  </svg>
+                  1. Loại trực tiếp (Single Elimination)
+                </h4>
+                <p>
+                  Đội thua một trận đấu sẽ bị loại ngay lập tức khỏi giải đấu. Đội thắng sẽ đi tiếp vào các vòng trong.
+                </p>
+                <div className="text-xs text-white/50 flex items-start gap-1">
+                  <svg className="w-3.5 h-3.5 text-white/40 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <span>Phù hợp cho giải đấu có nhiều đội tham gia, thời gian tổ chức ngắn và cần sự kịch tính cao.</span>
+                </div>
+              </div>
+
+              {/* Thể thức 2 */}
+              <div className="space-y-2 border-t border-white/[0.06] pt-4">
+                <h4 className="font-bold text-[#22c55e] flex items-center gap-2 text-base">
+                  <svg className="w-5 h-5 text-[#22c55e] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 5v2m0 4v2m-7-5h3m-3 4h3m-6 2a9 9 0 1118 0v1.5a2.5 2.5 0 01-2.5 2.5h-13A2.5 2.5 0 013 14.5V13z" />
+                  </svg>
+                  2. Nhánh thắng - Nhánh thua (Double Elimination)
+                </h4>
+                <p>
+                  Các đội có 2 cơ hội thi đấu (2 &quot;mạng&quot;). Đội thua ở Nhánh Thắng sẽ rơi xuống Nhánh Thua để thi đấu tiếp. Đội thua ở Nhánh Thua mới chính thức bị loại.
+                </p>
+                <p>
+                  Trận chung kết diễn ra giữa đội đứng đầu Nhánh Thắng và Nhánh Thua. Đội từ Nhánh Thua phải thắng 2 loạt trận liên tiếp mới vô địch.
+                </p>
+                <div className="text-xs text-white/50 flex items-start gap-1">
+                  <svg className="w-3.5 h-3.5 text-white/40 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <span>Thể thức tiêu chuẩn của Esport chuyên nghiệp, đảm bảo tính công bằng tối đa.</span>
+                </div>
+              </div>
+
+              {/* Thể thức 3 */}
+              <div className="space-y-2 border-t border-white/[0.06] pt-4">
+                <h4 className="font-bold text-[#22c55e] flex items-center gap-2 text-base">
+                  <svg className="w-5 h-5 text-[#22c55e] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  3. Vòng bảng & Knock-out (Round Robin + Knockout)
+                </h4>
+                <p>
+                  Các đội thi đấu vòng tròn tính điểm tại các bảng đấu. Những đội đứng đầu bảng đấu (thường là Top 2) sẽ giành quyền đi tiếp vào vòng Loại trực tiếp (Knock-out).
+                </p>
+                <div className="text-xs text-white/50 flex items-start gap-1">
+                  <svg className="w-3.5 h-3.5 text-white/40 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <span>Giúp các đội có cơ hội cọ xát tối thiểu 2-3 trận tại vòng bảng trước khi bước vào các trận sinh tử.</span>
+                </div>
+              </div>
+
+              {/* Thể thức 4 */}
+              <div className="space-y-2 border-t border-white/[0.06] pt-4">
+                <h4 className="font-bold text-[#22c55e] flex items-center gap-2 text-base">
+                  <svg className="w-5 h-5 text-[#22c55e] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                  </svg>
+                  4. Giải đấu Sinh tồn (Battle Royale / PUBG)
+                </h4>
+                <p>
+                  Nhiều đội cùng thi đấu đồng thời trong một hoặc nhiều trận đấu. Sau mỗi trận, các đội nhận được điểm số tích lũy bao gồm <strong>Điểm Thứ Hạng</strong> và <strong>Điểm Hạ Gục (Kill Points)</strong>. Đội có tổng điểm cao nhất sau tất cả các trận sẽ giành chức vô địch.
+                </p>
+                <div className="text-xs text-white/50 flex items-start gap-1">
+                  <svg className="w-3.5 h-3.5 text-white/40 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <span>Điểm thứ hạng PUBG tiêu chuẩn: Top 1 (10đ), Top 2 (6đ), Top 3 (5đ), Top 4 (4đ), Top 5 (3đ), Top 6-7 (2đ), Top 8-12 (1đ). Mỗi kill được +1 điểm.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

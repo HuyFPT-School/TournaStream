@@ -19,6 +19,8 @@ export default function MyTournamentsPage() {
   const [tournaments, setTournaments] = useState<any[]>([]);
   const [draftTournament, setDraftTournament] = useState<any | null>(null);
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
 
   const handleDeleteTournament = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -105,6 +107,29 @@ export default function MyTournamentsPage() {
         console.error("Error parsing tournamentDraft:", e);
       }
     }
+
+    // 3. Fetch full profile details for referrals
+    const fetchProfile = async () => {
+      setLoadingProfile(true);
+      try {
+        const { getAccessToken, getApiBaseUrl } = await import("@/app/lib/authStorage");
+        const token = getAccessToken();
+        const response = await fetch(`${getApiBaseUrl()}/auth/me`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setProfile(data);
+        }
+      } catch (err) {
+        console.error("Error fetching user profile:", err);
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+    fetchProfile();
   }, [router]);
 
   const handleLogout = async () => {
@@ -345,6 +370,76 @@ export default function MyTournamentsPage() {
                 </div>
               </Link>
             ))}
+          </div>
+        )}
+        {/* Referral Program Section */}
+        {profile && (
+          <div className="mt-16 bg-[#0f1419] border border-white/[0.06] rounded-3xl p-8 space-y-8 shadow-2xl">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#22c55e]">
+                  Chương trình giới thiệu
+                </span>
+                <h2 className="text-2xl font-black text-white mt-1">Mời bạn bè, nhận ngay ưu đãi</h2>
+                <p className="text-white/60 text-sm mt-1 max-w-xl leading-relaxed">
+                  Chia sẻ link giới thiệu của bạn cho người khác. Khi họ đăng ký và thanh toán tạo giải đấu đầu tiên thành công, bạn sẽ nhận ngay một mã giảm giá <strong>20%</strong> cho lần tạo giải đấu tiếp theo của mình!
+                </p>
+              </div>
+              <div className="bg-[#080b10] border border-white/[0.04] p-5 rounded-2xl flex flex-col gap-3 min-w-[280px]">
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-white/40 uppercase tracking-wider">Mã giới thiệu của bạn</span>
+                  <span className="text-lg font-black text-white tracking-wider mt-0.5">{profile.referralCode}</span>
+                </div>
+                <button
+                  onClick={() => {
+                    const refLink = `${window.location.origin}/register?ref=${profile.referralCode}`;
+                    navigator.clipboard.writeText(refLink);
+                    alert("Đã sao chép link giới thiệu của bạn!");
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-[#080b10] text-xs font-black uppercase tracking-wider transition-all duration-200"
+                >
+                  Sao chép Link giới thiệu
+                </button>
+              </div>
+            </div>
+
+            {/* Referral Coupons */}
+            <div className="border-t border-white/[0.06] pt-6 space-y-4">
+              <h3 className="text-lg font-bold text-white">Mã giảm giá đã nhận được</h3>
+              {profile.referralCoupons && profile.referralCoupons.filter((c: any) => !c.isUsed).length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {profile.referralCoupons.filter((c: any) => !c.isUsed).map((coupon: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.02] border border-white/[0.06] hover:border-white/[0.12] transition-colors"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-white text-base tracking-wider">{coupon.code}</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-black bg-[#22c55e]/20 text-[#22c55e]">
+                            Giảm {coupon.discountValue}%
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-white/40 mt-1">
+                          Nhận được từ người dùng: {coupon.referredEmail}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(coupon.code);
+                          alert("Đã sao chép mã giảm giá!");
+                        }}
+                        className="px-3.5 py-1.5 rounded-lg border border-white/10 hover:bg-white/5 text-white text-xs font-bold transition-all"
+                      >
+                        Sao chép mã
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-white/40 italic">Bạn chưa nhận được mã giảm giá nào hoặc đã sử dụng hết. Hãy chia sẻ link giới thiệu với bạn bè của bạn!</p>
+              )}
+            </div>
           </div>
         )}
       </section>

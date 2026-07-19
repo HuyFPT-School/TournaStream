@@ -106,6 +106,7 @@ export async function registerUser(input: {
   fullName: string;
   email: string;
   password: string;
+  ref?: string;
 }) {
   return apiRequest<{
     user: { id: string; fullName: string; email: string };

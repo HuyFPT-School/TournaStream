@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
 import { Toast } from "@/app/components/Toast";
 import { registerUser, getSession } from "@/app/lib/authStorage";
 
@@ -22,7 +22,7 @@ function makeToastId() {
   return `toast_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export default function RegisterPage() {
+function RegisterPageContent() {
   const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -35,6 +35,16 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<ToastState | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
+
+  const searchParams = useSearchParams();
+  const [ref, setRef] = useState("");
+
+  useEffect(() => {
+    const code = searchParams.get("ref");
+    if (code) {
+      setRef(code.toUpperCase());
+    }
+  }, [searchParams]);
 
   const dismissToast = () => {
     setToastVisible(false);
@@ -109,6 +119,7 @@ export default function RegisterPage() {
         fullName: trimmedName,
         email: normalizedEmail,
         password,
+        ref: ref || undefined,
       });
 
       if (result.requiresVerification) {
@@ -216,6 +227,11 @@ export default function RegisterPage() {
             onSubmit={handleSubmit}
             className="relative rounded-2xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-xl p-6 shadow-[0_24px_70px_rgba(0,0,0,0.55)] space-y-5"
           >
+            {ref && (
+              <div className="p-3 rounded-lg bg-[#22c55e]/15 border border-[#22c55e]/20 text-xs text-[#22c55e] flex items-center justify-between">
+                <span>✓ Mã giới thiệu áp dụng: <strong>{ref}</strong></span>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-semibold mb-2">
                 Họ và tên
@@ -519,5 +535,13 @@ export default function RegisterPage() {
         />
       )}
     </main>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#080b10] text-white flex items-center justify-center">Đang tải...</div>}>
+      <RegisterPageContent />
+    </Suspense>
   );
 }
