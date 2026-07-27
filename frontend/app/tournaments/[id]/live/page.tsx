@@ -349,8 +349,11 @@ function calculateGroupStandings(groupTeams: any[], groupMatches: any[], matchSt
   });
 }
 
-function getPlacementPoints(rank: number | null): number {
-  if (rank === null) return 0;
+function getPlacementPoints(rank: number | null, pointRules?: Record<string, number>): number {
+  if (rank === null || rank === undefined) return 0;
+  if (pointRules && pointRules[String(rank)] !== undefined) {
+    return Number(pointRules[String(rank)]) || 0;
+  }
   if (rank === 1) return 10;
   if (rank === 2) return 6;
   if (rank === 3) return 5;
@@ -361,7 +364,7 @@ function getPlacementPoints(rank: number | null): number {
   return 0;
 }
 
-function calculateBattleRoyaleStandings(teams: any[], matches: any[]) {
+function calculateBattleRoyaleStandings(teams: any[], matches: any[], pointRules?: Record<string, number>) {
   const standings = teams.map((team: any) => {
     const teamId = team.id || team.name;
     let mp = 0;
@@ -371,9 +374,9 @@ function calculateBattleRoyaleStandings(teams: any[], matches: any[]) {
     matches?.forEach((match: any) => {
       if (match.isFinished) {
         const teamResult = match.results?.find((r: any) => (r.teamId === teamId || r.teamName === team.name));
-        if (teamResult && teamResult.rank !== null) {
+        if (teamResult && teamResult.rank !== null && teamResult.rank !== undefined) {
           mp += 1;
-          placementPts += getPlacementPoints(teamResult.rank);
+          placementPts += getPlacementPoints(teamResult.rank, pointRules);
           killPts += teamResult.kills || 0;
         }
       }
@@ -1598,7 +1601,17 @@ export default function TournamentLiveViewPage() {
         {tournamentWinnerName && (
           <div className="mb-12 p-8 rounded-2xl bg-gradient-to-r from-yellow-500/10 via-amber-500/15 to-yellow-500/10 border border-yellow-500/30 text-center shadow-[0_0_30px_rgba(234,179,8,0.2)] relative overflow-hidden animate-pulse">
             <div className="relative z-10 flex flex-col items-center gap-3">
-              <div className="text-4xl animate-bounce">👑🏆👑</div>
+              <div className="flex items-center justify-center gap-2 text-yellow-400 animate-bounce">
+                <svg className="w-8 h-8 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z" />
+                </svg>
+                <svg className="w-10 h-10 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94A5.01 5.01 0 0011 15.9V18H8v2h8v-2h-3v-2.1a5.01 5.01 0 003.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z" />
+                </svg>
+                <svg className="w-8 h-8 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z" />
+                </svg>
+              </div>
               <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-amber-300 to-yellow-400 tracking-wider uppercase drop-shadow-[0_0_8px_rgba(250,204,21,0.25)]">
                 Nhà vô địch giải đấu
               </h2>
@@ -1697,7 +1710,9 @@ export default function TournamentLiveViewPage() {
                                     {m.image ? (
                                       <img src={m.image} className="w-4.5 h-4.5 rounded-md object-cover flex-shrink-0 border border-white/[0.08]" alt={m.name} />
                                     ) : (
-                                      <span>👤</span>
+                                      <svg className="w-3 h-3 text-white/40 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                      </svg>
                                     )}
                                     <span>{m.name}</span>
                                   </span>
@@ -1753,7 +1768,7 @@ export default function TournamentLiveViewPage() {
                         ).map((row, idx) => {
                           const isTop3 = idx < 3;
                           const rankColor = idx === 0 ? 'text-yellow-400 bg-yellow-400/10' : idx === 1 ? 'text-gray-300 bg-gray-300/10' : idx === 2 ? 'text-amber-600 bg-amber-600/10' : 'text-white/40';
-                          const medal = idx === 0 ? '👑 1st' : idx === 1 ? '🥈 2nd' : idx === 2 ? '🥉 3rd' : `${idx + 1}`;
+                          const medal = idx === 0 ? '1st' : idx === 1 ? '2nd' : idx === 2 ? '3rd' : `${idx + 1}`;
 
                           return (
                             <tr
