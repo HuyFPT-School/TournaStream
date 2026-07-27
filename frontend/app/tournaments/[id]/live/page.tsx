@@ -446,16 +446,28 @@ function calculateLeagueStandings(
   
   finishedMatches.forEach(match => {
     (match.results || []).forEach((res: any) => {
-      const team = standingsMap[res.teamId];
+      const team = standingsMap[res.teamId] || standingsMap[res.teamName];
       if (team) {
-        if (match.isFinished || (res.placement !== null && res.placement !== undefined && res.placement !== '') || res.pts !== undefined) {
+        if (match.isFinished || (res.placement !== null && res.placement !== undefined && res.placement !== '') || res.pts !== undefined || res.rank !== undefined) {
           team.matchesPlayed += 1;
         }
-        team.totalKills += res.kills || 0;
-        team.placementPoints += res.placementPoints || 0;
-        team.killPoints += res.killPoints || 0;
-        team.totalPoints += res.totalPoints || res.pts || 0;
-        if (res.placement === 1) {
+        const kills = Number(res.kills || 0);
+        const rankVal = res.placement ?? res.rank;
+        const calcPlacementPts = (res.placementPoints !== undefined && res.placementPoints !== null)
+          ? Number(res.placementPoints)
+          : (rankVal !== null && rankVal !== undefined && rankVal !== '' ? getPlacementPoints(Number(rankVal), pointRules) : 0);
+        const calcKillPts = (res.killPoints !== undefined && res.killPoints !== null)
+          ? Number(res.killPoints)
+          : kills;
+
+        team.totalKills += kills;
+        team.placementPoints += calcPlacementPts;
+        team.killPoints += calcKillPts;
+        team.totalPoints += (res.totalPoints !== undefined && res.totalPoints !== null)
+          ? Number(res.totalPoints)
+          : (res.pts !== undefined && res.pts !== null) ? Number(res.pts) : (calcPlacementPts + calcKillPts);
+
+        if (Number(rankVal) === 1) {
           team.wins += 1;
         }
       }
