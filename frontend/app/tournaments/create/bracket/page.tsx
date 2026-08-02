@@ -271,7 +271,15 @@ export default function BracketPage() {
       const draftKey = session ? `tournamentDraft_${session.id}` : 'tournamentDraft';
 
       const savedList = localStorage.getItem(tournamentsKey);
-      const list = savedList ? JSON.parse(savedList) : [];
+      let list: any[] = [];
+      if (savedList) {
+        try {
+          list = JSON.parse(savedList);
+          if (!Array.isArray(list)) list = [];
+        } catch {
+          list = [];
+        }
+      }
       const index = list.findIndex((t: any) => t.id === mockTournament.id);
       if (index > -1) {
         list[index] = mockTournament;
@@ -449,7 +457,9 @@ export default function BracketPage() {
         {data.format === 'round_robin' ? (
           <div className="p-6 rounded-lg bg-[#0f1419] border border-white/[0.06] mb-8 space-y-4">
             <div className="flex gap-3 items-center pb-3 border-b border-white/[0.06]">
-              <div className="text-xl">📊</div>
+              <svg className="w-5 h-5 text-[#22c55e] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z" />
+              </svg>
               <div className="font-semibold text-sm">Xem trước phân chia bảng đấu ({data.groupsCount} bảng)</div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -471,7 +481,9 @@ export default function BracketPage() {
         ) : data.format === 'double_elimination' ? (
           <div className="p-4 rounded-lg bg-[#0f1419] border border-white/[0.06] mb-8">
             <div className="flex gap-3 items-start">
-              <div className="text-lg flex-shrink-0">🎯</div>
+              <svg className="w-5 h-5 text-[#22c55e] shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
               <div className="flex-1">
                 <div className="font-semibold mb-1">THỂ THỨC NHÁNH THẮNG - NHÁNH THUA</div>
                 <div className="text-sm text-white/60">
@@ -484,7 +496,9 @@ export default function BracketPage() {
         ) : (
           <div className="p-4 rounded-lg bg-[#0f1419] border border-white/[0.06] mb-8">
             <div className="flex gap-3 items-start">
-              <div className="text-lg flex-shrink-0">🎯</div>
+              <svg className="w-5 h-5 text-[#22c55e] shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
               <div className="flex-1">
                 <div className="font-semibold mb-1">THỂ THỨC LOẠI TRỰC TIẾP</div>
                 <div className="text-sm text-white/60">

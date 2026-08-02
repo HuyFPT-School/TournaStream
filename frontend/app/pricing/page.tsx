@@ -224,9 +224,11 @@ export default function PricingPage() {
           </div>
         )}
 
-        <div className="rounded-2xl border border-white/[0.1] bg-white/[0.04] p-6 text-center">
+        <div className="rounded-2xl border border-white/[0.1] bg-white/[0.04] p-6 text-center flex items-center justify-center gap-2">
+          <svg className="w-5 h-5 text-yellow-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+          </svg>
           <p className="text-sm text-white/60">
-            <span className="text-lg mr-2">🎉</span>
             <span className="font-bold text-white">
               Miễn phí cho giải đấu đầu tiên!
             </span>

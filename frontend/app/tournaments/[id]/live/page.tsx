@@ -1477,8 +1477,11 @@ export default function TournamentLiveViewPage() {
   if (!tournament || (!tournament.bracketSeeded && !tournament.isPublicRegistration)) {
     return (
       <main className="min-h-screen bg-[#080b10] text-white font-sans flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-6xl mb-4">📺</div>
+        <div className="text-center flex flex-col items-center">
+          <svg className="w-16 h-16 text-white/20 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <rect x="2" y="3" width="20" height="14" rx="2" strokeWidth="2" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 21h8m-4-4v4" />
+          </svg>
           <p className="text-xl font-semibold">Giải đấu chưa bắt đầu</p>
           <p className="text-white/60 mt-2">Vui lòng quay lại sau</p>
         </div>
@@ -1592,12 +1595,15 @@ export default function TournamentLiveViewPage() {
                   'bg-[#22c55e]/5 border-[#22c55e]/20'
                 }`}>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-xs font-black uppercase tracking-wider ${
+                    <span className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 ${
                       ann.type === 'warning' ? 'text-amber-400' :
                       ann.type === 'update' ? 'text-blue-400' :
                       'text-[#22c55e]'
                     }`}>
-                      {ann.type === 'warning' ? '⚠️' : ann.type === 'update' ? '🔄' : 'ℹ️'} {ann.title}
+                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>{ann.title}</span>
                     </span>
                     <span className="text-[10px] text-white/30 ml-auto">
                       {new Date(ann.createdAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
@@ -1649,7 +1655,10 @@ export default function TournamentLiveViewPage() {
                 <div className="space-y-2 text-center md:text-left relative z-10">
                   {tournament.teamsLocked ? (
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-black uppercase tracking-wider">
-                      🔒 Đã chốt danh sách đội
+                      <svg className="w-3 h-3 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4" />
+                      </svg>
+                      Đã chốt danh sách đội
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#22c55e]/10 border border-[#22c55e]/20 text-[#22c55e] text-[10px] font-black uppercase tracking-wider">
@@ -1916,8 +1925,10 @@ export default function TournamentLiveViewPage() {
                                       <p className="text-xs text-white/60 font-semibold">Đang kết nối tới máy quay trọng tài...</p>
                                     </div>
                                   ) : viewerConnectionError ? (
-                                    <div className="text-center p-6 space-y-2">
-                                      <span className="text-3xl">📡❌</span>
+                                    <div className="text-center p-6 space-y-2 flex flex-col items-center">
+                                      <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 4.243a9 9 0 010-12.728M5.636 5.636L3 3m2.636 2.636l2.829 2.829" />
+                                      </svg>
                                       <p className="text-xs text-red-400 font-semibold">{viewerConnectionError}</p>
                                       <p className="text-[10px] text-white/40">Trọng tài chưa bật phát trực tiếp hoặc kết nối thất bại.</p>
                                     </div>
@@ -1930,8 +1941,10 @@ export default function TournamentLiveViewPage() {
                                       className="w-full h-full object-cover"
                                     />
                                   ) : (
-                                    <div className="text-center p-6 space-y-2">
-                                      <span className="text-3xl animate-pulse">📡</span>
+                                    <div className="text-center p-6 space-y-2 flex flex-col items-center">
+                                      <svg className="w-8 h-8 text-[#22c55e] animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+                                      </svg>
                                       <p className="text-xs text-white/50 font-semibold">Đang chờ luồng phát webcam...</p>
                                       <p className="text-[10px] text-white/30">Kết nối thành công. Chờ trọng tài gửi dữ liệu stream.</p>
                                     </div>
@@ -1949,7 +1962,11 @@ export default function TournamentLiveViewPage() {
                           </div>
                         ) : (
                           <div className="bg-[#0f1419] border border-white/[0.06] rounded-2xl p-8 text-center text-white/40 text-sm flex flex-col items-center gap-2">
-                            <span>📺 Trận đấu này chưa được cấu hình link livestream.</span>
+                            <svg className="w-8 h-8 text-white/20 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <rect x="2" y="3" width="20" height="14" rx="2" strokeWidth="2" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 21h8m-4-4v4" />
+                            </svg>
+                            <span>Trận đấu này chưa được cấu hình link livestream.</span>
                             <span className="text-xs text-white/20">Trọng tài sẽ cập nhật link stream khi trận đấu chuẩn bị khởi tranh.</span>
                           </div>
                         )}
@@ -2286,8 +2303,11 @@ export default function TournamentLiveViewPage() {
                 </div>
 
                 {regError && (
-                  <div className="p-3.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold">
-                    ⚠️ {regError}
+                  <div className="p-3.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold flex items-center gap-2">
+                    <svg className="w-4 h-4 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span>{regError}</span>
                   </div>
                 )}
 
@@ -2597,8 +2617,10 @@ export default function TournamentLiveViewPage() {
                           <p className="text-xs text-white/60 font-semibold">Đang kết nối tới máy quay trọng tài...</p>
                         </div>
                       ) : viewerConnectionError ? (
-                        <div className="text-center p-6 space-y-2">
-                          <span className="text-3xl">📡❌</span>
+                        <div className="text-center p-6 space-y-2 flex flex-col items-center">
+                          <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 4.243a9 9 0 010-12.728M5.636 5.636L3 3m2.636 2.636l2.829 2.829" />
+                          </svg>
                           <p className="text-xs text-red-400 font-semibold">{viewerConnectionError}</p>
                           <p className="text-[10px] text-white/40">Trọng tài chưa bật phát trực tiếp hoặc kết nối thất bại.</p>
                         </div>
@@ -2611,8 +2633,10 @@ export default function TournamentLiveViewPage() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="text-center p-6 space-y-2">
-                          <span className="text-3xl animate-pulse">📡</span>
+                        <div className="text-center p-6 space-y-2 flex flex-col items-center">
+                          <svg className="w-8 h-8 text-[#22c55e] animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+                          </svg>
                           <p className="text-xs text-white/50 font-semibold">Đang chờ luồng phát webcam...</p>
                           <p className="text-[10px] text-white/30">Kết nối thành công. Chờ trọng tài gửi dữ liệu stream.</p>
                         </div>
@@ -2761,8 +2785,11 @@ export default function TournamentLiveViewPage() {
               )}
               <div className="flex gap-2">
                 {isChatBlocked ? (
-                  <div className="flex-1 text-center py-2.5 bg-red-500/10 border border-red-500/20 rounded-lg text-xs text-red-400 font-semibold select-none">
-                    🔒 Tài khoản của bạn đã bị chặn chat
+                  <div className="flex-1 text-center py-2.5 bg-red-500/10 border border-red-500/20 rounded-lg text-xs text-red-400 font-semibold select-none flex items-center justify-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4" />
+                    </svg>
+                    <span>Tài khoản của bạn đã bị chặn chat</span>
                   </div>
                 ) : (
                   <>

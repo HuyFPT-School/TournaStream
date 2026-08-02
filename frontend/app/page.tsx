@@ -7,12 +7,12 @@ import { getSession } from "@/app/lib/authStorage";
 
 /* ── Live ticker data ── */
 const DEMO_TICKER_ITEMS = [
-  "🔴 LIVE · Dragon FC 3 - 1 Phoenix United",
-  "⚽ FT · Storm City 0 - 2 Iron Eagles",
-  "🔴 LIVE · Blaze SC 1 - 1 Thunder Boys",
-  "🏆 QF · Night Wolves 2 - 0 Solar Kings",
-  "🔴 LIVE · Red Sharks 4 - 2 Blue Tide",
-  "⚽ FT · Golden Lions 1 - 3 Dark Matter FC",
+  "LIVE · Dragon FC 3 - 1 Phoenix United",
+  "FT · Storm City 0 - 2 Iron Eagles",
+  "LIVE · Blaze SC 1 - 1 Thunder Boys",
+  "QF · Night Wolves 2 - 0 Solar Kings",
+  "LIVE · Red Sharks 4 - 2 Blue Tide",
+  "FT · Golden Lions 1 - 3 Dark Matter FC",
 ];
 
 /* ── Bracket data ── */
@@ -230,10 +230,10 @@ function getTickerItem(tournament: LiveTournament) {
   const sb = Number.isFinite(tournament.matchState?.team2Score) ? tournament.matchState?.team2Score : 0;
 
   if (teamA && teamB) {
-    return `🔴 LIVE · ${teamA} ${sa} - ${sb} ${teamB}`;
+    return `LIVE · ${teamA} ${sa} - ${sb} ${teamB}`;
   }
 
-  return `🔴 LIVE · ${tournament.name}`;
+  return `LIVE · ${tournament.name}`;
 }
 
 /* ── Stats ── */
@@ -616,8 +616,11 @@ export default function HomePage() {
               transform: bracketVisible ? "translateY(0)" : "translateY(8px)",
             }}
           >
-            <p className="text-[11px] font-bold tracking-widest text-white/25 uppercase">
-              🏆 {liveMatches.length > 0 ? `Đang diễn ra · ${liveMatches.length} giải` : "Demo bracket"}
+            <p className="text-[11px] font-bold tracking-widest text-white/25 uppercase flex items-center justify-center gap-1.5">
+              <svg className="w-3.5 h-3.5 text-[#22c55e] inline shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94A5.01 5.01 0 0011 15.9V18H8v2h8v-2h-3v-2.1a5.01 5.01 0 003.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z" />
+              </svg>
+              <span>{liveMatches.length > 0 ? `Đang diễn ra · ${liveMatches.length} giải` : "Demo bracket"}</span>
             </p>
             {liveMatches.length > 0 && (
               <label className="flex items-center gap-2 text-[11px] text-white/50">
@@ -731,7 +734,12 @@ export default function HomePage() {
                 transitionDelay: bracketVisible ? "900ms" : "0ms",
               }}
             >
-              <p className="text-[10px] font-black tracking-widest text-[#22c55e]/60 uppercase text-center mb-2">⚡ Chung kết</p>
+              <p className="text-[10px] font-black tracking-widest text-[#22c55e]/60 uppercase text-center mb-2 flex items-center justify-center gap-1">
+                <svg className="w-3 h-3 text-[#22c55e] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Chung kết</span>
+              </p>
               <div className="relative">
                 <div className="absolute -inset-2 rounded-2xl bg-[#22c55e]/10 blur-md" />
                 <BracketMatch {...bracketData.f[0]} delay={bracketVisible ? 950 : 99999} />
@@ -813,9 +821,11 @@ export default function HomePage() {
               </div>
             ))}
           </div>
-          <div className="rounded-2xl border border-white/[0.1] bg-white/[0.04] p-6 text-center">
+          <div className="rounded-2xl border border-white/[0.1] bg-white/[0.04] p-6 text-center flex items-center justify-center gap-2">
+            <svg className="w-5 h-5 text-yellow-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+            </svg>
             <p className="text-sm text-white/60">
-              <span className="text-lg mr-2">🎉</span>
               <span className="font-bold text-white">Miễn phí cho giải đấu đầu tiên!</span>
               <span className="text-white/40 ml-1">Tối đa 8 đội, đầy đủ tính năng.</span>
             </p>

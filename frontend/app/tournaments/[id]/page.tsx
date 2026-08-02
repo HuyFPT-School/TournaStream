@@ -879,6 +879,9 @@ export default function TournamentDetailPage() {
   const [activeDeTab, setActiveDeTab] = useState<'upper' | 'lower' | 'grand'>('upper');
   const [selectedLeagueMatchId, setSelectedLeagueMatchId] = useState<string | null>(null);
   const [editingResults, setEditingResults] = useState<Record<string, { placement: number | ''; kills: number | '' }>>({});
+  const [leagueAutoSaveStatus, setLeagueAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [leagueLastAutoSaveTime, setLeagueLastAutoSaveTime] = useState<string>('');
+  const isLeagueEditingInitialMount = useRef(true);
 
   // WebRTC Livestream states & refs for League Match Editor
   const [leagueStreamType, setLeagueStreamType] = useState<'youtube' | 'twitch' | 'webcam' | null>(null);
@@ -903,12 +906,103 @@ export default function TournamentDetailPage() {
         };
       });
       setEditingResults(resultsMap);
+      isLeagueEditingInitialMount.current = true;
 
       // Sync stream config states
       setLeagueStreamType(match.streamType || null);
       setLeagueStreamUrlInput(match.streamUrl || '');
     }
   };
+
+  const silentAutoSaveLeagueMatchResults = async (resultsMap: Record<string, { placement: number | ''; kills: number | '' }>) => {
+    if (!selectedLeagueMatchId || !tournament) return;
+    setLeagueAutoSaveStatus('saving');
+
+    const matchesList = tournament.leagueMatches || tournament.matches || [];
+    const matchIdx = matchesList.findIndex((m: any) => m.id === selectedLeagueMatchId);
+    if (matchIdx === -1) return;
+
+    const teamPlacements = Object.entries(resultsMap).map(([teamId, r]) => ({
+      teamId,
+      placement: r.placement === '' || r.placement === null || r.placement === undefined ? null : Number(r.placement),
+      kills: Number(r.kills || 0),
+    }));
+
+    const pointRules = tournament.pointRules || {
+      "1": 10, "2": 6, "3": 5, "4": 4, "5": 3, "6": 2, "7": 2, "8": 1, "9": 1, "10": 1, "11": 1, "12": 1
+    };
+
+    const updatedResults = teamPlacements.map(tp => {
+      const placementPoints = tp.placement !== null ? (pointRules[tp.placement.toString()] || 0) : 0;
+      const killPoints = tp.kills * 1;
+      const totalPoints = placementPoints + killPoints;
+
+      const teamObj = tournament.teams.find((t: any) => t.id === tp.teamId);
+
+      return {
+        teamId: tp.teamId,
+        teamName: teamObj?.name || '',
+        placement: tp.placement,
+        kills: tp.kills,
+        placementPoints,
+        killPoints,
+        totalPoints,
+        win: tp.placement === 1
+      };
+    });
+
+    const updatedMatches = [...matchesList];
+    updatedMatches[matchIdx] = {
+      ...updatedMatches[matchIdx],
+      results: updatedResults
+    };
+
+    const updatedTournament = {
+      ...tournament,
+      ...(tournament.leagueMatches ? { leagueMatches: updatedMatches } : { matches: updatedMatches })
+    };
+
+    setTournament(updatedTournament);
+    localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
+
+    const savedList = localStorage.getItem(tournamentsKey);
+    if (savedList) {
+      try {
+        const list = JSON.parse(savedList);
+        const idx = list.findIndex((t: any) => t.id === tournament.id);
+        if (idx > -1) {
+          list[idx] = updatedTournament;
+          localStorage.setItem(tournamentsKey, JSON.stringify(list));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    try {
+      await syncTournamentToBackend(updatedTournament);
+      setLeagueAutoSaveStatus('saved');
+      setLeagueLastAutoSaveTime(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    } catch (err) {
+      console.error('Error auto-syncing league results:', err);
+      setLeagueAutoSaveStatus('error');
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedLeagueMatchId) return;
+    if (isLeagueEditingInitialMount.current) {
+      isLeagueEditingInitialMount.current = false;
+      return;
+    }
+
+    setLeagueAutoSaveStatus('saving');
+    const timer = setTimeout(() => {
+      silentAutoSaveLeagueMatchResults(editingResults);
+    }, 700);
+
+    return () => clearTimeout(timer);
+  }, [editingResults, selectedLeagueMatchId]);
 
   const handleSaveLeagueMatchResults = async () => {
     if (!selectedLeagueMatchId || !tournament) return;
@@ -3505,7 +3599,7 @@ export default function TournamentDetailPage() {
                             }`}
                         >
                           <div className="font-bold text-xs">{m.name}</div>
-                          <div className="text-[10px] text-white/40">{m.isFinished ? '✓ Đã xong' : '⏳ Chờ'}</div>
+                          <div className="text-[10px] text-white/40">{m.isFinished ? '✓ Đã xong' : 'Chờ'}</div>
                         </button>
                       );
                     })}
@@ -3560,8 +3654,11 @@ export default function TournamentDetailPage() {
 
                           <div className="flex gap-3">
                             {isFinished ? (
-                              <div className="w-full text-center py-2 px-4 rounded-lg bg-white/5 border border-white/10 text-white/40 text-xs font-bold">
-                                🏁 Trận đấu đã kết thúc & Đã cập nhật Standing
+                              <div className="w-full text-center py-2 px-4 rounded-lg bg-white/5 border border-white/10 text-white/40 text-xs font-bold flex items-center justify-center gap-1.5">
+                                <svg className="w-3.5 h-3.5 text-white/40 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                                </svg>
+                                <span>Trận đấu đã kết thúc & Đã cập nhật Standing</span>
                               </div>
                             ) : (
                               <>
@@ -3667,12 +3764,15 @@ export default function TournamentDetailPage() {
                           <button
                             type="button"
                             onClick={() => handleLeagueStreamTypeChange('webcam')}
-                            className={`py-2 px-3 rounded-lg border font-bold text-xs transition-all ${leagueStreamType === 'webcam'
+                            className={`py-2 px-3 rounded-lg border font-bold text-xs transition-all flex items-center gap-1.5 ${leagueStreamType === 'webcam'
                               ? 'border-[#22c55e] bg-[#22c55e]/10 text-green-400 font-extrabold'
                               : 'border-white/[0.06] bg-white/[0.02] text-white/60 hover:text-white'
                               }`}
                           >
-                            🎥 Webcam trực tiếp
+                            <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            <span>Webcam trực tiếp</span>
                           </button>
                         </div>
                       </div>
@@ -3705,14 +3805,20 @@ export default function TournamentDetailPage() {
                                   onClick={startLeagueWebcamBroadcast}
                                   className="flex-1 py-2 px-4 rounded-lg bg-[#22c55e] text-[#080b10] font-black text-xs hover:bg-[#16a34a] transition-all flex items-center justify-center gap-1.5"
                                 >
-                                  🎥 Phát Webcam
+                                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                  </svg>
+                                  <span>Phát Webcam</span>
                                 </button>
                                 <button
                                   type="button"
                                   onClick={startLeagueScreenShareBroadcast}
                                   className="flex-1 py-2 px-4 rounded-lg bg-[#3b82f6] text-white font-black text-xs hover:bg-[#2563eb] transition-all flex items-center justify-center gap-1.5"
                                 >
-                                  🖥️ Chia sẻ màn hình
+                                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                  </svg>
+                                  <span>Chia sẻ màn hình</span>
                                 </button>
                               </>
                             ) : (
@@ -3824,19 +3930,53 @@ export default function TournamentDetailPage() {
                     })}
                   </div>
 
-                  <div className="flex justify-end gap-3 border-t border-white/[0.06] pt-4">
-                    <button
-                      onClick={() => setSelectedLeagueMatchId(null)}
-                      className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white font-semibold text-xs transition-colors"
-                    >
-                      Hủy bỏ
-                    </button>
-                    <button
-                      onClick={handleSaveLeagueMatchResults}
-                      className="px-5 py-2 rounded-lg bg-[#22c55e] text-[#080b10] font-bold text-xs hover:bg-[#16a34a] transition-all shadow-[0_0_15px_rgba(34,197,94,0.15)]"
-                    >
-                      Lưu kết quả & Standing
-                    </button>
+                  <div className="flex items-center justify-between gap-3 border-t border-white/[0.06] pt-4">
+                    <div className="px-3.5 py-1.5 rounded-lg border border-white/[0.08] bg-[#080b10] flex items-center gap-2 text-xs select-none">
+                      {leagueAutoSaveStatus === 'saving' ? (
+                        <>
+                          <svg className="w-3.5 h-3.5 text-amber-400 animate-spin" viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4" strokeDashoffset="10" />
+                          </svg>
+                          <span className="text-amber-400 font-bold">Đang tự động lưu...</span>
+                        </>
+                      ) : leagueAutoSaveStatus === 'saved' ? (
+                        <>
+                          <svg className="w-3.5 h-3.5 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="text-[#22c55e] font-bold">Đã tự động lưu ({leagueLastAutoSaveTime})</span>
+                        </>
+                      ) : leagueAutoSaveStatus === 'error' ? (
+                        <div className="flex items-center gap-1.5 text-yellow-400 font-bold">
+                          <svg className="w-3.5 h-3.5 text-yellow-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          <span>Đã lưu tạm ở máy</span>
+                        </div>
+                      ) : (
+                        <>
+                          <svg className="w-3.5 h-3.5 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                          </svg>
+                          <span className="text-white/50">Tự động lưu kích hoạt</span>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setSelectedLeagueMatchId(null)}
+                        className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white font-semibold text-xs transition-colors"
+                      >
+                        Đóng bảng
+                      </button>
+                      <button
+                        onClick={handleSaveLeagueMatchResults}
+                        className="px-5 py-2 rounded-lg bg-[#22c55e] text-[#080b10] font-bold text-xs hover:bg-[#16a34a] transition-all shadow-[0_0_15px_rgba(34,197,94,0.15)]"
+                      >
+                        Cập nhật Bảng xếp hạng
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -3928,7 +4068,10 @@ export default function TournamentDetailPage() {
                       }`}
                     disabled={!areAllGroupMatchesFinished()}
                   >
-                    🏁 Tiến vào Vòng Knockout
+                    <svg className="w-4 h-4 text-black shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                    </svg>
+                    <span>Tiến vào Vòng Knockout</span>
                   </button>
                 </div>
               )}
@@ -4103,7 +4246,11 @@ export default function TournamentDetailPage() {
                         <span>
                           {item.match.teamA?.name} vs {item.match.teamB?.name}
                         </span>
-                        {isFinished && <span className="text-[10px] text-white/30">(🏁)</span>}
+                        {isFinished && (
+                          <svg className="w-3 h-3 text-white/30 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                          </svg>
+                        )}
                         {isRunning && <span className="text-[9px] px-1 bg-[#22c55e] text-[#080b10] rounded">LIVE</span>}
                       </button>
                     );
@@ -4254,8 +4401,11 @@ export default function TournamentDetailPage() {
 
               <div className="flex justify-center gap-3">
                 {matchState.isFinished ? (
-                  <div className="w-full max-w-md text-center py-3 px-4 rounded-xl bg-white/[0.02] border border-white/[0.08] text-white/40 text-xs font-bold select-none">
-                    🏁 Trận đấu đã kết thúc. Kết quả đã lưu vĩnh viễn.
+                  <div className="w-full max-w-md text-center py-3 px-4 rounded-xl bg-white/[0.02] border border-white/[0.08] text-white/40 text-xs font-bold select-none flex items-center justify-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-white/40 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                    </svg>
+                    <span>Trận đấu đã kết thúc. Kết quả đã lưu vĩnh viễn.</span>
                   </div>
                 ) : (
                   <>
@@ -4265,7 +4415,10 @@ export default function TournamentDetailPage() {
                         onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleStartStop(); }}
                         className="px-5 py-2.5 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all duration-200 active:scale-95 bg-[#22c55e]/10 border border-[#22c55e]/20 text-[#22c55e] hover:bg-[#22c55e]/20 shadow-[0_0_15px_rgba(34,197,94,0.15)]"
                       >
-                        ▶ Bắt đầu
+                        <svg className="w-3.5 h-3.5 text-[#22c55e] shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                        <span>Bắt đầu</span>
                       </button>
                     )}
                     <button
@@ -4273,7 +4426,10 @@ export default function TournamentDetailPage() {
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleEndHalf(); }}
                       className="px-5 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 font-black text-xs transition-all duration-200 active:scale-95 flex items-center gap-1 shadow-[0_0_20px_rgba(239,68,68,0.2)]"
                     >
-                      🏁 Kết thúc trận
+                      <svg className="w-3.5 h-3.5 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                      </svg>
+                      <span>Kết thúc trận</span>
                     </button>
                   </>
                 )}
@@ -4503,9 +4659,12 @@ export default function TournamentDetailPage() {
                             type="button"
                             disabled={chatModerationSubmitting === msg.userId}
                             onClick={() => handleBlockUser(msg.userId, msg.userName)}
-                            className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-40"
+                            className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center gap-1"
                           >
-                            🚫 Chặn
+                            <svg className="w-3 h-3 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                            </svg>
+                            <span>Chặn</span>
                           </button>
                         )}
                       </div>
@@ -4537,9 +4696,12 @@ export default function TournamentDetailPage() {
                           type="button"
                           disabled={chatModerationSubmitting === userId}
                           onClick={() => handleUnblockUser(userId)}
-                          className="px-2.5 py-1 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white/70 hover:text-white text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-40"
+                          className="px-2.5 py-1 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white/70 hover:text-white text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center gap-1"
                         >
-                          🔓 Bỏ chặn
+                          <svg className="w-3 h-3 text-white/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                          </svg>
+                          <span>Bỏ chặn</span>
                         </button>
                       </div>
                     );
@@ -4608,8 +4770,10 @@ export default function TournamentDetailPage() {
 
             <div className="p-8">
               {/* Header */}
-              <div className="text-center mb-6">
-                <div className="text-4xl mb-3">🏁</div>
+              <div className="text-center mb-6 flex flex-col items-center">
+                <svg className="w-10 h-10 text-[#22c55e] mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                </svg>
                 <h3 className="text-xl font-black text-white mb-1">Trận đấu kết thúc!</h3>
                 <p className="text-sm text-white/50">
                   {finishedMatchInfo.roundLabel} • {finishedMatchInfo.teamA} vs {finishedMatchInfo.teamB}

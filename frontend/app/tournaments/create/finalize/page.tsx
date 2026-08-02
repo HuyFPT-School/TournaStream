@@ -307,7 +307,15 @@ export default function FinalizeCreatePage() {
 
       // Save tournament to localStorage list
       const savedList = localStorage.getItem(tournamentsKey);
-      const list = savedList ? JSON.parse(savedList) : [];
+      let list: any[] = [];
+      if (savedList) {
+        try {
+          list = JSON.parse(savedList);
+          if (!Array.isArray(list)) list = [];
+        } catch {
+          list = [];
+        }
+      }
       const index = list.findIndex((t: any) => t.id === tournament.id);
       if (index > -1) {
         list[index] = tournament;
@@ -399,7 +407,12 @@ export default function FinalizeCreatePage() {
 
         {/* Header */}
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-black mb-2">Giải đấu đã sẵn sàng! 🎉</h1>
+          <h1 className="text-4xl font-black mb-2 flex items-center justify-center gap-3">
+            <span>Giải đấu đã sẵn sàng!</span>
+            <svg className="w-8 h-8 text-yellow-400 shrink-0 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+            </svg>
+          </h1>
           <p className="text-white/60 max-w-2xl mx-auto">
             Giải đấu "{tournament.name}" của bạn đã được tạo thành công. Chia sẻ mã QR hoặc link dưới đây để người khác có thể xem trực tiếp.
           </p>
@@ -488,7 +501,9 @@ export default function FinalizeCreatePage() {
                             {m.image ? (
                               <img src={m.image} className="w-4 h-4 rounded-full object-cover flex-shrink-0 border border-white/[0.08]" alt={m.name} />
                             ) : (
-                              <span>👤</span>
+                              <svg className="w-3 h-3 text-white/40 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
                             )}
                             <span>{m.name}</span>
                           </span>

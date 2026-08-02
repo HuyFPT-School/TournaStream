@@ -352,12 +352,16 @@ export default function LiveMatchPage() {
   const [streamUrlInput, setStreamUrlInput] = useState('');
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [brResults, setBrResults] = useState<any[]>([]);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [lastAutoSaveTime, setLastAutoSaveTime] = useState<string>('');
+  const isBrInitialMount = useRef(true);
 
   useEffect(() => {
     if (tournament && matchKey && matchKey.startsWith('br-')) {
       const match = tournament.matches?.find((m: any) => m.id === matchKey);
       if (match) {
         setBrResults(match.results || []);
+        isBrInitialMount.current = true;
       }
     }
   }, [tournament, matchKey]);
@@ -1421,6 +1425,89 @@ export default function LiveMatchPage() {
     }));
   };
 
+  const silentAutoSaveBrResults = async (resultsToSave: any[]) => {
+    if (!tournament || !matchKey) return;
+    setAutoSaveStatus('saving');
+
+    const pointRules = tournament.pointRules || {
+      "1": 10, "2": 6, "3": 5, "4": 4, "5": 3, "6": 2, "7": 2, "8": 1, "9": 1, "10": 1, "11": 1, "12": 1
+    };
+
+    const calculatedResults = resultsToSave.map((r: any) => {
+      const placementVal = r.placement === '' || r.placement === null || r.placement === undefined ? null : Number(r.placement);
+      const placementPoints = placementVal !== null ? (pointRules[placementVal.toString()] || 0) : 0;
+      const killPoints = Number(r.kills || 0) * 1;
+      const totalPoints = placementPoints + killPoints;
+
+      return {
+        ...r,
+        rank: placementVal,
+        placement: placementVal,
+        kills: Number(r.kills || 0),
+        placementPoints,
+        killPoints,
+        totalPoints,
+        pts: totalPoints
+      };
+    });
+
+    const updatedMatches = (tournament.matches || []).map((m: any) => {
+      if (m.id === matchKey) {
+        return {
+          ...m,
+          results: calculatedResults
+        };
+      }
+      return m;
+    });
+
+    const updatedTournament = {
+      ...tournament,
+      matches: updatedMatches,
+    };
+
+    setTournament(updatedTournament);
+    localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
+
+    const savedList = localStorage.getItem(tournamentsKey);
+    if (savedList) {
+      try {
+        const list = JSON.parse(savedList);
+        const index = list.findIndex((t: any) => t.id === tournament.id);
+        if (index > -1) {
+          list[index] = updatedTournament;
+          localStorage.setItem(tournamentsKey, JSON.stringify(list));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    try {
+      await syncTournamentToBackend(updatedTournament);
+      setAutoSaveStatus('saved');
+      setLastAutoSaveTime(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    } catch (err) {
+      console.error('Error auto-syncing BR results:', err);
+      setAutoSaveStatus('error');
+    }
+  };
+
+  useEffect(() => {
+    if (!matchKey || !matchKey.startsWith('br-')) return;
+    if (isBrInitialMount.current) {
+      isBrInitialMount.current = false;
+      return;
+    }
+
+    setAutoSaveStatus('saving');
+    const timer = setTimeout(() => {
+      silentAutoSaveBrResults(brResults);
+    }, 700);
+
+    return () => clearTimeout(timer);
+  }, [brResults]);
+
   const saveBattleRoyaleMatchResults = async (isFinal: boolean) => {
     if (!tournament || !matchKey) return;
 
@@ -1658,19 +1745,44 @@ export default function LiveMatchPage() {
             </div>
 
             {/* Actions */}
-            <div className="flex gap-4">
+            <div className="flex items-center gap-4">
               <Link
                 href={`/tournaments/${tournament.id}`}
                 className="flex-1 px-6 py-3 rounded-xl border border-white/[0.06] text-white font-semibold hover:bg-white/[0.05] transition-all duration-200 text-center text-sm"
               >
                 Hủy & Quay lại
               </Link>
-              <button
-                onClick={() => saveBattleRoyaleMatchResults(false)}
-                className="flex-1 px-6 py-3 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-400 font-semibold hover:bg-blue-500/20 transition-all duration-200 text-sm"
-              >
-                Lưu tạm thời
-              </button>
+              <div className="flex-1 px-4 py-2.5 rounded-xl border border-white/[0.08] bg-[#0f1419] flex items-center justify-center gap-2 text-xs font-semibold select-none">
+                {autoSaveStatus === 'saving' ? (
+                  <>
+                    <svg className="w-3.5 h-3.5 text-amber-400 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4" strokeDashoffset="10" />
+                    </svg>
+                    <span className="text-amber-400 font-bold">Đang tự động lưu...</span>
+                  </>
+                ) : autoSaveStatus === 'saved' ? (
+                  <>
+                    <svg className="w-3.5 h-3.5 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-[#22c55e] font-bold">Tự động lưu ({lastAutoSaveTime})</span>
+                  </>
+                ) : autoSaveStatus === 'error' ? (
+                  <div className="flex items-center gap-1.5 text-yellow-400 font-bold">
+                    <svg className="w-3.5 h-3.5 text-yellow-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span>Đã lưu tạm ở máy</span>
+                  </div>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>
+                    <span className="text-white/50">Tự động lưu kích hoạt</span>
+                  </>
+                )}
+              </div>
               <button
                 onClick={() => saveBattleRoyaleMatchResults(true)}
                 className="flex-1 px-6 py-3 rounded-xl bg-[#22c55e] text-[#080b10] font-black hover:bg-[#16a34a] shadow-[0_0_20px_rgba(34,197,94,0.25)] transition-all duration-200 text-sm"
@@ -1695,8 +1807,11 @@ export default function LiveMatchPage() {
               
               {/* Start/Stop Button */}
               {matchState.isFinished ? (
-                <div className="px-6 py-3 rounded-lg font-bold text-xs bg-white/[0.02] border border-white/[0.08] text-white/40 uppercase tracking-widest cursor-not-allowed">
-                  🏁 Trận đấu đã kết thúc
+                <div className="px-6 py-3 rounded-lg font-bold text-xs bg-white/[0.02] border border-white/[0.08] text-white/40 uppercase tracking-widest cursor-not-allowed flex items-center justify-center gap-1.5">
+                  <svg className="w-3.5 h-3.5 text-white/40 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                  </svg>
+                  <span>Trận đấu đã kết thúc</span>
                 </div>
               ) : !matchState.isRunning ? (
                 <button
@@ -1807,25 +1922,34 @@ export default function LiveMatchPage() {
 
               {/* Start Button */}
               {matchState.isFinished ? (
-                <div className="px-6 py-3 rounded-lg font-semibold bg-gray-500/20 border border-gray-500/30 text-gray-400 mb-4 cursor-not-allowed">
-                  🏁 Trận đấu đã kết thúc
+                <div className="px-6 py-3 rounded-lg font-semibold bg-gray-500/20 border border-gray-500/30 text-gray-400 mb-4 cursor-not-allowed flex items-center justify-center gap-1.5">
+                  <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                  </svg>
+                  <span>Trận đấu đã kết thúc</span>
                 </div>
               ) : !matchState.isRunning ? (
                 <div className="flex flex-col gap-2 w-full max-w-[200px] mb-4">
                   {!matchState.isRunning && (
                     <button
                       onClick={handleStartStop}
-                      className="w-full px-6 py-3 rounded-lg font-semibold transition-all duration-200 border bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border-[#22c55e]/50 text-green-400"
+                      className="w-full px-6 py-3 rounded-lg font-semibold transition-all duration-200 border bg-[#22c55e]/20 hover:bg-[#22c55e]/30 border-[#22c55e]/50 text-green-400 flex items-center justify-center gap-1.5"
                     >
-                      ▶ Bắt đầu trận đấu
+                      <svg className="w-4 h-4 text-green-400 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                      <span>Bắt đầu trận đấu</span>
                     </button>
                   )}
                   {tournament?.sport === 'fighting_sports' && (
                     <button
                       onClick={() => setMatchState(prev => ({ ...prev, hiep: prev.hiep + 1 }))}
-                      className="w-full px-4 py-2 rounded-lg font-bold text-xs bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-400 transition-all duration-200"
+                      className="w-full px-4 py-2 rounded-lg font-bold text-xs bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-400 transition-all duration-200 flex items-center justify-center gap-1"
                     >
-                      ➔ Qua Hiệp {matchState.hiep + 1}
+                      <span>Qua Hiệp {matchState.hiep + 1}</span>
+                      <svg className="w-3.5 h-3.5 text-purple-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      </svg>
                     </button>
                   )}
                 </div>
@@ -1921,13 +2045,16 @@ export default function LiveMatchPage() {
                 </button>
                 <button
                   onClick={() => handleStreamTypeChange('webcam')}
-                  className={`py-2.5 px-3 rounded-lg border font-bold text-xs transition-all ${
+                  className={`py-2.5 px-3 rounded-lg border font-bold text-xs transition-all flex items-center gap-1.5 ${
                     streamType === 'webcam'
                       ? 'border-[#22c55e] bg-[#22c55e]/10 text-green-400 font-extrabold'
                       : 'border-white/[0.06] bg-white/[0.02] text-white/60 hover:text-white'
                   }`}
                 >
-                  🎥 Webcam trực tiếp
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  <span>Webcam trực tiếp</span>
                 </button>
               </div>
             </div>
@@ -1960,13 +2087,19 @@ export default function LiveMatchPage() {
                         onClick={startWebcamBroadcast}
                         className="flex-1 py-2.5 px-4 rounded-lg bg-[#22c55e] text-[#080b10] font-black text-xs hover:bg-[#16a34a] transition-all flex items-center justify-center gap-1.5"
                       >
-                        🎥 Phát Webcam
+                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        <span>Phát Webcam</span>
                       </button>
                       <button
                         onClick={startScreenShareBroadcast}
                         className="flex-1 py-2.5 px-4 rounded-lg bg-[#3b82f6] text-white font-black text-xs hover:bg-[#2563eb] transition-all flex items-center justify-center gap-1.5"
                       >
-                        🖥️ Chia sẻ màn hình
+                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        <span>Chia sẻ màn hình</span>
                       </button>
                     </>
                   ) : (
@@ -2043,8 +2176,10 @@ export default function LiveMatchPage() {
 
             <div className="p-8">
               {/* Header */}
-              <div className="text-center mb-6">
-                <div className="text-4xl mb-3">🏁</div>
+              <div className="text-center mb-6 flex flex-col items-center">
+                <svg className="w-10 h-10 text-[#22c55e] mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                </svg>
                 <h3 className="text-xl font-black text-white mb-1">Trận đấu kết thúc!</h3>
                 <p className="text-sm text-white/50">
                   {finishedMatchInfo.roundLabel} • {finishedMatchInfo.teamA} vs {finishedMatchInfo.teamB}
