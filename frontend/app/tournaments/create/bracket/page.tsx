@@ -10,21 +10,28 @@ import { getSession } from '@/app/lib/authStorage';
 type TeamRef = { id?: string; name?: string };
 
 function buildInitialBracket(teams: TeamRef[]) {
+  const list = [...teams];
+  if (list.length % 2 !== 0) {
+    list.push({ id: 'bye', name: 'BYE' });
+  }
   const roundOne = [] as Array<{
     teamA?: TeamRef;
     teamB?: TeamRef;
     scoreA: number | null;
     scoreB: number | null;
     isFinished: boolean;
+    winner?: TeamRef;
   }>;
 
-  for (let i = 0; i < teams.length; i += 2) {
+  for (let i = 0; i < list.length; i += 2) {
+    const isBye = list[i + 1]?.id === 'bye';
     roundOne.push({
-      teamA: teams[i],
-      teamB: teams[i + 1],
-      scoreA: null,
-      scoreB: null,
-      isFinished: false,
+      teamA: list[i],
+      teamB: list[i + 1],
+      scoreA: isBye ? 1 : null,
+      scoreB: isBye ? 0 : null,
+      isFinished: isBye,
+      winner: isBye ? list[i] : undefined,
     });
   }
 
@@ -77,24 +84,31 @@ function buildRoundRobinMatches(groupTeams: TeamRef[], groupIdx: number) {
 }
 
 function buildDoubleEliminationBracket(teams: TeamRef[]) {
-  const n = teams.length;
+  const paddedTeams = [...teams];
+  const nextPowerOfTwo = Math.pow(2, Math.ceil(Math.log2(Math.max(2, teams.length))));
+  while (paddedTeams.length < nextPowerOfTwo) {
+    paddedTeams.push({ id: 'bye', name: 'BYE' });
+  }
+  const n = paddedTeams.length;
   const numUpperRounds = Math.ceil(Math.log2(n));
 
   const upperRounds: any[][] = [];
   const u0Matches: any[] = [];
   for (let i = 0; i < n; i += 2) {
+    const isBye = paddedTeams[i + 1]?.id === 'bye';
     u0Matches.push({
-      teamA: teams[i],
-      teamB: teams[i + 1],
-      scoreA: null,
-      scoreB: null,
-      isFinished: false,
+      teamA: paddedTeams[i],
+      teamB: paddedTeams[i + 1],
+      scoreA: isBye ? 1 : null,
+      scoreB: isBye ? 0 : null,
+      isFinished: isBye,
+      winner: isBye ? paddedTeams[i] : undefined,
     });
   }
   upperRounds.push(u0Matches);
 
   for (let r = 1; r < numUpperRounds; r++) {
-    const matchesInRound = n / Math.pow(2, r + 1);
+    const matchesInRound = Math.max(1, Math.floor(n / Math.pow(2, r + 1)));
     const roundMatches: any[] = [];
     for (let m = 0; m < matchesInRound; m++) {
       roundMatches.push({
@@ -109,10 +123,10 @@ function buildDoubleEliminationBracket(teams: TeamRef[]) {
   }
 
   const lowerRounds: any[][] = [];
-  const totalLowerRounds = 2 * numUpperRounds - 2;
+  const totalLowerRounds = Math.max(1, 2 * numUpperRounds - 2);
   for (let r = 0; r < totalLowerRounds; r++) {
     const k = Math.floor(r / 2);
-    const matchesInRound = n / Math.pow(2, k + 2);
+    const matchesInRound = Math.max(1, Math.floor(n / Math.pow(2, k + 2)));
     const roundMatches: any[] = [];
     for (let m = 0; m < matchesInRound; m++) {
       roundMatches.push({
@@ -216,6 +230,10 @@ export default function BracketPage() {
 
   const handleCreate = async () => {
     if (isSubmitting) return;
+    if (!orderedTeams || orderedTeams.length < 2) {
+      alert("Cần ít nhất 2 đội tham gia để tạo giải đấu!");
+      return;
+    }
     setIsSubmitting(true);
 
     try {

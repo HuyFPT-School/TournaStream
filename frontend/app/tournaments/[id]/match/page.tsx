@@ -41,14 +41,20 @@ type BracketState = {
 };
 
 function buildInitialBracket(teams: TeamRef[]): BracketState {
+  const list = [...teams];
+  if (list.length % 2 !== 0) {
+    list.push({ id: 'bye', name: 'BYE' });
+  }
   const roundOne: BracketMatch[] = [];
-  for (let i = 0; i < teams.length; i += 2) {
+  for (let i = 0; i < list.length; i += 2) {
+    const isByeMatch = list[i + 1]?.id === 'bye';
     roundOne.push({
-      teamA: teams[i],
-      teamB: teams[i + 1],
-      scoreA: null,
-      scoreB: null,
-      isFinished: false,
+      teamA: list[i],
+      teamB: list[i + 1],
+      scoreA: isByeMatch ? 1 : null,
+      scoreB: isByeMatch ? 0 : null,
+      isFinished: isByeMatch,
+      winner: isByeMatch ? list[i] : undefined,
     });
   }
 
@@ -58,6 +64,112 @@ function buildInitialBracket(teams: TeamRef[]): BracketState {
     currentMatch: 0,
     isFinished: false,
   };
+}
+
+type StandingRow = {
+  teamId: string;
+  teamName: string;
+  mp: number;
+  w: number;
+  d: number;
+  l: number;
+  gf: number;
+  ga: number;
+  gd: number;
+  pts: number;
+};
+
+function calculateGroupStandings(groupTeams: TeamRef[], groupMatches: any[], matchStates: any): StandingRow[] {
+  const standings: Record<string, StandingRow> = {};
+
+  groupTeams.forEach((team) => {
+    if (team.id) {
+      standings[team.id] = {
+        teamId: team.id,
+        teamName: team.name || '',
+        mp: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0,
+      };
+    }
+  });
+
+  const matchesArray = groupMatches || [];
+  matchesArray.forEach((m) => {
+    const mState = matchStates?.[m.id];
+    const isFinished = m.isFinished || mState?.isFinished;
+    if (!isFinished) return;
+
+    const scoreA = mState ? mState.team1Score : (m.scoreA ?? 0);
+    const scoreB = mState ? mState.team2Score : (m.scoreB ?? 0);
+    const idA = m.teamA?.id;
+    const idB = m.teamB?.id;
+
+    if (idA && standings[idA]) {
+      standings[idA].mp += 1;
+      standings[idA].gf += scoreA;
+      standings[idA].ga += scoreB;
+      standings[idA].gd = standings[idA].gf - standings[idA].ga;
+      if (scoreA > scoreB) {
+        standings[idA].w += 1;
+        standings[idA].pts += 3;
+      } else if (scoreA === scoreB) {
+        standings[idA].d += 1;
+        standings[idA].pts += 1;
+      } else {
+        standings[idA].l += 1;
+      }
+    }
+
+    if (idB && standings[idB]) {
+      standings[idB].mp += 1;
+      standings[idB].gf += scoreB;
+      standings[idB].ga += scoreA;
+      standings[idB].gd = standings[idB].gf - standings[idB].ga;
+      if (scoreB > scoreA) {
+        standings[idB].w += 1;
+        standings[idB].pts += 3;
+      } else if (scoreA === scoreB) {
+        standings[idB].d += 1;
+        standings[idB].pts += 1;
+      } else {
+        standings[idB].l += 1;
+      }
+    }
+  });
+
+  return Object.values(standings).sort((a, b) => {
+    if (b.pts !== a.pts) return b.pts - a.pts;
+    if (b.gd !== a.gd) return b.gd - a.gd;
+    if (b.gf !== a.gf) return b.gf - a.gf;
+    return a.teamName.localeCompare(b.teamName);
+  });
+}
+
+function seedKnockoutFromGroups(groups: any[], advancingCount: number, matchStates: any): TeamRef[] {
+  const groupStandings = groups.map((g, gIdx) => {
+    return {
+      groupIdx: gIdx,
+      name: g.name,
+      standings: calculateGroupStandings(g.teams, g.matches, matchStates)
+    };
+  });
+
+  const candidates: Array<{ team: TeamRef; rank: number; groupIdx: number }> = [];
+  groupStandings.forEach((gs) => {
+    for (let r = 0; r < advancingCount; r++) {
+      const row = gs.standings[r];
+      if (row) {
+        candidates.push({
+          team: { id: row.teamId, name: row.teamName },
+          rank: r + 1,
+          groupIdx: gs.groupIdx
+        });
+      }
+    }
+  });
+
+  const seeded: TeamRef[] = [];
+  candidates.forEach(c => seeded.push(c.team));
+  return seeded;
 }
 
 function getPlacementPoints(rank: number | null): number {
@@ -268,54 +380,73 @@ function getMatchLabel(key: string | null, tournament: any) {
 }
 
 function advanceDoubleElimination(bracket: any, roundIndex: number, matchIndex: number, winner: any, loser: any, isUpper: boolean) {
+  if (!bracket || !bracket.upperRounds || !bracket.lowerRounds || !bracket.grandFinal) return;
+
   const numUpperRounds = bracket.upperRounds.length;
   const totalLowerRounds = bracket.lowerRounds.length;
 
   if (isUpper) {
     if (roundIndex === numUpperRounds - 1) {
-      bracket.grandFinal[0].teamA = winner;
-      bracket.lowerRounds[totalLowerRounds - 1][0].teamB = loser;
+      if (bracket.grandFinal[0]) bracket.grandFinal[0].teamA = winner;
+      if (bracket.lowerRounds[totalLowerRounds - 1]?.[0]) {
+        bracket.lowerRounds[totalLowerRounds - 1][0].teamB = loser;
+      }
     } else {
       const nextMatchIdx = Math.floor(matchIndex / 2);
       const isTeamA = matchIndex % 2 === 0;
-      const targetMatch = bracket.upperRounds[roundIndex + 1][nextMatchIdx];
-      if (isTeamA) {
-        targetMatch.teamA = winner;
-      } else {
-        targetMatch.teamB = winner;
+      const targetMatch = bracket.upperRounds[roundIndex + 1]?.[nextMatchIdx];
+      if (targetMatch) {
+        if (isTeamA) {
+          targetMatch.teamA = winner;
+        } else {
+          targetMatch.teamB = winner;
+        }
       }
 
       if (roundIndex === 0) {
         const lowerMatchIdx = Math.floor(matchIndex / 2);
         const isLowerTeamA = matchIndex % 2 === 0;
-        const targetLowerMatch = bracket.lowerRounds[0][lowerMatchIdx];
-        if (isLowerTeamA) {
-          targetLowerMatch.teamA = loser;
-        } else {
-          targetLowerMatch.teamB = loser;
+        const targetLowerMatch = bracket.lowerRounds[0]?.[lowerMatchIdx];
+        if (targetLowerMatch) {
+          if (isLowerTeamA) {
+            targetLowerMatch.teamA = loser;
+          } else {
+            targetLowerMatch.teamB = loser;
+          }
         }
       } else {
-        const lowerRoundIdx = 2 * roundIndex - 1;
-        const targetLowerMatch = bracket.lowerRounds[lowerRoundIdx][matchIndex];
-        targetLowerMatch.teamB = loser;
+        const lowerRoundIdx = Math.min(2 * roundIndex - 1, totalLowerRounds - 1);
+        const roundMatches = bracket.lowerRounds[lowerRoundIdx] || [];
+        const safeMatchIdx = Math.min(matchIndex, Math.max(0, roundMatches.length - 1));
+        const targetLowerMatch = roundMatches[safeMatchIdx];
+        if (targetLowerMatch) {
+          targetLowerMatch.teamB = loser;
+        }
       }
     }
   } else {
     if (roundIndex === totalLowerRounds - 1) {
-      bracket.grandFinal[0].teamB = winner;
+      if (bracket.grandFinal[0]) bracket.grandFinal[0].teamB = winner;
     } else {
       const isMinorRound = roundIndex % 2 === 0;
-      if (isMinorRound) {
-        const targetLowerMatch = bracket.lowerRounds[roundIndex + 1][matchIndex];
-        targetLowerMatch.teamA = winner;
-      } else {
-        const nextLowerMatchIdx = Math.floor(matchIndex / 2);
-        const isLowerTeamA = matchIndex % 2 === 0;
-        const targetLowerMatch = bracket.lowerRounds[roundIndex + 1][nextLowerMatchIdx];
-        if (isLowerTeamA) {
-          targetLowerMatch.teamA = winner;
+      const nextLowerRound = bracket.lowerRounds[roundIndex + 1];
+      if (nextLowerRound) {
+        if (isMinorRound) {
+          const safeMatchIdx = Math.min(matchIndex, Math.max(0, nextLowerRound.length - 1));
+          const targetLowerMatch = nextLowerRound[safeMatchIdx];
+          if (targetLowerMatch) targetLowerMatch.teamA = winner;
         } else {
-          targetLowerMatch.teamB = winner;
+          const nextLowerMatchIdx = Math.floor(matchIndex / 2);
+          const isLowerTeamA = matchIndex % 2 === 0;
+          const safeMatchIdx = Math.min(nextLowerMatchIdx, Math.max(0, nextLowerRound.length - 1));
+          const targetLowerMatch = nextLowerRound[safeMatchIdx];
+          if (targetLowerMatch) {
+            if (isLowerTeamA) {
+              targetLowerMatch.teamA = winner;
+            } else {
+              targetLowerMatch.teamB = winner;
+            }
+          }
         }
       }
     }
@@ -1090,8 +1221,8 @@ export default function LiveMatchPage() {
 
     if (!dbMatch) return;
 
-    if (matchState.team1Score === matchState.team2Score) {
-      alert("Trận đấu không thể kết thúc với tỉ số hòa! Vui lòng cập nhật tỉ số để xác định đội thắng cuộc.");
+    if (!isGroup && matchState.team1Score === matchState.team2Score) {
+      alert("Trận đấu không thể kết thúc với tỉ số hòa ở vòng loại trực tiếp! Vui lòng cập nhật tỉ số để xác định đội thắng cuộc.");
       return;
     }
 
@@ -1135,8 +1266,16 @@ export default function LiveMatchPage() {
 
     if (isGroup) {
       const allGroupMatchesFinished = updatedTournament.groups.every((g: any) =>
-        g.matches.every((m: any) => m.isFinished || (g.name === updatedTournament.groups[roundIndex].name && m.id === dbMatch.id))
+        g.matches.every((m: any) => m.isFinished || (g.name === updatedTournament.groups[roundIndex]?.name && m.id === dbMatch.id))
       );
+      if (allGroupMatchesFinished) {
+        const advancingCount = updatedTournament.advancingCount || 2;
+        const seededTeams = seedKnockoutFromGroups(updatedTournament.groups, advancingCount, updatedTournament.matchStates);
+        if (seededTeams.length >= 2) {
+          updatedTournament.stage = 'knockout';
+          updatedTournament.bracket = buildInitialBracket(seededTeams);
+        }
+      }
     } else if (isUpper || isLower || isGF) {
       advanceDoubleElimination(updatedTournament.bracket, roundIndex, matchIndex, dbMatch.winner, loser, isUpper);
       
@@ -1425,8 +1564,9 @@ export default function LiveMatchPage() {
     }));
   };
 
-  const silentAutoSaveBrResults = async (resultsToSave: any[]) => {
-    if (!tournament || !matchKey) return;
+  const silentAutoSaveBrResults = async (resultsToSave: any[], targetMatchKey?: string) => {
+    const activeKey = targetMatchKey || matchKey;
+    if (!tournament || !activeKey) return;
     setAutoSaveStatus('saving');
 
     const pointRules = tournament.pointRules || {
@@ -1452,7 +1592,7 @@ export default function LiveMatchPage() {
     });
 
     const updatedMatches = (tournament.matches || []).map((m: any) => {
-      if (m.id === matchKey) {
+      if (m.id === activeKey) {
         return {
           ...m,
           results: calculatedResults
@@ -1463,7 +1603,7 @@ export default function LiveMatchPage() {
 
     const updatedTournament = {
       ...tournament,
-      matches: updatedMatches,
+      matches: updatedMatches
     };
 
     setTournament(updatedTournament);
@@ -1500,13 +1640,14 @@ export default function LiveMatchPage() {
       return;
     }
 
+    const currentKey = matchKey;
     setAutoSaveStatus('saving');
     const timer = setTimeout(() => {
-      silentAutoSaveBrResults(brResults);
+      silentAutoSaveBrResults(brResults, currentKey);
     }, 700);
 
     return () => clearTimeout(timer);
-  }, [brResults]);
+  }, [brResults, matchKey]);
 
   const saveBattleRoyaleMatchResults = async (isFinal: boolean) => {
     if (!tournament || !matchKey) return;

@@ -7,6 +7,7 @@ import { fetchTournamentFromBackend, syncTournamentToBackend } from '@/app/lib/t
 import { useTournament } from '@/app/contexts/TournamentContext';
 import { getSession, getApiBaseUrl, getAccessToken } from '@/app/lib/authStorage';
 import { getPusherClient } from '@/app/lib/pusher';
+import FormatGuideModal from '@/app/components/FormatGuideModal';
 
 interface MatchState {
   team1Score: number;
@@ -276,9 +277,10 @@ function calculateGroupStandings(groupTeams: TeamRef[], groupMatches: any[], mat
       standings[idA].gd = standings[idA].gf - standings[idA].ga;
       if (scoreA > scoreB) {
         standings[idA].w += 1;
-        standings[idA].pts += 1;
+        standings[idA].pts += 3;
       } else if (scoreA === scoreB) {
         standings[idA].d += 1;
+        standings[idA].pts += 1;
       } else {
         standings[idA].l += 1;
       }
@@ -291,9 +293,10 @@ function calculateGroupStandings(groupTeams: TeamRef[], groupMatches: any[], mat
       standings[idB].gd = standings[idB].gf - standings[idB].ga;
       if (scoreB > scoreA) {
         standings[idB].w += 1;
-        standings[idB].pts += 1;
+        standings[idB].pts += 3;
       } else if (scoreA === scoreB) {
         standings[idB].d += 1;
+        standings[idB].pts += 1;
       } else {
         standings[idB].l += 1;
       }
@@ -576,54 +579,73 @@ function seedKnockoutFromGroups(groups: any[], advancingCount: number, matchStat
 }
 
 function advanceDoubleElimination(bracket: any, roundIndex: number, matchIndex: number, winner: any, loser: any, isUpper: boolean) {
+  if (!bracket || !bracket.upperRounds || !bracket.lowerRounds || !bracket.grandFinal) return;
+
   const numUpperRounds = bracket.upperRounds.length;
   const totalLowerRounds = bracket.lowerRounds.length;
 
   if (isUpper) {
     if (roundIndex === numUpperRounds - 1) {
-      bracket.grandFinal[0].teamA = winner;
-      bracket.lowerRounds[totalLowerRounds - 1][0].teamB = loser;
+      if (bracket.grandFinal[0]) bracket.grandFinal[0].teamA = winner;
+      if (bracket.lowerRounds[totalLowerRounds - 1]?.[0]) {
+        bracket.lowerRounds[totalLowerRounds - 1][0].teamB = loser;
+      }
     } else {
       const nextMatchIdx = Math.floor(matchIndex / 2);
       const isTeamA = matchIndex % 2 === 0;
-      const targetMatch = bracket.upperRounds[roundIndex + 1][nextMatchIdx];
-      if (isTeamA) {
-        targetMatch.teamA = winner;
-      } else {
-        targetMatch.teamB = winner;
+      const targetMatch = bracket.upperRounds[roundIndex + 1]?.[nextMatchIdx];
+      if (targetMatch) {
+        if (isTeamA) {
+          targetMatch.teamA = winner;
+        } else {
+          targetMatch.teamB = winner;
+        }
       }
 
       if (roundIndex === 0) {
         const lowerMatchIdx = Math.floor(matchIndex / 2);
         const isLowerTeamA = matchIndex % 2 === 0;
-        const targetLowerMatch = bracket.lowerRounds[0][lowerMatchIdx];
-        if (isLowerTeamA) {
-          targetLowerMatch.teamA = loser;
-        } else {
-          targetLowerMatch.teamB = loser;
+        const targetLowerMatch = bracket.lowerRounds[0]?.[lowerMatchIdx];
+        if (targetLowerMatch) {
+          if (isLowerTeamA) {
+            targetLowerMatch.teamA = loser;
+          } else {
+            targetLowerMatch.teamB = loser;
+          }
         }
       } else {
-        const lowerRoundIdx = 2 * roundIndex - 1;
-        const targetLowerMatch = bracket.lowerRounds[lowerRoundIdx][matchIndex];
-        targetLowerMatch.teamB = loser;
+        const lowerRoundIdx = Math.min(2 * roundIndex - 1, totalLowerRounds - 1);
+        const roundMatches = bracket.lowerRounds[lowerRoundIdx] || [];
+        const safeMatchIdx = Math.min(matchIndex, Math.max(0, roundMatches.length - 1));
+        const targetLowerMatch = roundMatches[safeMatchIdx];
+        if (targetLowerMatch) {
+          targetLowerMatch.teamB = loser;
+        }
       }
     }
   } else {
     if (roundIndex === totalLowerRounds - 1) {
-      bracket.grandFinal[0].teamB = winner;
+      if (bracket.grandFinal[0]) bracket.grandFinal[0].teamB = winner;
     } else {
       const isMinorRound = roundIndex % 2 === 0;
-      if (isMinorRound) {
-        const targetLowerMatch = bracket.lowerRounds[roundIndex + 1][matchIndex];
-        targetLowerMatch.teamA = winner;
-      } else {
-        const nextLowerMatchIdx = Math.floor(matchIndex / 2);
-        const isLowerTeamA = matchIndex % 2 === 0;
-        const targetLowerMatch = bracket.lowerRounds[roundIndex + 1][nextLowerMatchIdx];
-        if (isLowerTeamA) {
-          targetLowerMatch.teamA = winner;
+      const nextLowerRound = bracket.lowerRounds[roundIndex + 1];
+      if (nextLowerRound) {
+        if (isMinorRound) {
+          const safeMatchIdx = Math.min(matchIndex, Math.max(0, nextLowerRound.length - 1));
+          const targetLowerMatch = nextLowerRound[safeMatchIdx];
+          if (targetLowerMatch) targetLowerMatch.teamA = winner;
         } else {
-          targetLowerMatch.teamB = winner;
+          const nextLowerMatchIdx = Math.floor(matchIndex / 2);
+          const isLowerTeamA = matchIndex % 2 === 0;
+          const safeMatchIdx = Math.min(nextLowerMatchIdx, Math.max(0, nextLowerRound.length - 1));
+          const targetLowerMatch = nextLowerRound[safeMatchIdx];
+          if (targetLowerMatch) {
+            if (isLowerTeamA) {
+              targetLowerMatch.teamA = winner;
+            } else {
+              targetLowerMatch.teamB = winner;
+            }
+          }
         }
       }
     }
@@ -863,6 +885,7 @@ export default function TournamentDetailPage() {
   const [qrCode, setQrCode] = useState<string>('');
   const [isOwner, setIsOwner] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [showGuideModal, setShowGuideModal] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [isSwitching, setIsSwitching] = useState(false);
@@ -3152,6 +3175,17 @@ export default function TournamentDetailPage() {
 
           <button
             type="button"
+            onClick={() => setShowGuideModal(true)}
+            className="px-4 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white text-xs font-bold transition-all duration-200 flex items-center gap-1.5"
+          >
+            <svg className="w-3.5 h-3.5 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+            Thể thức
+          </button>
+
+          <button
+            type="button"
             onClick={(e) => handleCopyLink(e)}
             className="px-4 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] text-white text-xs font-bold transition-all duration-200 flex items-center gap-1.5"
           >
@@ -4892,6 +4926,11 @@ export default function TournamentDetailPage() {
           </div>
         </div>
       )}
+      <FormatGuideModal
+        isOpen={showGuideModal}
+        onClose={() => setShowGuideModal(false)}
+        initialFormat={tournament?.format}
+      />
     </main>
   );
 }
