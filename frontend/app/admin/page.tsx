@@ -47,6 +47,8 @@ interface AdminStats {
     fullName: string;
     email: string;
     role: string;
+    isVip?: boolean;
+    bypassPayment?: boolean;
     isVerified: boolean;
     lastActiveAt?: string;
     createdAt: string;

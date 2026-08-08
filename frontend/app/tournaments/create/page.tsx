@@ -134,6 +134,7 @@ export default function PackageSelectionPage() {
   }, [router]);
 
   const session = getSession();
+  const isVipUser = Boolean(session?.isVip);
   const pendingCheckoutKey = session ? `pendingCheckout_${session.id}` : 'pendingCheckout';
 
   const bankDetails = useMemo(() => {
@@ -235,13 +236,18 @@ export default function PackageSelectionPage() {
     };
   }, [activeCheckout, paymentSuccess, pendingCheckoutKey]);
 
-  const session = getSession();
-  const isVipUser = Boolean(session?.isVip);
-  const pendingCheckoutKey = session ? `pendingCheckout_${session.id}` : 'pendingCheckout';
-
-  const bankDetails = useMemo(() => { ... });
-
-  const handleCancelCheckout = async () => { ... };
+  const handleCancelCheckout = async () => {
+    if (!paymentSuccess && activeCheckout) {
+      const codeToCancel = activeCheckout.checkoutCode;
+      setActiveCheckout(null);
+      localStorage.removeItem(pendingCheckoutKey);
+      try {
+        await cancelSePayCheckout(codeToCancel);
+      } catch (err) {
+        console.error('Error cancelling checkout on backend:', err);
+      }
+    }
+  };
 
   const handleContinue = async () => {
     const pkg = packages.find(p => p.id === selectedPackage);
