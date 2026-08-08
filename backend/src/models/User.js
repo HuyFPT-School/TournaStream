@@ -7,6 +7,8 @@ const userSchema = new mongoose.Schema(
     passwordHash: { type: String, required: true },
     isVerified: { type: Boolean, default: false },
     role: { type: String, default: "user", enum: ["user", "admin"] },
+    isVip: { type: Boolean, default: false },
+    bypassPayment: { type: Boolean, default: false },
     lastActiveAt: { type: Date, default: Date.now },
     verificationTokenHash: { type: String, default: null },
     verificationTokenExpiresAt: { type: Date, default: null },

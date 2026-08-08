@@ -52,7 +52,7 @@ async function getAdminStats(req, res) {
     // 5. Full Users List
     const usersList = await User.find({})
       .sort({ createdAt: -1 })
-      .select("fullName email role isVerified lastActiveAt createdAt")
+      .select("fullName email role isVip bypassPayment isVerified lastActiveAt createdAt")
       .lean();
 
     // 6. Full Transactions List
@@ -102,7 +102,7 @@ async function getUserDetails(req, res) {
     const userId = req.params.id;
 
     // 1. Fetch user info
-    const user = await User.findById(userId).select("fullName email role isVerified lastActiveAt createdAt").lean();
+    const user = await User.findById(userId).select("fullName email role isVip bypassPayment isVerified lastActiveAt createdAt").lean();
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }

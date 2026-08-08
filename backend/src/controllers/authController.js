@@ -157,6 +157,7 @@ async function login(req, res) {
       fullName: user.fullName,
       email: user.email,
       role: user.role,
+      isVip: Boolean(user.isVip || user.bypassPayment),
     },
   });
 }
@@ -195,6 +196,7 @@ async function refresh(req, res) {
       fullName: user.fullName,
       email: user.email,
       role: user.role,
+      isVip: Boolean(user.isVip || user.bypassPayment),
     },
   });
 }

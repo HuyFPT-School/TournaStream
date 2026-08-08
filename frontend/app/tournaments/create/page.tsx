@@ -174,6 +174,21 @@ export default function PackageSelectionPage() {
   }, [pendingCheckoutKey]);
 
   useEffect(() => {
+    if (paymentSuccess && activeCheckout) {
+      localStorage.removeItem(pendingCheckoutKey);
+      const timer = setTimeout(() => {
+        const planId = activeCheckout.planKey === 'premium' ? 'pro' : activeCheckout.planKey;
+        const pkg = packages.find(p => p.id === planId);
+        if (pkg) {
+          setPackage(pkg.id, pkg.name, pkg.price);
+          router.push('/tournaments/create/info');
+        }
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [paymentSuccess, activeCheckout, pendingCheckoutKey, router, setPackage]);
+
+  useEffect(() => {
     if (!activeCheckout || paymentSuccess) return;
 
     const createdAtTime = activeCheckout.createdAt ? new Date(activeCheckout.createdAt).getTime() : Date.now();
@@ -196,17 +211,8 @@ export default function PackageSelectionPage() {
         const res = await getSePayTransactionStatus(activeCheckout.checkoutCode);
         if (res.status === 'paid') {
           setPaymentSuccess(true);
-          localStorage.removeItem(pendingCheckoutKey);
           clearInterval(statusInterval);
           clearInterval(timerInterval);
-          setTimeout(() => {
-            const planId = activeCheckout.planKey === 'premium' ? 'pro' : activeCheckout.planKey;
-            const pkg = packages.find(p => p.id === planId);
-            if (pkg) {
-              setPackage(pkg.id, pkg.name, pkg.price);
-              router.push('/tournaments/create/info');
-            }
-          }, 2000);
         } else if (res.status === 'expired' || res.status === 'cancelled') {
           setActiveCheckout(null);
           localStorage.removeItem(pendingCheckoutKey);
@@ -227,27 +233,22 @@ export default function PackageSelectionPage() {
       clearInterval(statusInterval);
       clearInterval(timerInterval);
     };
-  }, [activeCheckout, paymentSuccess, router, setPackage, pendingCheckoutKey]);
+  }, [activeCheckout, paymentSuccess, pendingCheckoutKey]);
 
-  const handleCancelCheckout = async () => {
-    if (!paymentSuccess && activeCheckout) {
-      const codeToCancel = activeCheckout.checkoutCode;
-      setActiveCheckout(null);
-      localStorage.removeItem(pendingCheckoutKey);
-      try {
-        await cancelSePayCheckout(codeToCancel);
-      } catch (err) {
-        console.error('Error cancelling checkout on backend:', err);
-      }
-    }
-  };
+  const session = getSession();
+  const isVipUser = Boolean(session?.isVip);
+  const pendingCheckoutKey = session ? `pendingCheckout_${session.id}` : 'pendingCheckout';
+
+  const bankDetails = useMemo(() => { ... });
+
+  const handleCancelCheckout = async () => { ... };
 
   const handleContinue = async () => {
     const pkg = packages.find(p => p.id === selectedPackage);
     if (!pkg) return;
 
     if (pkg.id === 'free') {
-      if (hasCreatedBefore) {
+      if (hasCreatedBefore && !isVipUser) {
         alert('Cảnh báo: Bạn đã sử dụng gói dùng thử trước đó. Gói dùng thử chỉ áp dụng cho giải đấu đầu tiên của bạn. Vui lòng chọn gói Cơ bản hoặc Cao cấp.');
         return;
       }
@@ -265,7 +266,9 @@ export default function PackageSelectionPage() {
         couponCode: appliedCouponInfo ? appliedCouponInfo.code : undefined,
       });
       setActiveCheckout(checkout);
-      localStorage.setItem(pendingCheckoutKey, JSON.stringify(checkout));
+      if (checkout.status !== 'paid') {
+        localStorage.setItem(pendingCheckoutKey, JSON.stringify(checkout));
+      }
       setPaymentSuccess(checkout.status === 'paid');
     } catch (error) {
       setErrorMessage(
@@ -374,9 +377,14 @@ export default function PackageSelectionPage() {
                   Phổ biến
                 </div>
               )}
-              {pkg.id === 'free' && hasCreatedBefore && (
+              {pkg.id === 'free' && hasCreatedBefore && !isVipUser && (
                 <div className="absolute top-0 right-0 px-3 py-1 bg-red-600 text-white text-[10px] font-bold rounded-bl-xl shadow-md">
                   Đã dùng thử
+                </div>
+              )}
+              {pkg.id === 'free' && isVipUser && (
+                <div className="absolute top-0 right-0 px-3 py-1 bg-[#22c55e] text-[#080b10] text-[10px] font-bold rounded-bl-xl shadow-md">
+                  Miễn phí (VIP)
                 </div>
               )}
 
@@ -389,12 +397,20 @@ export default function PackageSelectionPage() {
                     <span className="text-lg font-normal text-white/60">đ</span>
                   </div>
                   <p className="text-sm text-white/60">{pkg.description}</p>
-                  {pkg.id === 'free' && hasCreatedBefore && (
+                  {pkg.id === 'free' && hasCreatedBefore && !isVipUser && (
                     <p className="text-xs text-red-400 font-bold mt-2 flex items-center gap-1.5">
                       <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                       </svg>
                       Bạn đã dùng gói này rồi
+                    </p>
+                  )}
+                  {pkg.id === 'free' && isVipUser && (
+                    <p className="text-xs text-[#22c55e] font-bold mt-2 flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Đặc quyền Tài khoản VIP (Miễn phí)
                     </p>
                   )}
                 </div>
@@ -476,8 +492,11 @@ export default function PackageSelectionPage() {
             </div>
             {appliedCouponInfo && (
               <div className="p-3.5 rounded-xl bg-[#22c55e]/10 border border-[#22c55e]/20 text-xs text-[#22c55e] flex items-center justify-between">
-                <span>
-                  ✓ Đã áp dụng mã <strong>{appliedCouponInfo.code}</strong> (Giảm{' '}
+                <span className="flex items-center gap-1.5">
+                  <svg className="w-4 h-4 text-[#22c55e] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Đã áp dụng mã <strong>{appliedCouponInfo.code}</strong> (Giảm{' '}
                   {appliedCouponInfo.discountType === 'percentage'
                     ? `${appliedCouponInfo.discountValue}%`
                     : `${appliedCouponInfo.discountValue.toLocaleString('vi-VN')} đ`}
@@ -531,10 +550,10 @@ export default function PackageSelectionPage() {
             <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#22c55e]">
-                  SePay Checkout
+                  {activeCheckout.amount === 0 ? 'Kích hoạt gói dịch vụ' : 'SePay Checkout'}
                 </p>
                 <h3 className="mt-1 text-lg font-black text-white">
-                  Thanh toán gói {activeCheckout.planName}
+                  {activeCheckout.amount === 0 ? `Kích hoạt gói ${activeCheckout.planName}` : `Thanh toán gói ${activeCheckout.planName}`}
                 </h3>
               </div>
               {!paymentSuccess && (
@@ -566,9 +585,13 @@ export default function PackageSelectionPage() {
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
                   </div>
-                  <h4 className="text-2xl font-black text-white">Thanh toán thành công!</h4>
+                  <h4 className="text-2xl font-black text-white">
+                    {activeCheckout.amount === 0 ? 'Kích hoạt gói thành công!' : 'Thanh toán thành công!'}
+                  </h4>
                   <p className="text-white/60 text-sm max-w-sm">
-                    Giao dịch đã được ghi nhận. Đang chuẩn bị chuyển đến màn hình thiết lập thông tin giải đấu...
+                    {activeCheckout.amount === 0
+                      ? 'Gói dịch vụ đã được kích hoạt miễn phí. Đang chuẩn bị chuyển đến màn hình thiết lập thông tin giải đấu...'
+                      : 'Giao dịch đã được ghi nhận. Đang chuẩn bị chuyển đến màn hình thiết lập thông tin giải đấu...'}
                   </p>
                   <div className="w-12 h-1 bg-white/10 rounded-full overflow-hidden relative">
                     <div className="absolute inset-y-0 left-0 bg-[#22c55e] w-1/2 rounded-full animate-pulse" />

@@ -647,7 +647,7 @@ export default function AdminDashboardPage() {
                             )}
                           </td>
                           <td className="px-6 py-4 font-mono text-white/80">{user.email}</td>
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4 flex items-center gap-1.5">
                             <span className={`px-2 py-0.5 rounded text-xs font-bold ${
                               user.role === 'admin' 
                                 ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
@@ -655,6 +655,11 @@ export default function AdminDashboardPage() {
                             }`}>
                               {user.role}
                             </span>
+                            {(user.isVip || user.bypassPayment) && (
+                              <span className="px-2 py-0.5 rounded text-xs font-extrabold bg-[#22c55e]/20 text-[#22c55e] border border-[#22c55e]/40">
+                                VIP
+                              </span>
+                            )}
                           </td>
                           <td className="px-6 py-4">
                             <span className={`inline-flex px-2 py-0.5 text-xs font-bold rounded-full ${

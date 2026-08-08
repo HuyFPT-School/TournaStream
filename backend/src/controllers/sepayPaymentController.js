@@ -86,11 +86,24 @@ async function createSepayCheckout(req, res) {
 
   const userId = req.user ? req.user.id : null;
 
-  // Compute amount based on coupon
+  // Compute amount based on coupon & VIP status
   let finalAmount = plan.amount;
   let appliedCoupon = null;
 
-  if (couponCode) {
+  if (userId) {
+    try {
+      const { User } = require("../models/User");
+      const currentUser = await User.findById(userId);
+      if (currentUser && (currentUser.isVip || currentUser.bypassPayment)) {
+        finalAmount = 0;
+      }
+    } catch (userErr) {
+      console.error("Error looking up user VIP status:", userErr);
+    }
+  }
+
+  // Only apply coupon if not already free (e.g. VIP user)
+  if (couponCode && finalAmount > 0) {
     const { Coupon } = require("../models/Coupon");
     const normalizedCode = String(couponCode).trim().toUpperCase();
     const coupon = await Coupon.findOne({ code: normalizedCode });
@@ -135,8 +148,8 @@ async function createSepayCheckout(req, res) {
 
   const isFree = finalAmount === 0;
 
-  const qrPayload = isFree ? "" : buildQrPayload({ checkoutCode, amount: finalAmount });
-  const qrImageUrl = isFree ? "" : buildQrImageUrl(qrPayload);
+  const qrPayload = isFree ? "FREE_CHECKOUT" : buildQrPayload({ checkoutCode, amount: finalAmount });
+  const qrImageUrl = isFree ? "FREE_CHECKOUT" : buildQrImageUrl(qrPayload);
 
   const transaction = await Transaction.create({
     checkoutCode,

@@ -23,7 +23,10 @@ async function upsertTournament(req, res) {
     } else {
       // Creating a new tournament: check packages and transaction limits
       if (data.packageId === "free") {
-        if (!env.disableFreeLimit) {
+        const { User } = require("../models/User");
+        const currentUser = userId ? await User.findById(userId) : null;
+        const isVipUser = currentUser && (currentUser.isVip || currentUser.bypassPayment);
+        if (!env.disableFreeLimit && !isVipUser) {
           const existingCount = await Tournament.countDocuments({ userId });
           if (existingCount > 0) {
             return res.status(400).json({ message: "Gói dùng thử chỉ áp dụng cho giải đấu đầu tiên của bạn." });
