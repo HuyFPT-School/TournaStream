@@ -1001,6 +1001,91 @@ export default function LiveMatchPage() {
     // No timer interval for Esports
   }, []);
 
+  const silentAutoSaveBrResults = async (resultsToSave: any[], targetMatchKey?: string) => {
+    const activeKey = targetMatchKey || matchKey;
+    if (!tournament || !activeKey) return;
+    setAutoSaveStatus('saving');
+
+    const pointRules = tournament.pointRules || {
+      "1": 10, "2": 6, "3": 5, "4": 4, "5": 3, "6": 2, "7": 2, "8": 1, "9": 1, "10": 1, "11": 1, "12": 1
+    };
+
+    const calculatedResults = resultsToSave.map((r: any) => {
+      const placementVal = r.placement === '' || r.placement === null || r.placement === undefined ? null : Number(r.placement);
+      const placementPoints = placementVal !== null ? (pointRules[placementVal.toString()] || 0) : 0;
+      const killPoints = Number(r.kills || 0) * 1;
+      const totalPoints = placementPoints + killPoints;
+
+      return {
+        ...r,
+        rank: placementVal,
+        placement: placementVal,
+        kills: Number(r.kills || 0),
+        placementPoints,
+        killPoints,
+        totalPoints,
+        pts: totalPoints
+      };
+    });
+
+    const updatedMatches = (tournament.matches || []).map((m: any) => {
+      if (m.id === activeKey) {
+        return {
+          ...m,
+          results: calculatedResults
+        };
+      }
+      return m;
+    });
+
+    const updatedTournament = {
+      ...tournament,
+      matches: updatedMatches
+    };
+
+    setTournament(updatedTournament);
+    localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
+
+    const savedList = localStorage.getItem(tournamentsKey);
+    if (savedList) {
+      try {
+        const list = JSON.parse(savedList);
+        const index = list.findIndex((t: any) => t.id === tournament.id);
+        if (index > -1) {
+          list[index] = updatedTournament;
+          localStorage.setItem(tournamentsKey, JSON.stringify(list));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    try {
+      await syncTournamentToBackend(updatedTournament);
+      setAutoSaveStatus('saved');
+      setLastAutoSaveTime(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    } catch (err) {
+      console.error('Error auto-syncing BR results:', err);
+      setAutoSaveStatus('error');
+    }
+  };
+
+  useEffect(() => {
+    if (!matchKey || !matchKey.startsWith('br-')) return;
+    if (isBrInitialMount.current) {
+      isBrInitialMount.current = false;
+      return;
+    }
+
+    const currentKey = matchKey;
+    setAutoSaveStatus('saving');
+    const timer = setTimeout(() => {
+      silentAutoSaveBrResults(brResults, currentKey);
+    }, 700);
+
+    return () => clearTimeout(timer);
+  }, [brResults, matchKey]);
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -1451,91 +1536,6 @@ export default function LiveMatchPage() {
       return r;
     }));
   };
-
-  const silentAutoSaveBrResults = async (resultsToSave: any[], targetMatchKey?: string) => {
-    const activeKey = targetMatchKey || matchKey;
-    if (!tournament || !activeKey) return;
-    setAutoSaveStatus('saving');
-
-    const pointRules = tournament.pointRules || {
-      "1": 10, "2": 6, "3": 5, "4": 4, "5": 3, "6": 2, "7": 2, "8": 1, "9": 1, "10": 1, "11": 1, "12": 1
-    };
-
-    const calculatedResults = resultsToSave.map((r: any) => {
-      const placementVal = r.placement === '' || r.placement === null || r.placement === undefined ? null : Number(r.placement);
-      const placementPoints = placementVal !== null ? (pointRules[placementVal.toString()] || 0) : 0;
-      const killPoints = Number(r.kills || 0) * 1;
-      const totalPoints = placementPoints + killPoints;
-
-      return {
-        ...r,
-        rank: placementVal,
-        placement: placementVal,
-        kills: Number(r.kills || 0),
-        placementPoints,
-        killPoints,
-        totalPoints,
-        pts: totalPoints
-      };
-    });
-
-    const updatedMatches = (tournament.matches || []).map((m: any) => {
-      if (m.id === activeKey) {
-        return {
-          ...m,
-          results: calculatedResults
-        };
-      }
-      return m;
-    });
-
-    const updatedTournament = {
-      ...tournament,
-      matches: updatedMatches
-    };
-
-    setTournament(updatedTournament);
-    localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
-
-    const savedList = localStorage.getItem(tournamentsKey);
-    if (savedList) {
-      try {
-        const list = JSON.parse(savedList);
-        const index = list.findIndex((t: any) => t.id === tournament.id);
-        if (index > -1) {
-          list[index] = updatedTournament;
-          localStorage.setItem(tournamentsKey, JSON.stringify(list));
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    try {
-      await syncTournamentToBackend(updatedTournament);
-      setAutoSaveStatus('saved');
-      setLastAutoSaveTime(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-    } catch (err) {
-      console.error('Error auto-syncing BR results:', err);
-      setAutoSaveStatus('error');
-    }
-  };
-
-  useEffect(() => {
-    if (!matchKey || !matchKey.startsWith('br-')) return;
-    if (isBrInitialMount.current) {
-      isBrInitialMount.current = false;
-      return;
-    }
-
-    const currentKey = matchKey;
-    setAutoSaveStatus('saving');
-    const timer = setTimeout(() => {
-      silentAutoSaveBrResults(brResults, currentKey);
-    }, 700);
-
-    return () => clearTimeout(timer);
-  }, [brResults, matchKey]);
 
   const saveBattleRoyaleMatchResults = async (isFinal: boolean) => {
     if (!tournament || !matchKey) return;
