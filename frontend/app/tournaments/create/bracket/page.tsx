@@ -6,6 +6,7 @@ import { useTournament } from '@/app/contexts/TournamentContext';
 import { useState, useEffect } from 'react';
 import { syncTournamentToBackend } from '@/app/lib/tournaments';
 import { getSession } from '@/app/lib/authStorage';
+import { buildSingleEliminationBracket, buildDoubleEliminationBracket } from '@/app/lib/bracketEngine';
 
 type TeamRef = { id?: string; name?: string };
 
@@ -83,83 +84,7 @@ function buildRoundRobinMatches(groupTeams: TeamRef[], groupIdx: number) {
   return matches;
 }
 
-function buildDoubleEliminationBracket(teams: TeamRef[]) {
-  const paddedTeams = [...teams];
-  const nextPowerOfTwo = Math.pow(2, Math.ceil(Math.log2(Math.max(2, teams.length))));
-  while (paddedTeams.length < nextPowerOfTwo) {
-    paddedTeams.push({ id: 'bye', name: 'BYE' });
-  }
-  const n = paddedTeams.length;
-  const numUpperRounds = Math.ceil(Math.log2(n));
 
-  const upperRounds: any[][] = [];
-  const u0Matches: any[] = [];
-  for (let i = 0; i < n; i += 2) {
-    const isBye = paddedTeams[i + 1]?.id === 'bye';
-    u0Matches.push({
-      teamA: paddedTeams[i],
-      teamB: paddedTeams[i + 1],
-      scoreA: isBye ? 1 : null,
-      scoreB: isBye ? 0 : null,
-      isFinished: isBye,
-      winner: isBye ? paddedTeams[i] : undefined,
-    });
-  }
-  upperRounds.push(u0Matches);
-
-  for (let r = 1; r < numUpperRounds; r++) {
-    const matchesInRound = Math.max(1, Math.floor(n / Math.pow(2, r + 1)));
-    const roundMatches: any[] = [];
-    for (let m = 0; m < matchesInRound; m++) {
-      roundMatches.push({
-        teamA: { id: '', name: '?' },
-        teamB: { id: '', name: '?' },
-        scoreA: null,
-        scoreB: null,
-        isFinished: false,
-      });
-    }
-    upperRounds.push(roundMatches);
-  }
-
-  const lowerRounds: any[][] = [];
-  const totalLowerRounds = Math.max(1, 2 * numUpperRounds - 2);
-  for (let r = 0; r < totalLowerRounds; r++) {
-    const k = Math.floor(r / 2);
-    const matchesInRound = Math.max(1, Math.floor(n / Math.pow(2, k + 2)));
-    const roundMatches: any[] = [];
-    for (let m = 0; m < matchesInRound; m++) {
-      roundMatches.push({
-        teamA: { id: '', name: '?' },
-        teamB: { id: '', name: '?' },
-        scoreA: null,
-        scoreB: null,
-        isFinished: false,
-      });
-    }
-    lowerRounds.push(roundMatches);
-  }
-
-  const grandFinal = [
-    {
-      teamA: { id: '', name: '?' },
-      teamB: { id: '', name: '?' },
-      scoreA: null,
-      scoreB: null,
-      isFinished: false,
-    }
-  ];
-
-  return {
-    upperRounds,
-    lowerRounds,
-    grandFinal,
-    currentRound: 0,
-    currentMatch: 0,
-    isFinished: false,
-    activeMatches: []
-  };
-}
 
 export default function BracketPage() {
   const router = useRouter();
@@ -262,7 +187,7 @@ export default function BracketPage() {
       } else if (data.format === 'double_elimination') {
         bracket = buildDoubleEliminationBracket(orderedTeams);
       } else {
-        bracket = buildInitialBracket(orderedTeams);
+        bracket = buildSingleEliminationBracket(orderedTeams);
       }
 
       const mockTournament = {

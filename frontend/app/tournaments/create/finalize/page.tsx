@@ -6,6 +6,7 @@ import { useTournament } from '@/app/contexts/TournamentContext';
 import { useState, useEffect } from 'react';
 import { syncTournamentToBackend } from '@/app/lib/tournaments';
 import { getSession } from '@/app/lib/authStorage';
+import { buildSingleEliminationBracket, buildDoubleEliminationBracket } from '@/app/lib/bracketEngine';
 
 type TeamRef = { id?: string; name?: string };
 
@@ -77,81 +78,7 @@ function buildRoundRobinMatches(groupTeams: TeamRef[], groupIdx: number) {
   return matches;
 }
 
-function buildDoubleEliminationBracket(teams: TeamRef[]) {
-  const n = teams.length; // power of 2, e.g. 4, 8, 16, 32
-  const numUpperRounds = Math.ceil(Math.log2(n));
 
-  // 1. Upper Rounds
-  const upperRounds: any[][] = [];
-  // Upper Round 0 matches
-  const u0Matches: any[] = [];
-  for (let i = 0; i < n; i += 2) {
-    u0Matches.push({
-      teamA: teams[i],
-      teamB: teams[i + 1],
-      scoreA: null,
-      scoreB: null,
-      isFinished: false,
-    });
-  }
-  upperRounds.push(u0Matches);
-
-  // Remaining Upper Rounds (with placeholders '?' for names)
-  for (let r = 1; r < numUpperRounds; r++) {
-    const matchesInRound = n / Math.pow(2, r + 1);
-    const roundMatches: any[] = [];
-    for (let m = 0; m < matchesInRound; m++) {
-      roundMatches.push({
-        teamA: { id: '', name: '?' },
-        teamB: { id: '', name: '?' },
-        scoreA: null,
-        scoreB: null,
-        isFinished: false,
-      });
-    }
-    upperRounds.push(roundMatches);
-  }
-
-  // 2. Lower Rounds
-  const lowerRounds: any[][] = [];
-  const totalLowerRounds = 2 * numUpperRounds - 2;
-  for (let r = 0; r < totalLowerRounds; r++) {
-    const k = Math.floor(r / 2);
-    const matchesInRound = n / Math.pow(2, k + 2);
-    const roundMatches: any[] = [];
-    for (let m = 0; m < matchesInRound; m++) {
-      roundMatches.push({
-        teamA: { id: '', name: '?' },
-        teamB: { id: '', name: '?' },
-        scoreA: null,
-        scoreB: null,
-        isFinished: false,
-      });
-    }
-    lowerRounds.push(roundMatches);
-  }
-
-  // 3. Grand Final (up to 2 matches for bracket reset)
-  const grandFinal = [
-    {
-      teamA: { id: '', name: '?' },
-      teamB: { id: '', name: '?' },
-      scoreA: null,
-      scoreB: null,
-      isFinished: false,
-    }
-  ];
-
-  return {
-    upperRounds,
-    lowerRounds,
-    grandFinal,
-    currentRound: 0,
-    currentMatch: 0,
-    isFinished: false,
-    activeMatches: []
-  };
-}
 
 export default function FinalizeCreatePage() {
   const router = useRouter();
@@ -254,8 +181,10 @@ export default function FinalizeCreatePage() {
         }))
       }));
       stage = 'league';
+    } else if ((data.format as string) === 'double_elimination') {
+      bracket = buildDoubleEliminationBracket(data.teams);
     } else {
-      bracket = buildInitialBracket(data.teams);
+      bracket = buildSingleEliminationBracket(data.teams);
     }
 
     const mockTournament = {

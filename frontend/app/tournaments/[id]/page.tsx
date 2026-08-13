@@ -7,6 +7,17 @@ import { fetchTournamentFromBackend, syncTournamentToBackend } from '@/app/lib/t
 import { useTournament } from '@/app/contexts/TournamentContext';
 import { getSession, getApiBaseUrl, getAccessToken } from '@/app/lib/authStorage';
 import { getPusherClient } from '@/app/lib/pusher';
+import {
+  pickWinner as pickWinnerEngine,
+  advanceSingleElimination as advanceSingleEliminationEngine,
+  advanceDoubleElimination as advanceDoubleEliminationEngine,
+  buildSingleEliminationBracket,
+  buildDoubleEliminationBracket,
+  getTournamentChampion,
+  isSameTeam,
+  padTeamsToPowerOfTwo,
+  isPowerOfTwo
+} from '@/app/lib/bracketEngine';
 import FormatGuideModal from '@/app/components/FormatGuideModal';
 
 interface MatchState {
@@ -23,7 +34,7 @@ interface MatchState {
   streamUrl?: string;
 }
 
-type TeamRef = { id?: string; name?: string };
+type TeamRef = { id?: string; name?: string; isBye?: boolean };
 
 type BracketMatch = {
   teamA?: TeamRef;
@@ -32,9 +43,6 @@ type BracketMatch = {
   scoreB: number | null;
   isFinished: boolean;
   winner?: TeamRef;
-  time?: number;
-  hiep?: number;
-  buGio?: number;
 };
 
 type BracketState = {
@@ -44,6 +52,18 @@ type BracketState = {
   isFinished: boolean;
   activeMatches?: number[];
 };
+
+function pickWinner(teamA: TeamRef | undefined, teamB: TeamRef | undefined, scoreA: number | null | undefined, scoreB: number | null | undefined) {
+  if (scoreA === null || scoreB === null || scoreA === undefined || scoreB === undefined) return null;
+  if (scoreA === scoreB) return null;
+  const aIsBye = teamA?.name === 'BYE';
+  const bIsBye = teamB?.name === 'BYE';
+  if (bIsBye && !aIsBye) return teamA || null;
+  if (aIsBye && !bIsBye) return teamB || null;
+  if (scoreA > scoreB) return teamA || null;
+  if (scoreB > scoreA) return teamB || null;
+  return null;
+}
 
 function getFallbackTeams(tournament: any) {
   return tournament.orderedTeams || tournament.teams || [];
@@ -67,13 +87,7 @@ function getCurrentBracketMatch(bracket?: BracketState) {
   return round[bracket.currentMatch] || null;
 }
 
-function pickWinner(teamA: TeamRef | undefined, teamB: TeamRef | undefined, scoreA: number, scoreB: number) {
-  if (!teamB) return teamA;
-  if (!teamA) return teamB;
-  if (scoreA > scoreB) return teamA;
-  if (scoreB > scoreA) return teamB;
-  return teamA;
-}
+
 
 function buildNextRound(winners: TeamRef[]) {
   const round: BracketMatch[] = [];
@@ -150,81 +164,7 @@ function buildRoundRobinMatches(groupTeams: TeamRef[], groupIdx: number) {
   return matches;
 }
 
-function buildDoubleEliminationBracket(teams: TeamRef[]) {
-  const n = teams.length; // power of 2, e.g. 4, 8, 16, 32
-  const numUpperRounds = Math.ceil(Math.log2(n));
 
-  // 1. Upper Rounds
-  const upperRounds: any[][] = [];
-  // Upper Round 0 matches
-  const u0Matches: any[] = [];
-  for (let i = 0; i < n; i += 2) {
-    u0Matches.push({
-      teamA: teams[i],
-      teamB: teams[i + 1],
-      scoreA: null,
-      scoreB: null,
-      isFinished: false,
-    });
-  }
-  upperRounds.push(u0Matches);
-
-  // Remaining Upper Rounds (with placeholders '?' for names)
-  for (let r = 1; r < numUpperRounds; r++) {
-    const matchesInRound = n / Math.pow(2, r + 1);
-    const roundMatches: any[] = [];
-    for (let m = 0; m < matchesInRound; m++) {
-      roundMatches.push({
-        teamA: { id: '', name: '?' },
-        teamB: { id: '', name: '?' },
-        scoreA: null,
-        scoreB: null,
-        isFinished: false,
-      });
-    }
-    upperRounds.push(roundMatches);
-  }
-
-  // 2. Lower Rounds
-  const lowerRounds: any[][] = [];
-  const totalLowerRounds = 2 * numUpperRounds - 2;
-  for (let r = 0; r < totalLowerRounds; r++) {
-    const k = Math.floor(r / 2);
-    const matchesInRound = n / Math.pow(2, k + 2);
-    const roundMatches: any[] = [];
-    for (let m = 0; m < matchesInRound; m++) {
-      roundMatches.push({
-        teamA: { id: '', name: '?' },
-        teamB: { id: '', name: '?' },
-        scoreA: null,
-        scoreB: null,
-        isFinished: false,
-      });
-    }
-    lowerRounds.push(roundMatches);
-  }
-
-  // 3. Grand Final (up to 2 matches for bracket reset)
-  const grandFinal = [
-    {
-      teamA: { id: '', name: '?' },
-      teamB: { id: '', name: '?' },
-      scoreA: null,
-      scoreB: null,
-      isFinished: false,
-    }
-  ];
-
-  return {
-    upperRounds,
-    lowerRounds,
-    grandFinal,
-    currentRound: 0,
-    currentMatch: 0,
-    isFinished: false,
-    activeMatches: []
-  };
-}
 
 interface StandingRow {
   teamId: string;
@@ -578,79 +518,7 @@ function seedKnockoutFromGroups(groups: any[], advancingCount: number, matchStat
   return seeded;
 }
 
-function advanceDoubleElimination(bracket: any, roundIndex: number, matchIndex: number, winner: any, loser: any, isUpper: boolean) {
-  if (!bracket || !bracket.upperRounds || !bracket.lowerRounds || !bracket.grandFinal) return;
 
-  const numUpperRounds = bracket.upperRounds.length;
-  const totalLowerRounds = bracket.lowerRounds.length;
-
-  if (isUpper) {
-    if (roundIndex === numUpperRounds - 1) {
-      if (bracket.grandFinal[0]) bracket.grandFinal[0].teamA = winner;
-      if (bracket.lowerRounds[totalLowerRounds - 1]?.[0]) {
-        bracket.lowerRounds[totalLowerRounds - 1][0].teamB = loser;
-      }
-    } else {
-      const nextMatchIdx = Math.floor(matchIndex / 2);
-      const isTeamA = matchIndex % 2 === 0;
-      const targetMatch = bracket.upperRounds[roundIndex + 1]?.[nextMatchIdx];
-      if (targetMatch) {
-        if (isTeamA) {
-          targetMatch.teamA = winner;
-        } else {
-          targetMatch.teamB = winner;
-        }
-      }
-
-      if (roundIndex === 0) {
-        const lowerMatchIdx = Math.floor(matchIndex / 2);
-        const isLowerTeamA = matchIndex % 2 === 0;
-        const targetLowerMatch = bracket.lowerRounds[0]?.[lowerMatchIdx];
-        if (targetLowerMatch) {
-          if (isLowerTeamA) {
-            targetLowerMatch.teamA = loser;
-          } else {
-            targetLowerMatch.teamB = loser;
-          }
-        }
-      } else {
-        const lowerRoundIdx = Math.min(2 * roundIndex - 1, totalLowerRounds - 1);
-        const roundMatches = bracket.lowerRounds[lowerRoundIdx] || [];
-        const safeMatchIdx = Math.min(matchIndex, Math.max(0, roundMatches.length - 1));
-        const targetLowerMatch = roundMatches[safeMatchIdx];
-        if (targetLowerMatch) {
-          targetLowerMatch.teamB = loser;
-        }
-      }
-    }
-  } else {
-    if (roundIndex === totalLowerRounds - 1) {
-      if (bracket.grandFinal[0]) bracket.grandFinal[0].teamB = winner;
-    } else {
-      const isMinorRound = roundIndex % 2 === 0;
-      const nextLowerRound = bracket.lowerRounds[roundIndex + 1];
-      if (nextLowerRound) {
-        if (isMinorRound) {
-          const safeMatchIdx = Math.min(matchIndex, Math.max(0, nextLowerRound.length - 1));
-          const targetLowerMatch = nextLowerRound[safeMatchIdx];
-          if (targetLowerMatch) targetLowerMatch.teamA = winner;
-        } else {
-          const nextLowerMatchIdx = Math.floor(matchIndex / 2);
-          const isLowerTeamA = matchIndex % 2 === 0;
-          const safeMatchIdx = Math.min(nextLowerMatchIdx, Math.max(0, nextLowerRound.length - 1));
-          const targetLowerMatch = nextLowerRound[safeMatchIdx];
-          if (targetLowerMatch) {
-            if (isLowerTeamA) {
-              targetLowerMatch.teamA = winner;
-            } else {
-              targetLowerMatch.teamB = winner;
-            }
-          }
-        }
-      }
-    }
-  }
-}
 
 
 interface BracketMatchCardProps {
@@ -2330,88 +2198,31 @@ export default function TournamentDetailPage() {
     let bracketFinished = false;
 
     if (isGroup) {
-      // For Group Stage: check if all matches finished
-      // Standings will be recalculated on demand
-      const allGroupMatchesFinished = updatedTournament.groups.every((g: any) =>
-        g.matches.every((m: any) => m.isFinished || (g.name === updatedTournament.groups[roundIndex].name && m.id === dbMatch.id))
-      );
+      // Group stage matches do nothing extra to bracket tree
     } else if (isUpper || isLower || isGF) {
-      advanceDoubleElimination(updatedTournament.bracket, roundIndex, matchIndex, dbMatch.winner, loser, isUpper);
-
-      const activeMatches = (updatedTournament.bracket.activeMatches || []).filter((idx: number) => idx !== matchIndex);
-      updatedTournament.bracket.activeMatches = activeMatches;
-
-      if (isGF) {
-        if (matchIndex === 0) {
-          if (dbMatch.winner?.id === dbMatch.teamA?.id) {
-            updatedTournament.bracket.isFinished = true;
-            bracketFinished = true;
-          } else {
-            // Lower winner won: trigger reset
-            updatedTournament.bracket.grandFinal.push({
-              teamA: dbMatch.teamA,
-              teamB: dbMatch.teamB,
-              scoreA: null,
-              scoreB: null,
-              isFinished: false,
-            });
-            updatedTournament.bracket.currentMatch = 1;
-          }
-        } else if (matchIndex === 1) {
-          updatedTournament.bracket.isFinished = true;
-          bracketFinished = true;
-        }
-      } else {
-        // Check if both upper final and lower final are done to trigger grand final
-        const bracket = updatedTournament.bracket;
-        const upperFinalDone = bracket.upperRounds[bracket.upperRounds.length - 1][0].isFinished;
-        const lowerFinalDone = bracket.lowerRounds[bracket.lowerRounds.length - 1][0].isFinished;
-        if (upperFinalDone && lowerFinalDone) {
-          // Both done, check if grandFinal initialized
-          const gf = bracket.grandFinal[0];
-          if (gf.teamA?.name === '?' || gf.teamB?.name === '?') {
-            gf.teamA = bracket.upperRounds[bracket.upperRounds.length - 1][0].winner;
-            gf.teamB = bracket.lowerRounds[bracket.lowerRounds.length - 1][0].winner;
-          }
-        }
+      const loc = isGF ? 'gf' : isUpper ? 'upper' : 'lower';
+      const advRes = advanceDoubleEliminationEngine(
+        updatedTournament.bracket,
+        roundIndex,
+        matchIndex,
+        matchState.team1Score,
+        matchState.team2Score,
+        loc
+      );
+      if (advRes.bracketFinished) {
+        bracketFinished = true;
       }
     } else {
-      // Single Elimination (legacy)
-      const bracket = updatedTournament.bracket;
-      const round = bracket.rounds[roundIndex] || [];
-      const activeMatches = (bracket.activeMatches || []).filter((idx: number) => idx !== matchIndex);
-      bracket.activeMatches = activeMatches;
-
-      const allMatchesInRoundFinished = round.every((m: any, idx: number) => {
-        return m.isFinished || idx === matchIndex;
-      });
-
-      if (allMatchesInRoundFinished) {
-        const winners = round.map((m: any, idx: number) => {
-          if (idx === matchIndex) {
-            return pickWinner(m.teamA, m.teamB, matchState.team1Score, matchState.team2Score);
-          }
-          return m.winner;
-        }).filter(Boolean) as TeamRef[];
-
-        const resolvedWinners = winners.map(w =>
-          w.id ? (updatedTournament.teams?.find((t: any) => t.id === w.id) || w) : w
-        );
-
-        if (resolvedWinners.length > 1) {
-          const nextRound = buildNextRound(resolvedWinners);
-          if (bracket.rounds[roundIndex + 1]) {
-            bracket.rounds[roundIndex + 1] = nextRound;
-          } else {
-            bracket.rounds.push(nextRound);
-          }
-          bracket.currentRound = roundIndex + 1;
-          bracket.currentMatch = 0;
-          bracket.activeMatches = [];
-        } else {
-          bracket.isFinished = true;
-          bracketFinished = true;
-        }
+      // Single Elimination
+      const advRes = advanceSingleEliminationEngine(
+        updatedTournament.bracket,
+        roundIndex,
+        matchIndex,
+        matchState.team1Score,
+        matchState.team2Score
+      );
+      if (advRes.bracketFinished) {
+        bracketFinished = true;
       }
     }
 
@@ -3009,37 +2820,7 @@ export default function TournamentDetailPage() {
     : null;
 
   const getTournamentWinnerName = () => {
-    if (!tournament) return null;
-    if (tournament.format === 'league' || tournament.format === 'battle_royale') {
-      const matchesList = tournament.leagueMatches || tournament.matches || [];
-      const allFinished = matchesList.length > 0 && matchesList.every((m: any) => m.isFinished);
-      if (!allFinished) return null;
-      const standings = calculateLeagueStandings(tournament.teams, matchesList, tournament.pointRules || {});
-      if (standings.length > 0) {
-        return standings[0].teamName;
-      }
-      return null;
-    }
-    if (tournament.format === 'double_elimination') {
-      const bracket = tournament.bracket;
-      if (!bracket || !bracket.isFinished) return null;
-      if (bracket.grandFinal?.[1]?.isFinished) {
-        return bracket.grandFinal[1].winner?.name || null;
-      }
-      if (bracket.grandFinal?.[0]?.isFinished) {
-        return bracket.grandFinal[0].winner?.name || null;
-      }
-      return null;
-    }
-
-    if (!tournament.bracket || !tournament.bracket.isFinished) return null;
-    const rounds = tournament.bracket.rounds;
-    if (!rounds || rounds.length === 0) return null;
-    const finalRound = rounds[rounds.length - 1];
-    if (!finalRound || finalRound.length === 0) return null;
-    const finalMatch = finalRound[0];
-    if (!finalMatch || !finalMatch.isFinished) return null;
-    return finalMatch.winner?.name || null;
+    return getTournamentChampion(tournament)?.name || null;
   };
   const tournamentWinnerName = getTournamentWinnerName();
   const activeMatchesCount = tournament?.bracket?.activeMatches?.length || 0;
