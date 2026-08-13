@@ -103,24 +103,8 @@ function buildNextRound(winners: TeamRef[]) {
   return round;
 }
 
-function buildInitialBracket(teams: TeamRef[]): BracketState {
-  const roundOne: BracketMatch[] = [];
-  for (let i = 0; i < teams.length; i += 2) {
-    roundOne.push({
-      teamA: teams[i],
-      teamB: teams[i + 1],
-      scoreA: null,
-      scoreB: null,
-      isFinished: false,
-    });
-  }
-
-  return {
-    rounds: [roundOne],
-    currentRound: 0,
-    currentMatch: 0,
-    isFinished: false,
-  };
+function buildInitialBracket(teams: TeamRef[]): any {
+  return buildSingleEliminationBracket(teams);
 }
 
 function buildRoundRobinMatches(groupTeams: TeamRef[], groupIdx: number) {

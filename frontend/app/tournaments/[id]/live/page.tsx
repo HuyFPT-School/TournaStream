@@ -6,6 +6,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { fetchTournamentFromBackend } from '@/app/lib/tournaments';
 import { getPusherClient } from '@/app/lib/pusher';
 import { getApiBaseUrl, getSession } from '@/app/lib/authStorage';
+import { getTournamentChampion } from '@/app/lib/bracketEngine';
 
 interface ChatMsg {
   _id: string;
@@ -1492,25 +1493,7 @@ export default function TournamentLiveViewPage() {
   const selectedDetails = getSelectedMatchDetails();
 
   const getTournamentWinnerName = () => {
-    if (!tournament) return null;
-    if (tournament.format === 'league' || tournament.format === 'battle_royale') {
-      const matchesList = tournament.leagueMatches || tournament.matches || [];
-      const allFinished = matchesList.length > 0 && matchesList.every((m: any) => m.isFinished);
-      if (!allFinished) return null;
-      const standings = calculateLeagueStandings(tournament.teams, matchesList, tournament.pointRules || {});
-      if (standings.length > 0) {
-        return standings[0].teamName;
-      }
-      return null;
-    }
-    if (!tournament.bracket || !tournament.bracket.isFinished) return null;
-    const rounds = tournament.bracket.rounds;
-    if (!rounds || rounds.length === 0) return null;
-    const finalRound = rounds[rounds.length - 1];
-    if (!finalRound || finalRound.length === 0) return null;
-    const finalMatch = finalRound[0];
-    if (!finalMatch || !finalMatch.isFinished) return null;
-    return finalMatch.winner?.name || null;
+    return getTournamentChampion(tournament)?.name || null;
   };
   const tournamentWinnerName = getTournamentWinnerName();
 

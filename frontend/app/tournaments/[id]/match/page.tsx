@@ -49,30 +49,8 @@ type BracketState = {
   activeMatches?: number[];
 };
 
-function buildInitialBracket(teams: TeamRef[]): BracketState {
-  const list = [...teams];
-  if (list.length % 2 !== 0) {
-    list.push({ id: 'bye', name: 'BYE' });
-  }
-  const roundOne: BracketMatch[] = [];
-  for (let i = 0; i < list.length; i += 2) {
-    const isByeMatch = list[i + 1]?.id === 'bye';
-    roundOne.push({
-      teamA: list[i],
-      teamB: list[i + 1],
-      scoreA: isByeMatch ? 1 : null,
-      scoreB: isByeMatch ? 0 : null,
-      isFinished: isByeMatch,
-      winner: isByeMatch ? list[i] : undefined,
-    });
-  }
-
-  return {
-    rounds: [roundOne],
-    currentRound: 0,
-    currentMatch: 0,
-    isFinished: false,
-  };
+function buildInitialBracket(teams: TeamRef[]): any {
+  return buildSingleEliminationBracket(teams);
 }
 
 type StandingRow = {
