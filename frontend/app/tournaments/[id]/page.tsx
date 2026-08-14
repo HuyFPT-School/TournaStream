@@ -582,7 +582,7 @@ function buildBracketData(tournament: any, matchState: any, selectedMatchKey: st
   const numTeams = teams.length;
   if (numTeams < 2) return [];
 
-  const numRounds = Math.ceil(Math.log2(numTeams));
+  const numRounds = tournament.bracket?.rounds?.length || Math.ceil(Math.log2(numTeams));
   const roundsData: any[][] = [];
 
   const getMatchWinner = (roundIdx: number, matchIdx: number): any => {
@@ -615,6 +615,13 @@ function buildBracketData(tournament: any, matchState: any, selectedMatchKey: st
 
   const getTeamForMatch = (roundIdx: number, matchIdx: number, slot: 'A' | 'B'): any => {
     if (roundIdx === 0) {
+      const round0 = tournament.bracket?.rounds?.[0];
+      if (round0 && round0[matchIdx]) {
+        const teamRef = slot === 'A' ? round0[matchIdx].teamA : round0[matchIdx].teamB;
+        if (teamRef && teamRef.name && teamRef.name !== '?') {
+          return tournament.teams?.find((t: any) => t.id === teamRef.id || t.name === teamRef.name) || teamRef;
+        }
+      }
       const idx = matchIdx * 2 + (slot === 'A' ? 0 : 1);
       return teams[idx] || null;
     }

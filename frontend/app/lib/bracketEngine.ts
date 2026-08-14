@@ -270,6 +270,10 @@ export function advanceSingleElimination(
   if (!round || !round[matchIndex]) return { bracketFinished: false };
 
   const match = round[matchIndex];
+  if (!match.teamA || !match.teamB || !match.teamA.name || !match.teamB.name || match.teamA.name === '?' || match.teamB.name === '?') {
+    return { bracketFinished: false };
+  }
+
   if (scoreA === scoreB) {
     throw new Error("Trận đấu loại trực tiếp không thể hòa!");
   }
