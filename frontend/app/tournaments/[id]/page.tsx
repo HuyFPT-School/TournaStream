@@ -2068,7 +2068,8 @@ export default function TournamentDetailPage() {
       setFeedbackContent('');
       setShowFeedbackModal(true);
     } else {
-      setSelectedMatchKey(null);
+      setSelectedMatchKey(selectedMatchKey);
+      setMatchState(nextMatchState);
       setTournament(updatedTournament);
       localStorage.setItem(currentTournamentKey, JSON.stringify(updatedTournament));
       const savedList = localStorage.getItem(tournamentsKey);
