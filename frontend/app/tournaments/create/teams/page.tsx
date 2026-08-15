@@ -110,16 +110,12 @@ export default function TeamsPage() {
   const isValidTeamCount = () => {
     const len = data.teams.length;
     const format = data.format || 'single_elimination';
-    const groupsCount = data.groupsCount || 1;
 
     if (format === 'single_elimination') {
       return len >= 2 && isPowerOfTwo(len);
     }
     if (format === 'double_elimination') {
       return len >= 4 && isPowerOfTwo(len);
-    }
-    if (format === 'round_robin') {
-      return len >= groupsCount * 2;
     }
     if (format === 'league' || format === 'battle_royale') {
       return len >= 2;
@@ -147,14 +143,12 @@ export default function TeamsPage() {
 
     // Normal flow
     if (!isValidTeamCount()) {
-      if (data.format === 'round_robin') {
-        alert(`Vui lòng thêm ít nhất ${(data.groupsCount || 1) * 2} đội cho thể thức Vòng bảng (${data.groupsCount} bảng).`);
-      } else if (data.format === 'double_elimination') {
-        alert('Thể thức nhánh thắng - thua yêu cầu ít nhất 4 đội và số đội phải là lũy thừa của 2.');
+      if (data.format === 'double_elimination') {
+        alert('Thể thức nhánh thắng - thua yêu cầu ít nhất 4 đội và số đội phải là lũy thừa của 2 (4, 8, 16 hoặc 32 đội).');
       } else if (data.format === 'league' || data.format === 'battle_royale') {
         alert('Thể thức Giải đấu yêu cầu ít nhất 2 đội.');
       } else {
-        alert('Thể thức loại trực tiếp yêu cầu ít nhất 2 đội và số đội phải là lũy thừa của 2.');
+        alert('Thể thức loại trực tiếp yêu cầu ít nhất 2 đội và số đội phải là lũy thừa của 2 (2, 4, 8, 16 hoặc 32 đội).');
       }
       return;
     }
@@ -358,13 +352,11 @@ export default function TeamsPage() {
             </svg>
             <div>
               <div className="font-semibold mb-0.5">Số lượng đội không hợp lệ</div>
-              {data.format === 'round_robin'
-                ? `Thể thức vòng bảng với ${data.groupsCount} bảng yêu cầu tối thiểu ${(data.groupsCount || 1) * 2} đội (tối thiểu 2 đội mỗi bảng). Hiện tại có ${data.teams.length} đội.`
-                : data.format === 'double_elimination'
-                  ? `Thể thức nhánh thắng - thua yêu cầu số lượng đội là lũy thừa của 2 và tối thiểu 4 đội (4, 8, 16 hoặc 32 đội). Hiện tại có ${data.teams.length} đội.`
-                  : (data.format === 'league' || data.format === 'battle_royale')
-                    ? `Thể thức Giải đấu Sinh tồn / League yêu cầu tối thiểu 2 đội. Hiện tại có ${data.teams.length} đội.`
-                    : `Thể thức loại trực tiếp yêu cầu số lượng đội phải là lũy thừa của 2 (2, 4, 8, 16 hoặc 32 đội). Hiện tại có ${data.teams.length} đội.`
+              {data.format === 'double_elimination'
+                ? `Thể thức nhánh thắng - thua yêu cầu số lượng đội là lũy thừa của 2 và tối thiểu 4 đội (4, 8, 16 hoặc 32 đội). Hiện tại có ${data.teams.length} đội.`
+                : (data.format === 'league' || data.format === 'battle_royale')
+                  ? `Thể thức Giải đấu Sinh tồn / League yêu cầu tối thiểu 2 đội. Hiện tại có ${data.teams.length} đội.`
+                  : `Thể thức loại trực tiếp yêu cầu số lượng đội phải là lũy thừa của 2 (2, 4, 8, 16 hoặc 32 đội). Hiện tại có ${data.teams.length} đội.`
               }
             </div>
           </div>

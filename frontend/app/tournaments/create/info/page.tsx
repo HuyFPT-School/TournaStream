@@ -37,11 +37,6 @@ const FORMAT_ICONS: Record<string, React.ReactNode> = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v5m-3 0h6M4 7h16M4 7a3 3 0 003 3h10a3 3 0 003-3M4 7V4a1 1 0 011-1h14a1 1 0 011 1v3M4 7a4 4 0 004 4h8a4 4 0 004-4" />
     </svg>
   ),
-  round_robin: (
-    <svg className="w-6 h-6 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-    </svg>
-  ),
   double_elimination: (
     <svg className="w-6 h-6 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
       <path strokeLinecap="round" strokeLinejoin="round" d="M15 5v2m0 4v2m-7-5h3m-3 4h3m-6 2a9 9 0 1118 0v1.5a2.5 2.5 0 01-2.5 2.5h-13A2.5 2.5 0 013 14.5V13z" />
@@ -58,7 +53,6 @@ const sports = [
 
 const formats = [
   { id: 'single_elimination', name: 'Loại trực tiếp', desc: 'Thua 1 trận là bị loại ngay lập tức' },
-  { id: 'round_robin', name: 'Vòng bảng & Knockout', desc: 'Chia bảng đấu tính điểm và lấy đội đi tiếp đấu Knockout' },
   { id: 'double_elimination', name: 'Nhánh thắng - Nhánh thua', desc: 'Esport chuyên nghiệp, thua 1 lần vẫn còn cơ hội sửa sai' },
 ];
 
@@ -274,7 +268,7 @@ export default function TournamentInfoPage() {
           {sport !== 'battle_royale' && (
             <div>
               <label className="block text-sm font-semibold mb-3">Thể thức thi đấu</label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {formats.map((f) => (
                   <button
                     key={f.id}
@@ -292,52 +286,6 @@ export default function TournamentInfoPage() {
                   </button>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Group Stage Config (Round Robin Sub-options) */}
-          {sport !== 'battle_royale' && format === 'round_robin' && (
-            <div className="p-5 rounded-lg bg-[#0f1419] border border-white/[0.06] space-y-4">
-              <h4 className="text-sm font-bold text-[#22c55e]">Cấu hình Vòng bảng</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-white/60 mb-2 font-medium">Số bảng đấu</label>
-                  <div className="flex gap-2">
-                    {[1, 2, 4].map((num) => (
-                      <button
-                        key={num}
-                        onClick={() => setGroupsCount(num)}
-                        className={`flex-1 py-2 px-3 rounded-lg border text-xs font-semibold transition-all duration-200 ${groupsCount === num
-                          ? 'border-[#22c55e] bg-[#1a1f2e] text-[#22c55e]'
-                          : 'border-white/[0.06] bg-[#080b10] hover:border-white/[0.12]'
-                          }`}
-                      >
-                        {num} Bảng
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs text-white/60 mb-2 font-medium">Số đội đi tiếp mỗi bảng</label>
-                  <div className="flex gap-2">
-                    {[1, 2].map((num) => (
-                      <button
-                        key={num}
-                        onClick={() => setAdvancingCount(num)}
-                        className={`flex-1 py-2 px-3 rounded-lg border text-xs font-semibold transition-all duration-200 ${advancingCount === num
-                          ? 'border-[#22c55e] bg-[#1a1f2e] text-[#22c55e]'
-                          : 'border-white/[0.06] bg-[#080b10] hover:border-white/[0.12]'
-                          }`}
-                      >
-                        Top {num} Đội
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <p className="text-[11px] text-white/40">
-                Tổng số đội vào vòng Knock-out: <span className="text-[#22c55e] font-bold">{groupsCount * advancingCount} đội</span>.
-              </p>
             </div>
           )}
 

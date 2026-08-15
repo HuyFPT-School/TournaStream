@@ -235,13 +235,15 @@ function buildBracketData(tournament: any, onSelect: (matchKey: string) => void)
         else winnerName = teamAObj?.name || null;
       }
 
+      const isRunning = isLive && !!currentMS?.isRunning && !doneFlag;
+
       roundMatches.push({
         a: teamAObj?.name || '?',
         b: teamBObj?.name || '?',
         sa: scoreA,
         sb: scoreB,
         done: doneFlag,
-        isLive: isLive && (!currentMS || !currentMS.isFinished),
+        isLive: isRunning,
         winner: winnerName,
         matchKey: mKey,
         onSelect,
@@ -1335,17 +1337,8 @@ export default function TournamentLiveViewPage() {
     const mKey = selectedMatchKey;
     const liveState = tournament.matchStates?.[mKey];
     
-    let isLive = false;
-    if (isGroup) {
-      isLive = !!liveState?.isRunning && !liveState?.isFinished;
-    } else if (isUpper || isLower || isGF) {
-      isLive = (tournament.bracket?.activeMatches || []).includes(matchIndex) && 
-               ((isUpper && mKey.startsWith('u-')) || (isLower && mKey.startsWith('l-')) || (isGF && mKey.startsWith('gf-')));
-    } else {
-      isLive = tournament.bracket?.currentRound === roundIndex && (tournament.bracket?.activeMatches || []).includes(matchIndex);
-    }
-
-    const isFinished = dbMatch.isFinished || !!liveState?.isFinished;
+    const isFinished = !!(dbMatch.isFinished || liveState?.isFinished);
+    const isLive = !isFinished && !!liveState?.isRunning;
 
     const teamA = resolveTeamRef(tournament, dbMatch.teamA) || dbMatch.teamA;
     const teamB = resolveTeamRef(tournament, dbMatch.teamB) || dbMatch.teamB;
@@ -2440,19 +2433,19 @@ export default function TournamentLiveViewPage() {
               </p>
               <div className="flex justify-center items-center gap-2 mt-2">
                 {selectedDetails.isLive ? (
-                  <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-[#22c55e]/10 border border-[#22c55e]/30">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
-                    <span className="text-[#22c55e] text-[10px] font-bold">ĐANG DIỄN RA (LIVE)</span>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#22c55e]/10 border border-[#22c55e]/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-ping" />
+                    <span className="text-[#22c55e] text-[10px] font-black tracking-wider uppercase">ĐANG DIỄN RA (LIVE)</span>
                   </div>
                 ) : selectedDetails.isFinished ? (
-                  <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-red-500/10 border border-red-500/30">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/30">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                    <span className="text-red-400 text-[10px] font-bold">ĐÃ KẾT THÚC</span>
+                    <span className="text-red-400 text-[10px] font-black tracking-wider uppercase">ĐÃ KẾT THÚC</span>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-white/[0.05] border border-white/[0.08]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-white/40" />
-                    <span className="text-white/50 text-[10px] font-bold">CHƯA BẮT ĐẦU</span>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                    <span className="text-blue-400 text-[10px] font-black tracking-wider uppercase">SẴN SÀNG</span>
                   </div>
                 )}
               </div>
@@ -2466,7 +2459,7 @@ export default function TournamentLiveViewPage() {
                   ? 'Đang thi đấu'
                   : selectedDetails.isFinished 
                   ? 'Chung cuộc' 
-                  : 'Chờ bắt đầu'
+                  : 'Sẵn sàng thi đấu'
                 }
               </div>
 

@@ -14,11 +14,6 @@ const FORMAT_ICONS: Record<string, React.ReactNode> = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M15 5v2m0 4v2m-7-5h3m-3 4h3m-6 2a9 9 0 1118 0v1.5a2.5 2.5 0 01-2.5 2.5h-13A2.5 2.5 0 013 14.5V13z" />
     </svg>
   ),
-  round_robin: (
-    <svg className="w-full h-full text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-    </svg>
-  ),
   battle_royale: (
     <svg className="w-full h-full text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
@@ -52,18 +47,6 @@ const FORMATS_GUIDE = [
       "Đảm bảo các đội mạnh nhất không bị loại sớm do một trận đấu sẩy chân."
     ],
     tip: "Thích hợp cho các giải đấu Esports chuyên nghiệp, đòi hỏi chuyên môn cao như DOTA 2, League of Legends, Fighting Games."
-  },
-  {
-    id: "round_robin",
-    title: "Vòng bảng & Knock-out (Round Robin)",
-    subtitle: "Đấu vòng tròn tích điểm tìm đội đi tiếp",
-    desc: "Chia các đội thành 1, 2 hoặc 4 bảng đấu. Các đội trong cùng một bảng đấu vòng tròn một lượt để tính điểm (Thắng 3đ/1đ, Hòa 1đ, Thua 0đ). Top đội đứng đầu bảng đấu (thường là Top 2) đi tiếp vào vòng Loại trực tiếp.",
-    rules: [
-      "BTC có thể tùy chỉnh số bảng đấu và số lượng đội đi tiếp mỗi bảng.",
-      "Thứ hạng dựa trên: Tổng điểm tích lũy -> Hiệu số bàn thắng -> Đối đầu trực tiếp.",
-      "Kết thúc vòng bảng, hệ thống hỗ trợ sinh lịch đấu Knock-out tự động từ kết quả xếp hạng."
-    ],
-    tip: "Phù hợp cho các giải đấu bóng đá phong trào, bóng rổ hoặc các giải đấu kéo dài để mọi đội đều có cơ hội thi đấu tối thiểu 3 trận."
   },
   {
     id: "battle_royale",

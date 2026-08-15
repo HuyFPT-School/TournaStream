@@ -396,6 +396,12 @@ function BracketMatchCard({ a, b, sa, sb, done, isLive, winner, onClick }: Brack
         </div>
       )}
 
+      {!isLive && !done && (
+        <div className="bg-white/[0.03] text-white/40 text-[8px] font-bold tracking-widest text-center py-0.5 uppercase border-t border-white/[0.04]">
+          {a !== '?' && b !== '?' ? 'SẴN SÀNG' : 'CHỜ ĐỐI THỦ'}
+        </div>
+      )}
+
       {done && (
         <div className="bg-white/[0.03] text-white/40 text-[8px] font-bold tracking-widest text-center py-0.5 uppercase border-t border-white/[0.04]">
           XEM CHI TIẾT
@@ -517,13 +523,15 @@ function buildBracketData(tournament: any, matchState: any, selectedMatchKey: st
         else winnerName = teamAObj?.name || null;
       }
 
+      const isRunning = isLive && !!currentMS?.isRunning && !doneFlag;
+
       roundMatches.push({
         a: teamAObj?.name || '?',
         b: teamBObj?.name || '?',
         sa: scoreA,
         sb: scoreB,
         done: doneFlag,
-        isLive: isLive && (!currentMS || !currentMS.isFinished),
+        isLive: isRunning,
         winner: winnerName,
       });
     }
@@ -4061,20 +4069,45 @@ export default function TournamentDetailPage() {
                     </svg>
                     <span>Trận đấu đã kết thúc. Kết quả đã lưu vĩnh viễn.</span>
                   </div>
+                ) : !matchState.isRunning && (matchState.time === 0 || !matchState.time) && matchState.team1Score === 0 && matchState.team2Score === 0 ? (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleStartStop(); }}
+                    className="px-6 py-2.5 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all duration-200 active:scale-95 bg-[#22c55e] hover:bg-[#16a34a] text-black shadow-[0_0_20px_rgba(34,197,94,0.3)]"
+                  >
+                    <svg className="w-3.5 h-3.5 text-black shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                    <span>Bắt đầu trận đấu</span>
+                  </button>
                 ) : (
                   <>
-                    {!matchState.isRunning && (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleStartStop(); }}
-                        className="px-5 py-2.5 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all duration-200 active:scale-95 bg-[#22c55e]/10 border border-[#22c55e]/20 text-[#22c55e] hover:bg-[#22c55e]/20 shadow-[0_0_15px_rgba(34,197,94,0.15)]"
-                      >
-                        <svg className="w-3.5 h-3.5 text-[#22c55e] shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M8 5v14l11-7z" />
-                        </svg>
-                        <span>Bắt đầu</span>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleStartStop(); }}
+                      className={`px-5 py-2.5 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all duration-200 active:scale-95 border ${matchState.isRunning
+                        ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400 hover:bg-yellow-500/20 shadow-[0_0_15px_rgba(234,179,8,0.15)]'
+                        : 'bg-[#22c55e]/10 border-[#22c55e]/20 text-[#22c55e] hover:bg-[#22c55e]/20 shadow-[0_0_15px_rgba(34,197,94,0.15)]'
+                        }`}
+                    >
+                      {matchState.isRunning ? (
+                        <>
+                          <svg className="w-3.5 h-3.5 text-yellow-400 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                            <rect x="6" y="4" width="4" height="16" />
+                            <rect x="14" y="4" width="4" height="16" />
+                          </svg>
+                          <span>Tạm dừng</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3.5 h-3.5 text-[#22c55e] shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                          <span>Tiếp tục</span>
+                        </>
+                      )}
+                    </button>
+
                     <button
                       type="button"
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleEndHalf(); }}

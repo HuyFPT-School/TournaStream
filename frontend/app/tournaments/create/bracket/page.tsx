@@ -397,31 +397,7 @@ export default function BracketPage() {
         </div>
 
         {/* Seeding Info Preview */}
-        {data.format === 'round_robin' ? (
-          <div className="p-6 rounded-lg bg-[#0f1419] border border-white/[0.06] mb-8 space-y-4">
-            <div className="flex gap-3 items-center pb-3 border-b border-white/[0.06]">
-              <svg className="w-5 h-5 text-[#22c55e] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z" />
-              </svg>
-              <div className="font-semibold text-sm">Xem trước phân chia bảng đấu ({data.groupsCount} bảng)</div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {getGroupsOfTeams(orderedTeams, data.groupsCount || 1).map((groupTeams, gIdx) => (
-                <div key={gIdx} className="p-4 rounded-lg bg-[#080b10] border border-white/[0.04] space-y-2">
-                  <div className="text-xs font-bold text-[#22c55e]">BẢNG {String.fromCharCode(65 + gIdx)}</div>
-                  <div className="space-y-1.5">
-                    {groupTeams.map((team, tIdx) => (
-                      <div key={team.id} className="text-xs flex justify-between text-white/80">
-                        <span>{tIdx + 1}. {team.name}</span>
-                        <span className="text-white/30">{team.members.length} TV</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : data.format === 'double_elimination' ? (
+        {data.format === 'double_elimination' ? (
           <div className="p-4 rounded-lg bg-[#0f1419] border border-white/[0.06] mb-8">
             <div className="flex gap-3 items-start">
               <svg className="w-5 h-5 text-[#22c55e] shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

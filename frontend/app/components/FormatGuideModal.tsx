@@ -341,27 +341,7 @@ const FORMAT_GUIDES = [
     tip: 'Thể thức tiêu chuẩn của Esport chuyên nghiệp, đảm bảo tính công bằng tối đa.',
     warning: 'Số trận đấu nhiều hơn, cần thời gian tổ chức dài hơn.',
   },
-  {
-    id: 'round_robin',
-    name: 'Vòng Bảng & Knockout',
-    nameEn: 'Round Robin + Knockout',
-    icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-      </svg>
-    ),
-    color: '#3b82f6',
-    diagram: <RoundRobinDiagram />,
-    steps: [
-      { title: 'Chia bảng đấu', description: 'Các đội được chia thành nhiều bảng (A, B, C...) theo hạt giống' },
-      { title: 'Đấu vòng tròn', description: 'Mỗi đội đấu với TẤT CẢ đội khác trong cùng bảng' },
-      { title: 'Tính điểm xếp hạng', description: 'Thắng +3đ, Hòa +1đ, Thua 0đ. Xếp hạng theo Điểm → Hiệu số → Bàn thắng' },
-      { title: 'Top đội đi tiếp', description: 'Top 1-2 mỗi bảng (tùy cấu hình) tiến vào vòng Knockout' },
-      { title: 'Knockout → Chung kết', description: 'Vòng Knockout = Loại trực tiếp cho đến khi tìm ra nhà vô địch' },
-    ],
-    tip: 'Giúp các đội có cơ hội cọ xát tối thiểu 2-3 trận tại vòng bảng trước khi bước vào các trận sinh tử.',
-    warning: 'Cần tối thiểu 4 đội (2 đội/bảng × 2 bảng) cho thể thức này.',
-  },
+
   {
     id: 'battle_royale',
     name: 'Giải Sinh Tồn',

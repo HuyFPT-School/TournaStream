@@ -152,12 +152,14 @@ export default function MembersPage() {
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold">Thành viên — {selectedTeam.name}</h3>
-                  <Link
-                    href={`/tournaments/create/members/${selectedTeam.id}`}
-                    className="px-3 py-1.5 rounded-lg bg-[#22c55e] text-[#080b10] text-sm font-semibold hover:bg-[#16a34a] transition-all duration-200"
-                  >
-                    + Thêm TV
-                  </Link>
+                  {selectedTeam.members.length > 0 && (
+                    <Link
+                      href={`/tournaments/create/members/${selectedTeam.id}`}
+                      className="px-3 py-1.5 rounded-lg bg-[#22c55e] text-[#080b10] text-sm font-semibold hover:bg-[#16a34a] transition-all duration-200"
+                    >
+                      + Thêm TV
+                    </Link>
+                  )}
                 </div>
 
                 {selectedTeam.members.length === 0 ? (
