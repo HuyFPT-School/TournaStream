@@ -151,9 +151,8 @@ const DoubleEliminationDiagram = () => (
     {/* Trophy */}
     <text x="385" y="170" textAnchor="middle" fill="#fbbf24" fontSize="9" fontWeight="bold">VÔ ĐỊCH</text>
 
-    {/* Bracket Reset note */}
-    <text x="385" y="195" textAnchor="middle" fill="#ffffff30" fontSize="7">* Nếu Nhánh Thua thắng</text>
-    <text x="385" y="205" textAnchor="middle" fill="#ffffff30" fontSize="7">→ Đấu thêm 1 trận quyết định</text>
+    <text x="385" y="195" textAnchor="middle" fill="#ffffff40" fontSize="7">1 trận Chung kết duy nhất</text>
+    <text x="385" y="205" textAnchor="middle" fill="#22c55e" fontSize="7" fontWeight="bold">Tìm ra nhà Vô địch</text>
   </svg>
 );
 
@@ -335,8 +334,7 @@ const FORMAT_GUIDES = [
       { title: 'Bắt đầu ở Nhánh Thắng', description: 'Tất cả đội bắt đầu thi đấu ở Nhánh Thắng (Upper Bracket)' },
       { title: 'Thua → Rơi xuống Nhánh Thua', description: 'Đội thua ở Nhánh Thắng sẽ rơi xuống Nhánh Thua để có cơ hội thứ 2' },
       { title: 'Thua ở Nhánh Thua → Loại', description: 'Nếu thua tiếp ở Nhánh Thua thì mới chính thức bị loại' },
-      { title: 'Chung Kết Tổng', description: 'Đội cuối cùng của Nhánh Thắng gặp đội cuối của Nhánh Thua' },
-      { title: 'Bracket Reset (nếu có)', description: 'Nếu đội Nhánh Thua thắng Chung Kết, phải đấu thêm 1 trận quyết định' },
+      { title: 'Chung Kết Tổng', description: 'Vô địch Nhánh Thắng đối đầu Vô địch Nhánh Thua trong 1 trận quyết định để tìm ra Quán quân' },
     ],
     tip: 'Thể thức tiêu chuẩn của Esport chuyên nghiệp, đảm bảo tính công bằng tối đa.',
     warning: 'Số trận đấu nhiều hơn, cần thời gian tổ chức dài hơn.',

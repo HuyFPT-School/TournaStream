@@ -43,7 +43,7 @@ const FORMATS_GUIDE = [
     rules: [
       "Nhánh Thắng (Upper Bracket): Đấu trực tiếp như Single Elimination.",
       "Nhánh Thua (Lower Bracket): Gom các đội thua từ Nhánh Thắng để đấu tiếp.",
-      "Chung kết tổng (Grand Final): Vô địch Nhánh Thắng gặp Vô địch Nhánh Thua. Đội từ Nhánh Thua phải thắng 2 loạt trận liên tiếp (Bracket Reset) mới giành cúp vô địch.",
+      "Chung kết tổng (Grand Final): Vô địch Nhánh Thắng gặp Vô địch Nhánh Thua trong 1 trận đấu quyết định duy nhất để tìm ra nhà vô địch.",
       "Đảm bảo các đội mạnh nhất không bị loại sớm do một trận đấu sẩy chân."
     ],
     tip: "Thích hợp cho các giải đấu Esports chuyên nghiệp, đòi hỏi chuyên môn cao như DOTA 2, League of Legends, Fighting Games."

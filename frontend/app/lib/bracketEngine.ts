@@ -460,35 +460,10 @@ export function advanceDoubleElimination(
     gfMatch.winner = scoreA > scoreB ? gfMatch.teamA : gfMatch.teamB;
     gfMatch.loser = scoreA > scoreB ? gfMatch.teamB : gfMatch.teamA;
 
-    if (matchIndex === 0) {
-      // Robust comparison using isSameTeam
-      if (isSameTeam(gfMatch.winner, gfMatch.teamA)) {
-        // Upper winner won Grand Final Match 1: Tournament is OVER! No reset match!
-        bracket.isFinished = true;
-        bracket.winner = gfMatch.winner;
-        return { bracketFinished: true, champion: gfMatch.winner };
-      } else {
-        // Lower winner won Grand Final Match 1: Bracket Reset! Must play Match 2!
-        if (bracket.grandFinal.length === 1) {
-          bracket.grandFinal.push({
-            id: 'gf-1',
-            teamA: gfMatch.teamA,
-            teamB: gfMatch.teamB,
-            scoreA: null,
-            scoreB: null,
-            isFinished: false,
-            winner: null,
-            loser: null
-          });
-        }
-        return { bracketFinished: false };
-      }
-    } else if (matchIndex === 1) {
-      // Grand Final Reset Match finished: Winner is Champion!
-      bracket.isFinished = true;
-      bracket.winner = gfMatch.winner;
-      return { bracketFinished: true, champion: gfMatch.winner };
-    }
+    // Single-match Grand Final: Winner is Champion immediately!
+    bracket.isFinished = true;
+    bracket.winner = gfMatch.winner;
+    return { bracketFinished: true, champion: gfMatch.winner };
   }
 
   return { bracketFinished: false };
