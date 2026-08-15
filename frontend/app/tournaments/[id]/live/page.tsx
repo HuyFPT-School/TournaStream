@@ -6,7 +6,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { fetchTournamentFromBackend } from '@/app/lib/tournaments';
 import { getPusherClient } from '@/app/lib/pusher';
 import { getApiBaseUrl, getSession } from '@/app/lib/authStorage';
-import { getTournamentChampion } from '@/app/lib/bracketEngine';
+import { getTournamentChampion, getRoundLabel, calculateGroupStandings } from '@/app/lib/bracketEngine';
 
 interface ChatMsg {
   _id: string;
@@ -138,17 +138,17 @@ function buildBracketData(tournament: any, onSelect: (matchKey: string) => void)
   const numTeams = teams.length;
   if (numTeams < 2) return [];
 
-  const numRounds = Math.ceil(Math.log2(numTeams));
+  const numRounds = tournament.bracket?.rounds?.length || Math.ceil(Math.log2(numTeams));
   const roundsData: any[][] = [];
 
   const getMatchWinner = (roundIdx: number, matchIdx: number): any => {
     if (roundIdx < 0) return null;
     const roundMatches = tournament.bracket?.rounds?.[roundIdx] || [];
     const match = roundMatches[matchIdx];
-    
+
     const mKey = `${roundIdx}-${matchIdx}`;
     const isLive = tournament.bracket?.currentRound === roundIdx && (tournament.bracket?.activeMatches || []).includes(matchIdx);
-    
+
     const currentMS = tournament.matchStates?.[mKey];
     if (isLive && (!currentMS || !currentMS.isFinished)) return null;
 
@@ -167,6 +167,13 @@ function buildBracketData(tournament: any, onSelect: (matchKey: string) => void)
 
   const getTeamForMatch = (roundIdx: number, matchIdx: number, slot: 'A' | 'B'): any => {
     if (roundIdx === 0) {
+      const round0 = tournament.bracket?.rounds?.[0];
+      if (round0 && round0[matchIdx]) {
+        const teamRef = slot === 'A' ? round0[matchIdx].teamA : round0[matchIdx].teamB;
+        if (teamRef && teamRef.name && teamRef.name !== '?') {
+          return tournament.teams?.find((t: any) => t.id === teamRef.id || t.name === teamRef.name) || teamRef;
+        }
+      }
       const idx = matchIdx * 2 + (slot === 'A' ? 0 : 1);
       return teams[idx] || null;
     }
@@ -174,10 +181,10 @@ function buildBracketData(tournament: any, onSelect: (matchKey: string) => void)
     const prevMatchIdx = matchIdx * 2 + (slot === 'A' ? 0 : 1);
     const roundMatches = tournament.bracket?.rounds?.[roundIdx] || [];
     const match = roundMatches[matchIdx];
-    
+
     if (match) {
       const teamRef = slot === 'A' ? match.teamA : match.teamB;
-      if (teamRef) {
+      if (teamRef && teamRef.name && teamRef.name !== '?') {
         return tournament.teams?.find((t: any) => t.id === teamRef.id || t.name === teamRef.name) || teamRef;
       }
     }
@@ -186,7 +193,7 @@ function buildBracketData(tournament: any, onSelect: (matchKey: string) => void)
   };
 
   for (let r = 0; r < numRounds; r++) {
-    const numMatchesInRound = Math.pow(2, numRounds - r - 1);
+    const numMatchesInRound = tournament.bracket?.rounds?.[r]?.length || Math.pow(2, numRounds - r - 1);
     const roundMatches: any[] = [];
 
     for (let m = 0; m < numMatchesInRound; m++) {
@@ -198,7 +205,7 @@ function buildBracketData(tournament: any, onSelect: (matchKey: string) => void)
 
       const mKey = `${r}-${m}`;
       const isLive = tournament.bracket?.currentRound === r && (tournament.bracket?.activeMatches || []).includes(m);
-      
+
       const currentMS = tournament.matchStates?.[mKey];
       const isFinished = dbMatch ? !!dbMatch.isFinished : false;
 
@@ -245,13 +252,6 @@ function buildBracketData(tournament: any, onSelect: (matchKey: string) => void)
   return roundsData;
 }
 
-const getRoundLabel = (r: number, totalRounds: number) => {
-  if (r === totalRounds - 1) return "Chung kết";
-  if (r === totalRounds - 2) return "Bán kết";
-  if (r === totalRounds - 3) return "Tứ kết";
-  return `Vòng ${r + 1}`;
-};
-
 function getFallbackTeams(tournament: any) {
   return tournament.orderedTeams || tournament.teams || [];
 }
@@ -265,89 +265,6 @@ function resolveTeamRef(tournament: any, team?: TeamRef) {
     return tournament.teams?.find((t: any) => t.name === team.name) || team;
   }
   return team;
-}
-
-interface StandingRow {
-  teamId: string;
-  teamName: string;
-  mp: number; // matches played
-  w: number;  // wins
-  d: number;  // draws
-  l: number;  // losses
-  gf: number; // goals for
-  ga: number; // goals against
-  gd: number; // goal difference
-  pts: number; // points
-}
-
-function calculateGroupStandings(groupTeams: any[], groupMatches: any[], matchStates: any): StandingRow[] {
-  const standings: Record<string, StandingRow> = {};
-
-  groupTeams.forEach((team) => {
-    if (team.id) {
-      standings[team.id] = {
-        teamId: team.id,
-        teamName: team.name || '',
-        mp: 0,
-        w: 0,
-        d: 0,
-        l: 0,
-        gf: 0,
-        ga: 0,
-        gd: 0,
-        pts: 0,
-      };
-    }
-  });
-
-  const matchesArray = groupMatches || [];
-  matchesArray.forEach((m) => {
-    const mState = matchStates?.[m.id];
-    const isFinished = m.isFinished || mState?.isFinished;
-    if (!isFinished) return;
-
-    const scoreA = mState ? mState.team1Score : (m.scoreA ?? 0);
-    const scoreB = mState ? mState.team2Score : (m.scoreB ?? 0);
-    const idA = m.teamA?.id;
-    const idB = m.teamB?.id;
-
-    if (idA && standings[idA]) {
-      standings[idA].mp += 1;
-      standings[idA].gf += scoreA;
-      standings[idA].ga += scoreB;
-      standings[idA].gd = standings[idA].gf - standings[idA].ga;
-      if (scoreA > scoreB) {
-        standings[idA].w += 1;
-        standings[idA].pts += 1;
-      } else if (scoreA === scoreB) {
-        standings[idA].d += 1;
-      } else {
-        standings[idA].l += 1;
-      }
-    }
-
-    if (idB && standings[idB]) {
-      standings[idB].mp += 1;
-      standings[idB].gf += scoreB;
-      standings[idB].ga += scoreA;
-      standings[idB].gd = standings[idB].gf - standings[idB].ga;
-      if (scoreB > scoreA) {
-        standings[idB].w += 1;
-        standings[idB].pts += 1;
-      } else if (scoreA === scoreB) {
-        standings[idB].d += 1;
-      } else {
-        standings[idB].l += 1;
-      }
-    }
-  });
-
-  return Object.values(standings).sort((a, b) => {
-    if (b.pts !== a.pts) return b.pts - a.pts;
-    if (b.gd !== a.gd) return b.gd - a.gd;
-    if (b.gf !== a.gf) return b.gf - a.gf;
-    return a.teamName.localeCompare(b.teamName);
-  });
 }
 
 function getPlacementPoints(rank: number | null, pointRules?: Record<string, number>): number {

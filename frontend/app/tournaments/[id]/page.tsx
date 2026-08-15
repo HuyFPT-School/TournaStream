@@ -16,7 +16,11 @@ import {
   getTournamentChampion,
   isSameTeam,
   padTeamsToPowerOfTwo,
-  isPowerOfTwo
+  isPowerOfTwo,
+  getRoundLabel,
+  calculateGroupStandings,
+  seedKnockoutFromGroups,
+  areAllGroupMatchesFinished
 } from '@/app/lib/bracketEngine';
 import FormatGuideModal from '@/app/components/FormatGuideModal';
 
@@ -150,90 +154,7 @@ function buildRoundRobinMatches(groupTeams: TeamRef[], groupIdx: number) {
 
 
 
-interface StandingRow {
-  teamId: string;
-  teamName: string;
-  mp: number; // matches played
-  w: number;  // wins
-  d: number;  // draws
-  l: number;  // losses
-  gf: number; // goals for
-  ga: number; // goals against
-  gd: number; // goal difference
-  pts: number; // points
-}
 
-function calculateGroupStandings(groupTeams: TeamRef[], groupMatches: any[], matchStates: any): StandingRow[] {
-  const standings: Record<string, StandingRow> = {};
-
-  groupTeams.forEach((team) => {
-    if (team.id) {
-      standings[team.id] = {
-        teamId: team.id,
-        teamName: team.name || '',
-        mp: 0,
-        w: 0,
-        d: 0,
-        l: 0,
-        gf: 0,
-        ga: 0,
-        gd: 0,
-        pts: 0,
-      };
-    }
-  });
-
-  const matchesArray = groupMatches || [];
-  matchesArray.forEach((m) => {
-    const mState = matchStates?.[m.id];
-    const isFinished = m.isFinished || mState?.isFinished;
-    if (!isFinished) return;
-
-    const scoreA = mState ? mState.team1Score : (m.scoreA ?? 0);
-    const scoreB = mState ? mState.team2Score : (m.scoreB ?? 0);
-    const idA = m.teamA?.id;
-    const idB = m.teamB?.id;
-
-    if (idA && standings[idA]) {
-      standings[idA].mp += 1;
-      standings[idA].gf += scoreA;
-      standings[idA].ga += scoreB;
-      standings[idA].gd = standings[idA].gf - standings[idA].ga;
-      if (scoreA > scoreB) {
-        standings[idA].w += 1;
-        standings[idA].pts += 3;
-      } else if (scoreA === scoreB) {
-        standings[idA].d += 1;
-        standings[idA].pts += 1;
-      } else {
-        standings[idA].l += 1;
-      }
-    }
-
-    if (idB && standings[idB]) {
-      standings[idB].mp += 1;
-      standings[idB].gf += scoreB;
-      standings[idB].ga += scoreA;
-      standings[idB].gd = standings[idB].gf - standings[idB].ga;
-      if (scoreB > scoreA) {
-        standings[idB].w += 1;
-        standings[idB].pts += 3;
-      } else if (scoreA === scoreB) {
-        standings[idB].d += 1;
-        standings[idB].pts += 1;
-      } else {
-        standings[idB].l += 1;
-      }
-    }
-  });
-
-  return Object.values(standings).sort((a, b) => {
-    if (b.pts !== a.pts) return b.pts - a.pts;
-    if (b.gd !== a.gd) return b.gd - a.gd;
-    if (b.gf !== a.gf) return b.gf - a.gf;
-    return a.teamName.localeCompare(b.teamName);
-  });
-}
 
 function getPlacementPoints(rank: number | null, pointRules?: Record<string, number>): number {
   if (rank === null || rank === undefined) return 0;
@@ -429,82 +350,6 @@ function calculateLeagueStandings(
   return currentLeaderboard;
 }
 
-function seedKnockoutFromGroups(groups: any[], advancingCount: number, matchStates: any): TeamRef[] {
-  const groupStandings = groups.map((g, gIdx) => {
-    return {
-      groupIdx: gIdx,
-      name: g.name,
-      standings: calculateGroupStandings(g.teams, g.matches, matchStates)
-    };
-  });
-
-  const candidates: Array<{ team: TeamRef; rank: number; groupIdx: number }> = [];
-  groupStandings.forEach((gs) => {
-    for (let r = 0; r < advancingCount; r++) {
-      const row = gs.standings[r];
-      if (row) {
-        candidates.push({
-          team: { id: row.teamId, name: row.teamName },
-          rank: r + 1,
-          groupIdx: gs.groupIdx
-        });
-      }
-    }
-  });
-
-  const seeded: TeamRef[] = [];
-  const numGroups = groups.length;
-
-  if (numGroups === 1) {
-    if (candidates.length === 4) {
-      seeded.push(candidates[0].team, candidates[3].team, candidates[1].team, candidates[2].team);
-    } else {
-      candidates.forEach(c => seeded.push(c.team));
-    }
-  } else if (numGroups === 2) {
-    if (advancingCount === 2) {
-      const a1 = candidates.find(c => c.groupIdx === 0 && c.rank === 1)?.team;
-      const a2 = candidates.find(c => c.groupIdx === 0 && c.rank === 2)?.team;
-      const b1 = candidates.find(c => c.groupIdx === 1 && c.rank === 1)?.team;
-      const b2 = candidates.find(c => c.groupIdx === 1 && c.rank === 2)?.team;
-      if (a1 && b2) seeded.push(a1, b2);
-      if (b1 && a2) seeded.push(b1, a2);
-    } else {
-      const a1 = candidates.find(c => c.groupIdx === 0 && c.rank === 1)?.team;
-      const b1 = candidates.find(c => c.groupIdx === 1 && c.rank === 1)?.team;
-      if (a1 && b1) seeded.push(a1, b1);
-    }
-  } else if (numGroups === 4) {
-    if (advancingCount === 2) {
-      const getCandidate = (g: number, r: number) => candidates.find(c => c.groupIdx === g && c.rank === r)?.team;
-      const a1 = getCandidate(0, 1), a2 = getCandidate(0, 2);
-      const b1 = getCandidate(1, 1), b2 = getCandidate(1, 2);
-      const c1 = getCandidate(2, 1), c2 = getCandidate(2, 2);
-      const d1 = getCandidate(3, 1), d2 = getCandidate(3, 2);
-
-      if (a1 && b2) seeded.push(a1, b2);
-      if (c1 && d2) seeded.push(c1, d2);
-      if (b1 && a2) seeded.push(b1, a2);
-      if (d1 && c2) seeded.push(d1, c2);
-    } else {
-      const getCandidate = (g: number, r: number) => candidates.find(c => c.groupIdx === g && c.rank === r)?.team;
-      const a1 = getCandidate(0, 1);
-      const b1 = getCandidate(1, 1);
-      const c1 = getCandidate(2, 1);
-      const d1 = getCandidate(3, 1);
-      if (a1 && b1) seeded.push(a1, b1);
-      if (c1 && d1) seeded.push(c1, d1);
-    }
-  } else {
-    candidates.forEach(c => seeded.push(c.team));
-  }
-
-  return seeded;
-}
-
-
-
-
 interface BracketMatchCardProps {
   a: string;
   b: string;
@@ -528,47 +373,32 @@ function BracketMatchCard({ a, b, sa, sb, done, isLive, winner, onClick }: Brack
         : 'border-white/[0.08] bg-[#0f1419] hover:border-white/[0.15] hover:scale-[1.02]'
         }`}
     >
-      {/* Team A */}
-      <div className={`flex items-center justify-between px-3.5 py-2.5 border-b border-white/[0.04] transition-colors ${winA ? 'bg-[#22c55e]/10' : ''
+      <div className={`px-3 py-2 flex items-center justify-between border-b border-white/[0.04] ${winA ? 'bg-[#22c55e]/10 text-[#22c55e] font-bold' : ''
         }`}>
-        <span className={`font-semibold truncate max-w-[100px] ${winA ? 'text-[#22c55e]' : 'text-white/80'
-          }`}>
-          {a}
+        <span className={`truncate max-w-[90px] ${winA ? 'text-[#22c55e]' : a === '?' ? 'text-white/30' : 'text-white/90'}`}>{a}</span>
+        <span className={`font-mono text-[11px] ${winA ? 'text-[#22c55e]' : sa !== null ? 'text-white/90' : 'text-white/20'}`}>
+          {sa !== null ? sa : '-'}
         </span>
-        {sa !== null && (
-          <span className={`font-bold ml-2 ${winA ? 'text-[#22c55e]' : 'text-white/40'
-            }`}>
-            {sa}
-          </span>
-        )}
       </div>
 
-      {/* Team B */}
-      <div className={`flex items-center justify-between px-3.5 py-2.5 transition-colors ${winB ? 'bg-[#22c55e]/10' : ''
+      <div className={`px-3 py-2 flex items-center justify-between ${winB ? 'bg-[#22c55e]/10 text-[#22c55e] font-bold' : ''
         }`}>
-        <span className={`font-semibold truncate max-w-[100px] ${winB ? 'text-[#22c55e]' : 'text-white/80'
-          }`}>
-          {b}
+        <span className={`truncate max-w-[90px] ${winB ? 'text-[#22c55e]' : b === '?' ? 'text-white/30' : 'text-white/90'}`}>{b}</span>
+        <span className={`font-mono text-[11px] ${winB ? 'text-[#22c55e]' : sb !== null ? 'text-white/90' : 'text-white/20'}`}>
+          {sb !== null ? sb : '-'}
         </span>
-        {sb !== null && (
-          <span className={`font-bold ml-2 ${winB ? 'text-[#22c55e]' : 'text-white/40'
-            }`}>
-            {sb}
-          </span>
-        )}
       </div>
 
-      {/* Status Footer */}
       {isLive && (
-        <div className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#22c55e]/20 border-t border-[#22c55e]/30">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
-          <span className="text-[#22c55e] text-[10px] font-black tracking-wider uppercase">ĐANG ĐẤU</span>
+        <div className="bg-[#22c55e] text-[#080b10] text-[9px] font-black tracking-widest text-center py-0.5 uppercase flex items-center justify-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#080b10] animate-ping" />
+          <span>ĐANG ĐẤU</span>
         </div>
       )}
-      {!isLive && !done && (sa !== null || sb !== null) && (
-        <div className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-500/10 border-t border-blue-500/20">
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-          <span className="text-blue-500 text-[10px] font-black tracking-wider uppercase">SẴN SÀNG</span>
+
+      {done && (
+        <div className="bg-white/[0.03] text-white/40 text-[8px] font-bold tracking-widest text-center py-0.5 uppercase border-t border-white/[0.04]">
+          XEM CHI TIẾT
         </div>
       )}
     </div>
@@ -632,7 +462,7 @@ function buildBracketData(tournament: any, matchState: any, selectedMatchKey: st
 
     if (match) {
       const teamRef = slot === 'A' ? match.teamA : match.teamB;
-      if (teamRef) {
+      if (teamRef && teamRef.name && teamRef.name !== '?') {
         return tournament.teams?.find((t: any) => t.id === teamRef.id || t.name === teamRef.name) || teamRef;
       }
     }
@@ -641,7 +471,7 @@ function buildBracketData(tournament: any, matchState: any, selectedMatchKey: st
   };
 
   for (let r = 0; r < numRounds; r++) {
-    const numMatchesInRound = Math.pow(2, numRounds - r - 1);
+    const numMatchesInRound = tournament.bracket?.rounds?.[r]?.length || Math.pow(2, numRounds - r - 1);
     const roundMatches: any[] = [];
 
     for (let m = 0; m < numMatchesInRound; m++) {
@@ -702,12 +532,7 @@ function buildBracketData(tournament: any, matchState: any, selectedMatchKey: st
   return roundsData;
 }
 
-const getRoundLabel = (r: number, totalRounds: number) => {
-  if (r === totalRounds - 1) return "Chung kết";
-  if (r === totalRounds - 2) return "Bán kết";
-  if (r === totalRounds - 3) return "Tứ kết";
-  return `Vòng ${r + 1}`;
-};
+
 
 function migrateTournamentData(t: any): any {
   if (!t) return t;
@@ -2816,15 +2641,12 @@ export default function TournamentDetailPage() {
   const tournamentWinnerName = getTournamentWinnerName();
   const activeMatchesCount = tournament?.bracket?.activeMatches?.length || 0;
 
-  const areAllGroupMatchesFinished = () => {
-    if (!tournament || !tournament.groups) return false;
-    return tournament.groups.every((g: any) =>
-      g.matches.every((m: any) => m.isFinished)
-    );
+  const checkAllGroupMatchesFinished = () => {
+    return areAllGroupMatchesFinished(tournament?.groups, tournament?.matchStates);
   };
 
   const handleProceedToKnockout = async () => {
-    if (!areAllGroupMatchesFinished()) {
+    if (!checkAllGroupMatchesFinished()) {
       alert('Tất cả các trận đấu vòng bảng phải kết thúc trước khi tiến vào vòng Knockout.');
       return;
     }
@@ -2833,11 +2655,37 @@ export default function TournamentDetailPage() {
       return;
     }
 
-    const advancingTeams = seedKnockoutFromGroups(tournament.groups, tournament.advancingCount || 2, tournament.matchStates);
-    const newBracket = buildInitialBracket(advancingTeams);
+    // Synchronize all group match results from matchStates into groups structure
+    const updatedGroups = (tournament.groups || []).map((g: any, gIdx: number) => ({
+      ...g,
+      matches: (g.matches || []).map((m: any, mIdx: number) => {
+        const mKey = `g-${gIdx}-${mIdx}`;
+        const ms = (m.id && tournament.matchStates?.[m.id]) || (tournament.matchStates && tournament.matchStates[mKey]);
+        const isFin = !!(m.isFinished || ms?.isFinished || (m.scoreA !== null && m.scoreB !== null && m.scoreA !== undefined && m.scoreB !== undefined));
+        const sA = ms ? ms.team1Score : (m.scoreA ?? 0);
+        const sB = ms ? ms.team2Score : (m.scoreB ?? 0);
+        return {
+          ...m,
+          isFinished: isFin,
+          scoreA: sA,
+          scoreB: sB,
+        };
+      })
+    }));
+
+    const advancingCount = tournament.advancingCount || 2;
+    const advancingTeams = seedKnockoutFromGroups(updatedGroups, advancingCount, tournament.matchStates);
+
+    if (advancingTeams.length < 2) {
+      alert('Không đủ số đội để tiến vào vòng Knockout (cần tối thiểu 2 đội).');
+      return;
+    }
+
+    const newBracket = buildSingleEliminationBracket(advancingTeams);
 
     const updatedTournament = {
       ...tournament,
+      groups: updatedGroups,
       bracket: newBracket,
       stage: 'knockout'
     };
@@ -3868,11 +3716,11 @@ export default function TournamentDetailPage() {
                 <div className="flex justify-center pt-6">
                   <button
                     onClick={handleProceedToKnockout}
-                    className={`px-8 py-3 rounded-xl font-black text-sm transition-all duration-200 active:scale-95 flex items-center gap-2 ${areAllGroupMatchesFinished()
+                    className={`px-8 py-3 rounded-xl font-black text-sm transition-all duration-200 active:scale-95 flex items-center gap-2 ${checkAllGroupMatchesFinished()
                       ? 'bg-[#22c55e] text-black hover:bg-[#16a34a] shadow-[0_0_20px_rgba(34,197,94,0.25)]'
                       : 'bg-white/5 border border-white/10 text-white/30 cursor-not-allowed'
                       }`}
-                    disabled={!areAllGroupMatchesFinished()}
+                    disabled={!checkAllGroupMatchesFinished()}
                   >
                     <svg className="w-4 h-4 text-black shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />

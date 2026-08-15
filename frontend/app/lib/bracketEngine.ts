@@ -179,16 +179,45 @@ export function buildDoubleEliminationBracket(teams: TeamRef[]): BracketState {
   const upperRounds: BracketMatch[][] = [];
   const u0Matches: BracketMatch[] = [];
   for (let i = 0; i < n; i += 2) {
-    u0Matches.push({
-      id: `u0-m${i / 2}`,
-      teamA: padded[i],
-      teamB: padded[i + 1],
-      scoreA: null,
-      scoreB: null,
-      isFinished: false,
-      winner: null,
-      loser: null
-    });
+    const tA = padded[i];
+    const tB = padded[i + 1];
+    const isByeA = tA?.isBye || tA?.name === 'BYE';
+    const isByeB = tB?.isBye || tB?.name === 'BYE';
+
+    if (isByeB && !isByeA) {
+      u0Matches.push({
+        id: `u0-m${i / 2}`,
+        teamA: tA,
+        teamB: tB,
+        scoreA: 1,
+        scoreB: 0,
+        isFinished: true,
+        winner: tA,
+        loser: tB
+      });
+    } else if (isByeA && !isByeB) {
+      u0Matches.push({
+        id: `u0-m${i / 2}`,
+        teamA: tA,
+        teamB: tB,
+        scoreA: 0,
+        scoreB: 1,
+        isFinished: true,
+        winner: tB,
+        loser: tA
+      });
+    } else {
+      u0Matches.push({
+        id: `u0-m${i / 2}`,
+        teamA: tA,
+        teamB: tB,
+        scoreA: null,
+        scoreB: null,
+        isFinished: false,
+        winner: null,
+        loser: null
+      });
+    }
   }
   upperRounds.push(u0Matches);
 
@@ -243,6 +272,19 @@ export function buildDoubleEliminationBracket(teams: TeamRef[]): BracketState {
       loser: null
     }
   ];
+
+  // Advance initial BYE winners into Upper Round 1
+  u0Matches.forEach((m, idx) => {
+    if (m.isFinished && m.winner && upperRounds[1]) {
+      const nextMatchIdx = Math.floor(idx / 2);
+      const isTeamA = idx % 2 === 0;
+      if (isTeamA) {
+        upperRounds[1][nextMatchIdx].teamA = m.winner;
+      } else {
+        upperRounds[1][nextMatchIdx].teamB = m.winner;
+      }
+    }
+  });
 
   return {
     format: 'double_elimination',
@@ -480,4 +522,207 @@ export function getTournamentChampion(tournament: any): TeamRef | null {
   const finalMatch = finalRound[0];
   if (!finalMatch || !finalMatch.isFinished) return null;
   return finalMatch.winner || null;
+}
+
+// 6. Round Label Helper
+export function getRoundLabel(r: number, totalRounds: number): string {
+  if (totalRounds <= 1) return 'Chung kết';
+  if (r === totalRounds - 1) return 'Chung kết';
+  if (r === totalRounds - 2) return 'Bán kết';
+  if (r === totalRounds - 3) return 'Tứ kết';
+  return `Vòng ${r + 1}`;
+}
+
+// 7. Group Standings Calculation
+export interface GroupStandingRow {
+  teamId: string;
+  teamName: string;
+  mp: number; // matches played
+  w: number;  // wins
+  d: number;  // draws
+  l: number;  // losses
+  gf: number; // goals for
+  ga: number; // goals against
+  gd: number; // goal difference
+  pts: number; // points
+}
+
+export function calculateGroupStandings(
+  groupTeams: TeamRef[],
+  groupMatches: any[],
+  matchStates?: any,
+  groupIdx: number = 0
+): GroupStandingRow[] {
+  const standings: Record<string, GroupStandingRow> = {};
+
+  (groupTeams || []).forEach((team) => {
+    if (team?.id || team?.name) {
+      const key = team.id || team.name || '';
+      standings[key] = {
+        teamId: team.id || '',
+        teamName: team.name || '',
+        mp: 0,
+        w: 0,
+        d: 0,
+        l: 0,
+        gf: 0,
+        ga: 0,
+        gd: 0,
+        pts: 0,
+      };
+    }
+  });
+
+  const matchesArray = groupMatches || [];
+  matchesArray.forEach((m, mIdx) => {
+    const mKey = `g-${groupIdx}-${mIdx}`;
+    const mState = (m.id && matchStates?.[m.id]) || (matchStates && matchStates[mKey]);
+    const isFinished = m.isFinished || mState?.isFinished || (m.scoreA !== null && m.scoreB !== null && m.scoreA !== undefined && m.scoreB !== undefined);
+    if (!isFinished) return;
+
+    const scoreA = mState ? mState.team1Score : (m.scoreA ?? 0);
+    const scoreB = mState ? mState.team2Score : (m.scoreB ?? 0);
+    const idA = m.teamA?.id || m.teamA?.name;
+    const idB = m.teamB?.id || m.teamB?.name;
+
+    if (idA && standings[idA]) {
+      standings[idA].mp += 1;
+      standings[idA].gf += scoreA;
+      standings[idA].ga += scoreB;
+      standings[idA].gd = standings[idA].gf - standings[idA].ga;
+      if (scoreA > scoreB) {
+        standings[idA].w += 1;
+        standings[idA].pts += 3;
+      } else if (scoreA === scoreB) {
+        standings[idA].d += 1;
+        standings[idA].pts += 1;
+      } else {
+        standings[idA].l += 1;
+      }
+    }
+
+    if (idB && standings[idB]) {
+      standings[idB].mp += 1;
+      standings[idB].gf += scoreB;
+      standings[idB].ga += scoreA;
+      standings[idB].gd = standings[idB].gf - standings[idB].ga;
+      if (scoreB > scoreA) {
+        standings[idB].w += 1;
+        standings[idB].pts += 3;
+      } else if (scoreA === scoreB) {
+        standings[idB].d += 1;
+        standings[idB].pts += 1;
+      } else {
+        standings[idB].l += 1;
+      }
+    }
+  });
+
+  return Object.values(standings).sort((a, b) => {
+    if (b.pts !== a.pts) return b.pts - a.pts;
+    if (b.gd !== a.gd) return b.gd - a.gd;
+    if (b.gf !== a.gf) return b.gf - a.gf;
+    return a.teamName.localeCompare(b.teamName);
+  });
+}
+
+// 8. Check All Group Matches Finished
+export function areAllGroupMatchesFinished(groups: any[], matchStates?: any): boolean {
+  if (!groups || groups.length === 0) return false;
+  return groups.every((g: any, gIdx: number) => {
+    if (!g.matches || g.matches.length === 0) return false;
+    return g.matches.every((m: any, mIdx: number) => {
+      const mKey = `g-${gIdx}-${mIdx}`;
+      const ms = (m.id && matchStates?.[m.id]) || (matchStates && matchStates[mKey]);
+      return !!(m.isFinished || ms?.isFinished || (m.scoreA !== null && m.scoreB !== null && m.scoreA !== undefined && m.scoreB !== undefined));
+    });
+  });
+}
+
+// 9. Seed Knockout From Groups
+export function seedKnockoutFromGroups(
+  groups: any[],
+  advancingCount: number = 2,
+  matchStates?: any
+): TeamRef[] {
+  if (!groups || groups.length === 0) return [];
+
+  const groupStandings = groups.map((g, gIdx) => {
+    return {
+      groupIdx: gIdx,
+      name: g.name,
+      standings: calculateGroupStandings(g.teams, g.matches, matchStates, gIdx)
+    };
+  });
+
+  const candidates: Array<{ team: TeamRef; rank: number; groupIdx: number }> = [];
+  groupStandings.forEach((gs) => {
+    for (let r = 0; r < advancingCount; r++) {
+      const row = gs.standings[r];
+      if (row && (row.teamId || row.teamName)) {
+        candidates.push({
+          team: { id: row.teamId, name: row.teamName },
+          rank: r + 1,
+          groupIdx: gs.groupIdx
+        });
+      }
+    }
+  });
+
+  const seeded: TeamRef[] = [];
+  const numGroups = groups.length;
+
+  if (numGroups === 1) {
+    if (candidates.length === 2) {
+      // 1 table, Top 2 -> Final directly (2 teams)
+      seeded.push(candidates[0].team, candidates[1].team);
+    } else if (candidates.length === 4) {
+      // 1 table, Top 4 -> Semi 1 (1 vs 4), Semi 2 (2 vs 3)
+      seeded.push(candidates[0].team, candidates[3].team, candidates[1].team, candidates[2].team);
+    } else {
+      candidates.forEach(c => seeded.push(c.team));
+    }
+  } else if (numGroups === 2) {
+    if (advancingCount === 2) {
+      // 2 tables, Top 2 each -> Semi 1 (A1 vs B2), Semi 2 (B1 vs A2)
+      const a1 = candidates.find(c => c.groupIdx === 0 && c.rank === 1)?.team;
+      const a2 = candidates.find(c => c.groupIdx === 0 && c.rank === 2)?.team;
+      const b1 = candidates.find(c => c.groupIdx === 1 && c.rank === 1)?.team;
+      const b2 = candidates.find(c => c.groupIdx === 1 && c.rank === 2)?.team;
+      if (a1 && b2) seeded.push(a1, b2);
+      if (b1 && a2) seeded.push(b1, a2);
+    } else {
+      // 2 tables, Top 1 each -> Final (A1 vs B1)
+      const a1 = candidates.find(c => c.groupIdx === 0 && c.rank === 1)?.team;
+      const b1 = candidates.find(c => c.groupIdx === 1 && c.rank === 1)?.team;
+      if (a1 && b1) seeded.push(a1, b1);
+    }
+  } else if (numGroups === 4) {
+    if (advancingCount === 2) {
+      // 4 tables, Top 2 each (8 teams -> QF)
+      const getCandidate = (g: number, r: number) => candidates.find(c => c.groupIdx === g && c.rank === r)?.team;
+      const a1 = getCandidate(0, 1), a2 = getCandidate(0, 2);
+      const b1 = getCandidate(1, 1), b2 = getCandidate(1, 2);
+      const c1 = getCandidate(2, 1), c2 = getCandidate(2, 2);
+      const d1 = getCandidate(3, 1), d2 = getCandidate(3, 2);
+
+      if (a1 && b2) seeded.push(a1, b2);
+      if (c1 && d2) seeded.push(c1, d2);
+      if (b1 && a2) seeded.push(b1, a2);
+      if (d1 && c2) seeded.push(d1, c2);
+    } else {
+      // 4 tables, Top 1 each (4 teams -> SF)
+      const getCandidate = (g: number, r: number) => candidates.find(c => c.groupIdx === g && c.rank === r)?.team;
+      const a1 = getCandidate(0, 1);
+      const b1 = getCandidate(1, 1);
+      const c1 = getCandidate(2, 1);
+      const d1 = getCandidate(3, 1);
+      if (a1 && b1) seeded.push(a1, b1);
+      if (c1 && d1) seeded.push(c1, d1);
+    }
+  } else {
+    candidates.forEach(c => seeded.push(c.team));
+  }
+
+  return seeded;
 }

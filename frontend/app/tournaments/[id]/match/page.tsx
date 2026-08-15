@@ -13,7 +13,11 @@ import {
   buildSingleEliminationBracket,
   buildDoubleEliminationBracket,
   getTournamentChampion,
-  isSameTeam
+  isSameTeam,
+  getRoundLabel,
+  calculateGroupStandings,
+  seedKnockoutFromGroups,
+  areAllGroupMatchesFinished
 } from '@/app/lib/bracketEngine';
 
 interface MatchState {
@@ -53,111 +57,7 @@ function buildInitialBracket(teams: TeamRef[]): any {
   return buildSingleEliminationBracket(teams);
 }
 
-type StandingRow = {
-  teamId: string;
-  teamName: string;
-  mp: number;
-  w: number;
-  d: number;
-  l: number;
-  gf: number;
-  ga: number;
-  gd: number;
-  pts: number;
-};
 
-function calculateGroupStandings(groupTeams: TeamRef[], groupMatches: any[], matchStates: any): StandingRow[] {
-  const standings: Record<string, StandingRow> = {};
-
-  groupTeams.forEach((team) => {
-    if (team.id) {
-      standings[team.id] = {
-        teamId: team.id,
-        teamName: team.name || '',
-        mp: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0,
-      };
-    }
-  });
-
-  const matchesArray = groupMatches || [];
-  matchesArray.forEach((m) => {
-    const mState = matchStates?.[m.id];
-    const isFinished = m.isFinished || mState?.isFinished;
-    if (!isFinished) return;
-
-    const scoreA = mState ? mState.team1Score : (m.scoreA ?? 0);
-    const scoreB = mState ? mState.team2Score : (m.scoreB ?? 0);
-    const idA = m.teamA?.id;
-    const idB = m.teamB?.id;
-
-    if (idA && standings[idA]) {
-      standings[idA].mp += 1;
-      standings[idA].gf += scoreA;
-      standings[idA].ga += scoreB;
-      standings[idA].gd = standings[idA].gf - standings[idA].ga;
-      if (scoreA > scoreB) {
-        standings[idA].w += 1;
-        standings[idA].pts += 3;
-      } else if (scoreA === scoreB) {
-        standings[idA].d += 1;
-        standings[idA].pts += 1;
-      } else {
-        standings[idA].l += 1;
-      }
-    }
-
-    if (idB && standings[idB]) {
-      standings[idB].mp += 1;
-      standings[idB].gf += scoreB;
-      standings[idB].ga += scoreA;
-      standings[idB].gd = standings[idB].gf - standings[idB].ga;
-      if (scoreB > scoreA) {
-        standings[idB].w += 1;
-        standings[idB].pts += 3;
-      } else if (scoreA === scoreB) {
-        standings[idB].d += 1;
-        standings[idB].pts += 1;
-      } else {
-        standings[idB].l += 1;
-      }
-    }
-  });
-
-  return Object.values(standings).sort((a, b) => {
-    if (b.pts !== a.pts) return b.pts - a.pts;
-    if (b.gd !== a.gd) return b.gd - a.gd;
-    if (b.gf !== a.gf) return b.gf - a.gf;
-    return a.teamName.localeCompare(b.teamName);
-  });
-}
-
-function seedKnockoutFromGroups(groups: any[], advancingCount: number, matchStates: any): TeamRef[] {
-  const groupStandings = groups.map((g, gIdx) => {
-    return {
-      groupIdx: gIdx,
-      name: g.name,
-      standings: calculateGroupStandings(g.teams, g.matches, matchStates)
-    };
-  });
-
-  const candidates: Array<{ team: TeamRef; rank: number; groupIdx: number }> = [];
-  groupStandings.forEach((gs) => {
-    for (let r = 0; r < advancingCount; r++) {
-      const row = gs.standings[r];
-      if (row) {
-        candidates.push({
-          team: { id: row.teamId, name: row.teamName },
-          rank: r + 1,
-          groupIdx: gs.groupIdx
-        });
-      }
-    }
-  });
-
-  const seeded: TeamRef[] = [];
-  candidates.forEach(c => seeded.push(c.team));
-  return seeded;
-}
 
 function getPlacementPoints(rank: number | null): number {
   if (rank === null) return 0;
@@ -287,12 +187,7 @@ function migrateTournamentData(t: any): any {
   return t;
 }
 
-const getRoundLabel = (r: number, totalRounds: number) => {
-  if (r === totalRounds - 1) return "Chung kết";
-  if (r === totalRounds - 2) return "Bán kết";
-  if (r === totalRounds - 3) return "Tứ kết";
-  return `Vòng ${r + 1}`;
-};
+
 
 function getParsedIndices(key: string | null) {
   if (!key) return { roundIndex: 0, matchIndex: 0 };
